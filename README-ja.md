@@ -1,10 +1,11 @@
 # jlreq
 
 ## これは何？
-[日本語組版処理の要件](https://www.w3.org/TR/jlreq/?lang=ja)の実装を試みる[LuaTeX-ja](https://osdn.jp/projects/luatex-ja/wiki/FrontPage) / pLaTeX / upLaTeX用のクラスファイルと，それに必要なJFMの組み合わせです．
+[日本語組版処理の要件](https://www.w3.org/TR/jlreq/?lang=ja)の実装を試みる[LuaTeX-ja](https://osdn.jp/projects/luatex-ja/wiki/FrontPage) / pLaTeX / upLaTeX用のクラスファイルと，それに必要なJFMの組み合わせです（pdfLaTeXは実験的に対応）．
 
 ## 提供されるもの
 クラスファイルjlreq.clsと，横書きLuaTeX-ja用のJFMであるjfm-jlreq.luaが用意されています．また，縦書きのJFMやpLaTeX / upLaTeX用のJFMを生成するいくつかのスクリプトがあります．
+開発用に`tests/`（回帰・規則フィクスチャと一括テスト）と`tests/reference/`（参照エンジンの定量検証結果）も同梱されています．詳細は`docs/pdftex-tests.md`を参照してください．
 
 ## インストール
 `make`で必要なJFMを生成してください．その後，
@@ -25,13 +26,28 @@ pLaTeX / upLaTeX / LuaLaTeX上で動きます．以下のパッケージを内�
 
 リリース時点での最新版での動作を確認しています．
 
+### pdfLaTeX（実験的）
+pdfLaTeXでも横書き文書がコンパイルできます（実験的なサポート）．クラスオプションに
+`pdflatex`を渡すか，エンジンを自動判定させてください．内部でbxcjkjatype
+（CJKutf8・IPAex明朝/ゴシックType 1フォント）と実験的なバックエンド
+（jlreq-pdftex.sty）を読み込み，JFMに基づく文字間グルー・禁則・和欧文間隔を
+適用します．既知の制限:
+
+* 縦書き（`tate`）は未対応（明示的なエラーになります）
+* ぶら下げ組み・数式内和文は未対応
+* 約物はIPAexの全幅グリフで出力されます（JFMの半幅指定は組版規則の空きに反映）
+
+詳細は `docs/pdftex-compatibility.md` を参照してください．
+
+リリース時点での最新版での動作を確認しています．
+
 
 ## 使い方
 通常通り
 ```latex
 \documentclass{jlreq}
 ```
-とします．これで横書きのarticle相当の文書クラスとなります．エンジンは自動判定されますが，指定する場合はクラスオプションに`platex/uplatex/lualatex`のいずれかを渡してください．縦書きにするには`tate`オプションを渡します．また，reportやbook相当の文書クラスとするには，それぞれ`report`や`book`オプションを渡します．たとえば，縦書きの本を作成するには
+とします．これで横書きのarticle相当の文書クラスとなります．エンジンは自動判定されますが，指定する場合はクラスオプションに`platex/uplatex/lualatex/pdflatex`のいずれかを渡してください．縦書きにするには`tate`オプションを渡します．また，reportやbook相当の文書クラスとするには，それぞれ`report`や`book`オプションを渡します．たとえば，縦書きの本を作成するには
 ```latex
 \documentclass[tate,book]{jlreq}
 ```

@@ -1,7 +1,8 @@
 # jlreq
 
 ## What is this?
-This package provides the class file and JFM (Japanese font metric) files for LuaTeX-ja / pLaTeX / upLaTeX. This aims to implement [Requirements for Japanese Text Layout](https://www.w3.org/TR/jlreq/?lang=en).
+This package provides the class file and JFM (Japanese font metric) files for LuaTeX-ja / pLaTeX / upLaTeX, with experimental pdfLaTeX support. This aims to implement [Requirements for Japanese Text Layout](https://www.w3.org/TR/jlreq/?lang=en).
+For development, `tests/` (regression and rule fixtures plus a one-shot test runner) and `tests/reference/` (quantitative reference-engine results) are also included; see `docs/pdftex-tests.md`.
 
 ## Installation
 Run `make` to generate JFM files. Move the files as follows:
@@ -18,7 +19,16 @@ To use, simply write
 ```latex
 \documentclass{jlreq}
 ```
- This will set up a document class equivalent to an article in horizontal writing. The engine is automatically determined, but if you want to specify it, pass one of `platex/uplatex/lualatex` as a class option. To switch to vertical writing, pass the `tate` option. Additionally, to make the document class equivalent to report or book, pass the `report` or `book` option respectively. For example, to create a vertical book, write `\documentclass[tate,book]{jlreq}`.
+ This will set up a document class equivalent to an article in horizontal writing. The engine is automatically determined, but if you want to specify it, pass one of `platex/uplatex/lualatex/pdflatex` as a class option. To switch to vertical writing, pass the `tate` option. Additionally, to make the document class equivalent to report or book, pass the `report` or `book` option respectively. For example, to create a vertical book, write `\documentclass[tate,book]{jlreq}`.
+
+### pdfLaTeX (experimental)
+Horizontal documents also compile with pdfLaTeX (experimental support). Pass the `pdflatex` class option, or let the engine be auto-detected. Internally it loads bxcjkjatype (CJKutf8 with IPAex Mincho/Gothic Type 1 fonts) and an experimental backend (`jlreq-pdftex.sty`), applying JFM-based inter-character glue, kinsoku (line-breaking rules) and Japanese/Latin spacing. Known limitations:
+
+* Vertical writing (`tate`) is not supported (an explicit error is raised).
+* Hanging punctuation and Japanese in math mode are not supported.
+* Punctuation glyphs are rendered full-width from IPAex; the JFM half-width specification is reflected in the spacing rules.
+
+See `docs/pdftex-compatibility.md` for details.
 
 Other common options accepted are `oneside/twoside/onecolumn/twocolumn/titlepage/notitlepage/draft/final/landscape/openright/openany/leqno/fleqn`. Also, passing the `disablejfam` option will not register Japanese fonts for use in mathematics.
 

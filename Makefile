@@ -1,6 +1,14 @@
 TEXMF:=$(shell kpsewhich -var-value=TEXMFHOME)
 MAKEJVFCNF:=$(shell ls -R $(shell kpsewhich --var-value=TEXMFDIST)/fonts/source | awk '/:$$/{sub(/:$$/,"");f=$$0} tolower($$0) ~ /makejvf-upjpn\.cnf$$/{print f"/"$$0}' | head -n 1)
 
+# pdfTeX backend JFM data (PLAN.md §3.3, §5 M3).
+# The .def files ARE committed (unlike .tfm/.vf, which are built at install
+# time): the pdfTeX backend needs them at run time and users may not have
+# texlua.  Regeneration-diff-zero is checked by `make check-pdftex-jfm`
+# (run it in CI / after touching jfm-jlreq.lua or make_pdftex_jfm.lua).
+PDFTEX_JFM_DEFS = jlreq-pdftex-jfm.def jlreq-pdftex-jfm-b.def \
+	jlreq-pdftex-jfm-z.def jlreq-pdftex-jfm-bz.def
+
 TFMS = jlreq.tfm bjlreq.tfm zjlreq.tfm bzjlreq.tfm \
 	ujlreq.tfm ubjlreq.tfm uzjlreq.tfm ubzjlreq.tfm \
 	ujlreq-q.tfm ubjlreq-q.tfm uzjlreq-q.tfm ubzjlreq-q.tfm \
@@ -30,13 +38,40 @@ VFS = jlreq.vf bjlreq.vf zjlreq.vf bzjlreq.vf \
 	ujlreq-jidori-q.vf ujlreqg-jidori-q.vf
 
 
-.PHONY: all jfm doc latexdoc pdfdoc htmldoc jfm-install cls-install sty-install install tds uninstall jfmclean docclean clean
+.PHONY: all jfm doc latexdoc pdfdoc htmldoc jfm-install cls-install sty-install install tds uninstall jfmclean docclean clean pdftex-jfm check-pdftex-jfm check-pdftex-jfm-static
 
 all: jfm
 
 jfm: jfm-jlreqv.lua jfm-jlreqv-jidori.lua $(VFS) $(TFMS)
 	
 	rm -f rml.tfm rmlv.tfm gbm.tfm gbmv.tfm uprml-h.tfm uprml-hq.tfm upgbm-h.tfm upgbm-hq.tfm uprml-v.tfm uprml-vq.tfm upgbm-v.tfm upgbm-vq.tfm
+
+# pdfTeXバックエンド用JFMデータの生成（PLAN.md §3.3，§5 M3）
+# 全4バリアントを生成する。出力は決定的（タイムスタンプなし・ソート済み）。
+pdftex-jfm: $(PDFTEX_JFM_DEFS)
+
+$(PDFTEX_JFM_DEFS): make_pdftex_jfm.lua jfm-jlreq.lua
+	texlua make_pdftex_jfm.lua --all-variants
+
+# 再生成してコミット済みファイルとの差分ゼロを検査する（CI 用）。
+# このターゲットは `all` には含めない: 通常のビルド（make jfm）は
+# pTeX/upTeX/LuaTeX 用であり、pdfTeX 用データの検査は独立に実行する。
+check-pdftex-jfm: $(PDFTEX_JFM_DEFS)
+	rm -rf pdftex-jfm-check
+	mkdir -p pdftex-jfm-check
+	texlua make_pdftex_jfm.lua --all-variants --outdir=pdftex-jfm-check
+	cmp pdftex-jfm-check/jlreq-pdftex-jfm.def jlreq-pdftex-jfm.def
+	cmp pdftex-jfm-check/jlreq-pdftex-jfm-b.def jlreq-pdftex-jfm-b.def
+	cmp pdftex-jfm-check/jlreq-pdftex-jfm-z.def jlreq-pdftex-jfm-z.def
+	cmp pdftex-jfm-check/jlreq-pdftex-jfm-bz.def jlreq-pdftex-jfm-bz.def
+	texlua check_jfm_pdftex.lua
+	rm -rf pdftex-jfm-check
+	@echo "check-pdftex-jfm: regeneration diff zero, all variants validated"
+
+# 静的検査のみ（再生成なし）。check_jfm_pdftex.lua は既定でコミット
+# 済みの4ファイルを全検証する。
+check-pdftex-jfm-static:
+	texlua check_jfm_pdftex.lua
 
 # .pl
 ujlreq-v.pl ubjlreq-v.pl uzjlreq-v.pl ubzjlreq-v.pl: u%-v.pl: jfm-%v-pl.lua luajfm2pl.lua
@@ -216,14 +251,18 @@ cls-install:
 	install jlreq-helpers.sty ${TEXMF}/tex/latex/jlreq
 	install jlreq-complements.sty ${TEXMF}/tex/latex/jlreq
 	install jlreq.cls ${TEXMF}/tex/latex/jlreq
+	install jlreq-pdftex.sty ${TEXMF}/tex/latex/jlreq
+	install jlreq-pdftex-rules.sty ${TEXMF}/tex/latex/jlreq
+	install ${PDFTEX_JFM_DEFS} ${TEXMF}/tex/latex/jlreq
 
 sty-install:
 	mkdir -p ${TEXMF}/tex/latex/jlreq
 	install jlreq-trimmarks.sty ${TEXMF}/tex/latex/jlreq
+	install jlreq-trimmarks-pdftex.def ${TEXMF}/tex/latex/jlreq
 
 install: jfm-install cls-install sty-install
 
-tds: jfm jlreq.cls README.md README-ja.md LICENSE jlreq.html jlreq-ja.html jlreq-trimmarks.html jlreq-trimmarks-ja.html jlreq.pdf jlreq-ja.pdf
+tds: jfm pdftex-jfm jlreq.cls README.md README-ja.md LICENSE jlreq.html jlreq-ja.html jlreq-trimmarks.html jlreq-trimmarks-ja.html jlreq.pdf jlreq-ja.pdf
 	mkdir -p ./tds/fonts/tfm/public/jlreq
 	cp -f ${TFMS} ./tds/fonts/tfm/public/jlreq
 	mkdir -p ./tds/fonts/vf/public/jlreq
@@ -238,11 +277,21 @@ tds: jfm jlreq.cls README.md README-ja.md LICENSE jlreq.html jlreq-ja.html jlreq
 	cp jlreq-helpers.sty ./tds/tex/latex/jlreq
 	cp jlreq-complements.sty ./tds/tex/latex/jlreq
 	cp jlreq-trimmarks.sty ./tds/tex/latex/jlreq
+	cp jlreq-trimmarks-pdftex.def ./tds/tex/latex/jlreq
+	cp jlreq-pdftex.sty ./tds/tex/latex/jlreq
+	cp jlreq-pdftex-rules.sty ./tds/tex/latex/jlreq
+	cp ${PDFTEX_JFM_DEFS} ./tds/tex/latex/jlreq
 	mkdir -p ./tds/doc/latex/jlreq
 	cp README.md ./tds/doc/latex/jlreq
 	cp README-ja.md ./tds/doc/latex/jlreq
 	cp jlreq-trimmarks.md ./tds/doc/latex/jlreq
 	cp jlreq-trimmarks-ja.md ./tds/doc/latex/jlreq
+	cp docs/pdftex-audit.md ./tds/doc/latex/jlreq
+	cp docs/pdftex-compatibility.md ./tds/doc/latex/jlreq
+	cp docs/pdftex-internals.md ./tds/doc/latex/jlreq
+	cp docs/pdftex-tests.md ./tds/doc/latex/jlreq
+	cp docs/pdftex-jfm-generation.md ./tds/doc/latex/jlreq
+	cp docs/pdftex-dependencies.md ./tds/doc/latex/jlreq
 	cp LICENSE ./tds/doc/latex/jlreq
 	cp jlreq.html ./tds/doc/latex/jlreq
 	cp jlreq-ja.html ./tds/doc/latex/jlreq
@@ -256,6 +305,8 @@ tds: jfm jlreq.cls README.md README-ja.md LICENSE jlreq.html jlreq-ja.html jlreq
 	cp Makefile ./tds/source/latex/jlreq
 	cp make_variant_jfm.lua ./tds/source/latex/jlreq
 	cp luajfm2pl.lua ./tds/source/latex/jlreq
+	cp make_pdftex_jfm.lua ./tds/source/latex/jlreq
+	cp check_jfm_pdftex.lua ./tds/source/latex/jlreq
 
 uninstall:
 	rm -rf ${TEXMF}/fonts/tfm/public/jlreq

@@ -1,0 +1,62 @@
+%% jlreq-trimmarks-pdftex.def
+%% pdfTeXplcore
+%% jlreq-trimmarks.sty d \input 
+%% d \iftombow pTeX
+%%   \ifx 
+%%   pTeX
+  \newif\iftombow \tombowfalse
+  \newif\iftombowdate \tombowdatetrue
+  \newdimen\@tombowwidth
+  \setlength{\@tombowwidth}{.1\p@}%
+  \newbox\@TL\newbox\@Tl
+  \newbox\@TC
+  \newbox\@TR\newbox\@Tr
+  \newbox\@BL\newbox\@Bl
+  \newbox\@BC
+  \newbox\@BR\newbox\@Br
+  \newbox\@CL
+  \newbox\@CR
+  \newtoks\@bannertoken
+  \@bannertoken{}%
+  % plcorecmtt9
+  \font\@bannerfont=cmtt9
+  % pTeX\hour/\minute
+  \newcount\hour
+  \newcount\minute
+  \AtBeginDocument{\hour=\time \divide\hour60\relax
+    \minute=\numexpr\time-60*\hour\relax}%
+  % \yoko: pdfTeXbox
+  \ifx\yoko\@undefined\let\yoko\relax\fi
+  % \tate: pdfTeX
+  \ifx\tate\@undefined
+    \def\tate{\PackageError{jlreq-trimmarks}{the~rotated~banner~requires~pTeX~primitives;~under~pdfTeX~use~show=trimmarks}{\@ehc}}%
+  \fi
+  \ifx\adjustbaseline\@undefined\let\adjustbaseline\relax\fi
+  % bleedlltjcore
+  \def\@tombowbleed{3mm}%
+  \newdimen\@@paperheight
+  \newdimen\@@paperwidth
+  \newdimen\@@topmargin
+  % maketombowbox / \@outputtombow 590
+  % \@tombowreset@@paper \@ifundefined
+  % pdfTeX\mag=1000
+  % 1truein == 1in
+  \def\@tombowreset@@paper{%
+    \@@topmargin\topmargin
+    \jlreq@if{\iftombow\fi}{
+      \@@paperwidth\paperwidth
+      \advance\@@paperwidth 2\dimexpr\@tombowbleed\relax
+      \@@paperheight\paperheight
+      \advance\@@paperheight 10mm\relax
+      \advance\@@paperheight 2\dimexpr\@tombowbleed\relax
+      \advance\@@topmargin 1in\relax
+      \advance\@themargin 1in\relax
+    }{}%
+  }
+  % lltjcore 221-223
+  \AddToHook{build/page/reset}[jlreq-trimmarks/pdftex]{\@tombowreset@@paper}%
+  \AddToHook{shipout/background}[jlreq-trimmarks/pdftex]{%
+    \put(72.27,-72.27){\lineskip\z@skip\lineskiplimit\z@\@outputtombow}%
+  }%
+  % \tate
+  \tombowdatefalse

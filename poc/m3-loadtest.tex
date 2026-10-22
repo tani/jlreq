@@ -1,0 +1,93 @@
+% m3-loadtest.tex --- PoC for M3: machine-load the generated JFM .def under
+%                     pdfLaTeX and retrieve values at run time.
+%
+% Gate context (PLAN.md §3.3, §12-4): the future jlreq-pdftex.sty backend
+% must consume the generated jlreq-pdftex-jfm.def at run time. This PoC
+% proves the .def is loadable inside a CJK environment on plain article +
+% bxcjkjatype, and that class metrics and pair glues are retrievable with
+% plain TeX macro expansion (no expl3 needed at PoC stage; the same \defs
+% are trivially consumable from expl3 code).
+%
+% Run from the poc/ directory (or anywhere with poc/ in TEXINPUTS; do NOT
+% override TEXINPUTS, the default already includes the CWD):
+%   pdflatex -interaction=nonstopmode m3-loadtest.tex
+%
+% Output: m3-loadtest.log + stdout lines tagged M3LOAD| for machine checks:
+%   M3LOAD|class|<n>|<width>|<height>|<depth>|<align>
+%   M3LOAD|pair|<from>|<to>|<nat>|<stretch>|<shrink>|<ratio>|<spri>|<shpri>|<knat>
+%   M3LOAD|kanjiskip|<nat>|<stretch>|<shrink>
+%   M3LOAD|typeout (representative glyphs are also typeset to prove the CJK
+%   machinery can actually print them).
+\documentclass{article}
+\usepackage[ipaex-type1]{bxcjkjatype}
+
+\makeatletter
+
+% ---- load the generated data -----------------------------------------------
+% Enter CJK explicitly in the preamble (class-init equivalent, G1 PoC);
+% re-issue \makeatletter INSIDE it: CJK@input lazy loads wrap \makeatother
+% (finding from poc/g1-font-init.tex), clobbering the outer one.
+\begin{CJK}{UTF8}{ipxm}
+\makeatletter
+\input jlreq-pdftex-jfm-sample.def
+% NB: the .def relies on catcode @ = 11 (\makeatletter above) and does not
+% restore it; it also assumes standard catcodes otherwise (verified: it
+% contains only ASCII + TeX group/percent tokens).
+
+% ---- retrieval proof ---------------------------------------------------------
+% No field-splitting needed in TeX: \typeout fully expands the macro, so the
+% log line carries the body verbatim (single outer group + inner groups);
+% downstream parsing is done by the machine checker (m3-verify.lua, shell).
+%   M3LOAD|class|<n>|{w}{h}{d}{align}
+%   M3LOAD|pair|<f>|<t>|{nat}{str}{shr}{ratio}{spri}{shpri}{knat}{kstr}{kshr}
+% NOTE (LaTeX2e \typeout quirk, verified in isolation): \csname-built macro
+% references are NOT expanded inside \typeout (only literal control
+% sequences are). But the digit-bearing names below are ONLY accessible
+% via \csname anyway (plain \def\foo@0 would make 0 a delimiter), so all
+% probes go through \csname: expand first via \edef into a scratch macro,
+% then \typeout the literal scratch name (fully expanded by \typeout).
+\def\MTHREE@get#1{%
+  \begingroup
+    \edef\x{\endgroup
+      \typeout{M3LOAD|#1|\csname jlreqpdf@jfm@#1\endcsname}}%
+  \x}
+\MTHREE@get{class@0}
+\MTHREE@get{class@1}
+\MTHREE@get{class@5}
+\MTHREE@get{class@6}
+\MTHREE@get{class@7}
+\MTHREE@get{class@300}
+\MTHREE@get{pair@0@1}
+\MTHREE@get{pair@2@0}
+\MTHREE@get{pair@5@6}
+\MTHREE@get{pair@6@5}
+\MTHREE@get{pair@90@1}
+\MTHREE@get{pair@7@5}
+\MTHREE@get{pair@2@1}
+\MTHREE@get{endadj@6}
+\MTHREE@get{endadj@7}
+\MTHREE@get{cls@AB}
+\MTHREE@get{cls@300C}
+\MTHREE@get{pseudo@alchar}
+
+
+
+\typeout{M3LOAD|kanjiskip|\jlreqpdf@jfm@kanjiskip}
+\typeout{M3LOAD|xkanjiskip|\jlreqpdf@jfm@xkanjiskip}
+\typeout{M3LOAD|dir|\jlreqpdf@jfm@dir zw=\jlreqpdf@jfm@zw zh=\jlreqpdf@jfm@zh}
+
+
+% also typeset the representative chars to prove the CJK layer can print
+% them (in the preamble, glyphs must be boxed — a bare typeset would hit
+% "Missing \begin{document}"; \setbox material is never added to the main
+% vertical list, cf.\ the \hbox{阿} idiom used by jlreq.cls itself).
+\newbox\MTHREE@samplebox
+\setbox\MTHREE@samplebox=\hbox{阿「」・。、、‐}%
+\typeout{M3LOAD|typeout|samplebox width=\the\wd\MTHREE@samplebox}
+\end{CJK}
+
+\makeatother
+\begin{document}
+Typeset above was inside the CJK env in the preamble (class-load-time
+equivalent, cf.\ poc/g1-font-init.tex).
+\end{document}

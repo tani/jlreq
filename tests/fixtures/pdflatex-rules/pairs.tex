@@ -1,0 +1,33 @@
+% M4検証：JFMペアグルーの実測（.defデータとの一致をtypeoutで判定）
+% 各測定前に状態機構を段落境界(90)へ戻して測定間の汚染を防ぐ．
+\documentclass[pdflatex]{jlreq}
+\begin{document}
+\makeatletter
+\newbox\mboxa
+\def\meas#1#2#3{%
+  \global\jlreqpdf@lastclass=90
+  \setbox\mboxa=\hbox{#3}%
+  \ifdim\wd\mboxa=#1\relax
+    \typeout{PASS: #2 = \the\wd\mboxa}%
+  \else
+    \typeout{FAIL: #2 expected #1, got \the\wd\mboxa}%
+  \fi
+}
+% kanjiskip自然長0: かな連続は追加空きなし (10+10)
+\meas{20pt}{kanji-kanji (kanjiskip nat 0)}{漢字}
+% 90->1: 行頭括弧に空きなし (10)
+\meas{10pt}{parbdd-bracket (90->1 = 0)}{「}
+% 1->1: 括弧連続も空きなし (10+10)
+\meas{20pt}{bracket-bracket (pair 1->1 = 0)}{「「}
+% 15->1: かな→開き括弧は二分アキ(jfm-jlreq.lua:592) (10+5+10)
+\meas{25pt}{kanji-bracket (pair 15->1 nat 0.5zw)}{あ「}
+% 2->15: 閉じ括弧→かな 0.5zw (10+5+10)
+\meas{25pt}{bracket-kanji (pair 2->15 nat 0.5zw)}{」あ}
+% 0->1: 漢字→開き括弧 0.5zw (10+5+10)
+\meas{25pt}{kanji0-bracket (pair 0->1 nat 0.5zw)}{漢「}
+% JA->LA: xkanjiskip 0.25zw (10+2.5+abc)
+\meas{25.27779pt}{ja-la boundary (xkanjiskip 0.25zw)}{漢abc}
+% 既知の制限: 段落先頭のLA->JA境界はxkanjiskipが入らない
+% （直前CJKがいないためpeekが働かない．M4の制限として記録）
+\makeatother
+\end{document}

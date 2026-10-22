@@ -1,0 +1,122 @@
+%%
+%% This is file 'jlreq-pdftex.sty'.
+%% Experimental pdfTeX backend for the jlreq class (internal use).
+%%
+%% Loaded by jlreq.cls only when the engine is pdfTeX (engine letter `d').
+%% NOT a public package: the loading contract, macro names and behaviour
+%% may change at any time while the backend is under development.
+%%
+%% Milestone M2 scope (see docs/pdftex-compatibility.md):
+%%   - glyph output via bxcjkjatype (CJKutf8, ipaex-type1 Type1 fonts)
+%%   - always-on CJK state from class load time (metrics measurable)
+%%   - \zw/\zh as size-tracking dimen-register macros; \Cht..\Chs declared
+%%   - \mcfamily/\gtfamily/\mgfamily via CJKfamily; bold via CJKbold
+%%   - horizontal (yoko) only; tate errors loudly
+%%   - JFM pair glue / kinsoku / line-end adjustment: M4/M5 (loud errors)
+%%
+
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{jlreq-pdftex}[2026/10/23 v0.2 jlreq pdfTeX backend (experimental, M2+M4)]
+\RequirePackage{expl3}
+\RequirePackage{jlreq-pdftex-rules}
+
+%. ---------------------------------------------------------- glyph base
+% ipaex-type1 : Type 1 subfonts (ipxm/ipxg), embeds everywhere, ToUnicode ok.
+% noCJKpunct  : jlreq's own punctuation spacing comes from its JFM rules
+%               (M4); CJKpunct's quanjiao kerning would double-apply.
+% no `whole'  : the CJK state is turned on here (always-on), not per env.
+\RequirePackage[ipaex-type1,noCJKpunct]{bxcjkjatype}
+
+%. --------------------------------------------------- always-on CJK state
+% jlreq evaluates Japanese literals at class load time outside any env
+% (char-class lists, \contentsname, heading labels, notes). The PoC's
+% site-by-site env approach cannot cover that, so uncap CJK's
+% encapsulation: make its \global/\active/\local prefixes really global
+% and start the UTF8/ipxm state once. State then persists file-wide.
+\makeatletter
+\let\CJK@global\global
+\let\CJK@active\global
+\let\CJK@local\global
+\CJK@envStart{}{UTF8}{ipxm}%
+% \CJK@ignorespaces is NOT set up by envStart when entered directly
+% (CJK.sty sets it in \CJKspace, normally called from the env form).
+\CJKspace
+% CJK's lazy \CJK@input (\makeatother..\makeatletter) may have flipped
+% the @ catcode; re-issue before using @-named internals.
+\makeatletter
+
+%. --------------------------------------------------------------- units
+% pdfTeX has no zw/zh units. Plain TeX's <factor><internal dimen>
+% scan-dimen syntax (e.g. 2\baselineskip) still works, so define the
+% units as macros expanding to a dimen register. jlreq keeps internal
+% \jlreq@zw/\jlreq@zh via \let (= \zw below), so all existing
+% `N\jlreq@zw' uses keep working; literal "zw" text inside option
+% strings is rewritten by \jlreq@expand@speciallength (cls gate).
+\newdimen\jlreq@jareg
+\def\zw{\jlreq@jareg}%
+\def\zh{\jlreq@jareg}%
+% ipaex full-width glyphs are square: 1zh == 1zw == the JA design size.
+
+% \Cht..\Chs are engine-provided under pTeX (plcore.ltx) and LuaTeX-ja
+% (lltjfont.sty) but never declared by jlreq.cls; declare them here so
+% the cls load-time measurement block works unmodified.
+\newdimen\Cht
+\newdimen\Cdp
+\newdimen\Cwd
+\newdimen\Cvs
+\newdimen\Chs
+
+%. -------------------------------------------------------------- fonts
+% bxcjkjatype[ipaex-type1] already: \mcdefault->ipxm, \gtdefault->ipxg,
+% \mgdefault->ipxg, \mcfamily/\gtfamily/\mgfamily as CJKfamily wrappers,
+% rmfamily/sffamily/ttfamily hooked to CJKfamily selection. Latin NFSS
+% stays a separate axis (no conflation). Nothing to redefine here.
+
+% Bold: no bold IPAex Type1 face exists; bxcjkjatype defaults
+% \CJKboldbyembolden ON (PDF 2 Tr), but \bfseries alone does not raise
+% \CJK@bold@. Track the current NFSS series and switch CJK bold so
+% \sffamily\gtfamily\bfseries headings embolden the kanji too.
+\AddToHook{selectfont}{%
+  \jlreq@pdftex@trackseries
+}
+\def\jlreq@pdftex@trackseries{%
+  % カーネルの判定と同一（latex.ltxの\bfseries）: 系列名がbで始まる＝太字
+  % （b, bx を捕捉．sb は捕捉しない——カーネルと同じ挙動）．
+  \if b\expandafter\@car\f@series\@nil
+    \expandafter\jlreq@pdftex@bold
+  \else
+    \expandafter\jlreq@pdftex@nobold
+  \fi
+}
+\def\jlreq@pdftex@bold{\CJKbold}%
+\def\jlreq@pdftex@nobold{\CJKnormal}%
+
+%. ------------------------------------------- shims / direction / pending
+% pdfTeX inserts no automatic inter-character glue, so \inhibitglue is
+% semantically a no-op here (it only suppresses glue that does not
+% exist); this is the one safe neutralization. Everything else either
+% gets a real definition below or stays loudly undefined.
+\let\inhibitglue\relax
+
+% Horizontal only (M7 gate handles tate; the cls gates `tate' itself).
+% jlreq's \jlreq@if*(y|t)(dir|box) are redefined via these by the cls.
+\protected\def\jlreqpdftex@ifydir{\@firstoftwo}%
+\protected\def\jlreqpdftex@iftdir{\@secondoftwo}%
+
+% \lastnodechar does not exist under pdfTeX. jlreq keeps the character
+% context in \jlreq@lastnodechar; without a hook chain (M4) there is no
+% previous character, so pin it to -1 (which jlreq's \jlreq@fixjfm
+% treats as "no JFM glue insertion").
+\newcount\jlreqpdftex@lastnodechar
+\jlreqpdftex@lastnodechar=-1
+
+% M4/M5 pending APIs: fail loudly at use time, not silently.
+\def\jlreqpdftex@pending#1{%
+  \ClassError{jlreq}{pdfTeX~backend:~#1~is~not~implemented~yet.}{%
+    This~feature~is~planned~for~a~later~milestone~of~the~pdfTeX~backend.\MessageBreak
+    See~docs/pdftex-compatibility.md~for~the~current~status.\MessageBreak
+    \@ehc}%
+}
+
+% NB: jlreq.cls reads us mid-class where @ is a letter; keep it that way.
+\makeatletter

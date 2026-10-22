@@ -1,0 +1,22 @@
+% M6 L1マトリクス掃引: 代表クラスオプション一式（非既定値）のコンパイル検証
+% 既知制限（pdfTeXバックエンド）: 値にリテラルzw/zhを含む\jlreqsetupキー
+% （footnote_indent, footnote_second_indent, quote_indent等）は，キー値を
+% 後段の\dimexprで評価する実装のためpdfTeXでは「Illegal unit」になる．
+% これらはバックエンド側（jlreq-pdftex）の拡張が必要なためM6では
+% 「limitation」として文書化する（docs/pdftex-compatibility.md参照）．
+\documentclass[pdflatex,paper=b5,fontsize=12pt,line_length=40zw,number_of_lines=10,head_space=15mm,foot_space=20mm,gutter=15mm,fore_edge=20mm,baselineskip=20pt,column_gap=2zw,twoside]{jlreq}
+\jlreqsetup{
+  caption_font=\small,
+  caption_label_format={表#1:},
+  itemization_itemsep=0.2\baselineskip,
+  warichu_opening=（, warichu_closing=）,
+}
+\begin{document}
+\section{版面オプションの掃引}
+紙・行長・行数・天地・のど・小口・行送り・段間を非既定値にした文書．
+割注\warichu{割注一行目\\割注二行目}を含む．
+\begin{itemize}\item 箇条書きの項目間空き検証．\end{itemize}
+\begin{table}[htbp]\centering\caption{キャプション書式検証}
+\begin{tabular}{cc} あ & い \\ う & え \\\end{tabular}\end{table}
+\subsection{小見出し}
+\end{document}

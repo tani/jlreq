@@ -1,0 +1,330 @@
+% g1-font-init.tex ------------------------------------------------------------
+% PoC for gate G1 (class-load-time Japanese metric measurement) on pdfLaTeX.
+%
+% Simulates what jlreq.cls does *during class load* (jlreq.cls:1331--1338,
+% 543--555) on a plain `article' class, using
+%   \usepackage[ipaex-type1]{bxcjkjatype}
+% *without* the `whole' option: the CJK environment is entered explicitly in
+% the preamble, exactly as the future pdfTeX backend would do during class
+% initialization (jlreq measures \hbox{阿} at class load; a class cannot rely
+% on an env that only starts at \begin{document}).
+%
+% IMPORTANT mechanics discovered while building this PoC (all verified):
+%  * \begin{CJK} may issue \makeatother (the lazy .enc/.chr/.bdg loads inside
+%    CJK@input are wrapped in \makeatletter...\makeatother), so the backend
+%    MUST re-issue \makeatletter inside each CJK env (or pre-load the
+%    encoding once so no lazy load happens at measure time).
+%  * Catcodes of bytes "80-"FF stay active globally, but the active-char
+%    bindings (CJK@<byte>) are LOCAL to the env under bxcjkjatype's default
+%    `encapsulated' CJK load; after \end{CJK} direct JP text errors.
+%  * Therefore a `whole'-equivalent for body text is an env hooked at
+%    \begin{document} (AtBeginDocument), done in section [6] below.
+%
+% Every measurement is written to g1-measurements.txt via \immediate\write
+% so the results are machine-checkable.
+%
+% Build:  pdflatex g1-font-init.tex   (run twice for the savepos probes)
+% Output: g1-font-init.pdf, g1-measurements.txt
+% -----------------------------------------------------------------------------
+\documentclass{article}
+\usepackage[ipaex-type1]{bxcjkjatype}
+
+\makeatletter
+
+% ---- infrastructure: machine-readable measurement log ----------------------
+% NOTE: write driver commands only (no font/size commands) inside \write.
+\newwrite\g@log
+\immediate\openout\g@log=g1-measurements.txt
+% \g@logdim{<label>}{<box register>}: log W/H/D of a box register
+\newcommand*\g@logdim[2]{%
+  \immediate\write\g@log{#1:
+    W=\the\wd#2\space H=\the\ht#2\space D=\the\dp#2}}
+% \g@logline{<text>}: log a raw line
+\newcommand*\g@logline[1]{\immediate\write\g@log{#1}}
+% boxes / dimen scratch registers (mirroring jlreq's \jlreq@tempboxa etc.)
+\newbox\g@boxa
+\newbox\g@boxb
+\newbox\g@boxc
+\newdimen\g@dima
+\newdimen\g@dimb
+% result dimen used to export values out of groups (the \jlreq@resultdimen
+% pattern from jlreq-helpers.sty:482--497)
+\newdimen\g@resultdimen
+
+\g@logline{== G1 PoC: preamble (class-load-time equivalent) measurements ==}
+\g@logline{engine: pdflatex (pdfTeX), bxcjkjatype 2023/07/23 v0.5,
+  ipaex-type1 mode, explicit CJK env (no whole)}
+
+% =========================================================================
+% [1] Basic metrics: \hbox{阿} at several NFSS sizes, mincho and gothic
+% =========================================================================
+\g@logline{-- [1] basic metrics of \unexpanded{阿} at normalsize/large/footnotesize --}
+\g@logline{expected @10pt: W=10.0pt H=8.8pt D=1.2pt (JFM jlreq class-0:
+  width=1, height=0.88, depth=0.12)}
+
+\begin{CJK}{UTF8}{ipxm}%
+\makeatletter % REQUIRED: env start may have reset @ to catcode 12
+  % normalsize (10pt in article.cls)
+  \setbox\g@boxa=\hbox{阿}%
+  \g@logdim{[1] mincho normalsize(10pt)}\g@boxa
+  % large (14.4pt)
+  {\large
+    \setbox\g@boxa=\hbox{阿}%
+    \g@logdim{[1] mincho large(14.4pt)}\g@boxa}%
+  % footnotesize (8pt)
+  {\footnotesize
+    \setbox\g@boxa=\hbox{阿}%
+    \g@logdim{[1] mincho footnotesize(8pt)}\g@boxa}%
+  % gothic via \CJKfamily
+  {\CJKfamily{ipxg}%
+    \setbox\g@boxa=\hbox{阿}%
+    \g@logdim{[1] gothic normalsize(10pt)}\g@boxa}%
+  % explicit \fontsize{12}{12} request inside the CJK env in the preamble
+  {\CJKfamily{ipxm}\fontsize{12}{12}\selectfont
+    \setbox\g@boxa=\hbox{阿}%
+    \g@logdim{[1] mincho fontsize12}\g@boxa}%
+  % explicit \fontsize{9}{9} ("9pt" scaled CJK font)
+  {\CJKfamily{ipxm}\fontsize{9}{9}\selectfont
+    \setbox\g@boxa=\hbox{阿}%
+    \g@logdim{[1] mincho fontsize9}\g@boxa}%
+\end{CJK}
+
+% =========================================================================
+% [2] jlreq class-load-time idiom coverage (6 idioms from jlreq.cls)
+% =========================================================================
+\g@logline{-- [2] jlreq class-load-time idioms, all inside preamble CJK env --}
+
+\begin{CJK}{UTF8}{ipxm}%
+\makeatletter
+
+  % ---- idiom (a): plain \hbox{阿} width (jlreq.cls:1333, 546, 2270, 3431)
+  \setbox\g@boxa=\hbox{阿}%
+  \g@logdim{[2a] hbox-width of \unexpanded{阿}}\g@boxa
+  \g@dima=\wd\g@boxa
+  \g@logline{[2a] wd copied to dimen = \the\g@dima;
+    fontdimen6 (font size at measure time) = \the\fontdimen6\font}
+
+  % ---- idiom (b): \setbox + ht/dp of a two-char string 漢字
+  %      (jlreq measures single chars for Cht/Cdp/Cwd but multi-char
+  %      strings the same way elsewhere; jlreq.cls:4054,4058 use （ )
+  \setbox\g@boxb=\hbox{漢字}%
+  \g@logdim{[2b] hbox\unexpanded{漢字}}\g@boxb
+  \g@dima=\dimexpr\ht\g@boxb+\dp\g@boxb\relax
+  \g@logline{[2b] height+depth of \unexpanded{漢字} = \the\g@dima
+    (expect 1.0zh = 10pt, NOT 2x width)}
+
+  % ---- idiom (c): \dimexpr arithmetic on measured dims
+  %      (jlreq.cls:545--551, 736: \dimexpr(\ht...-\dp...)/2\relax etc.)
+  \setbox\g@boxa=\hbox{阿}%
+  \g@dima=\dimexpr(\ht\g@boxa - \dp\g@boxa)/2\relax % jlreq@box@putcenter line
+  \g@dimb=\dimexpr\g@dima*3 + 2\wd\g@boxa/4\relax
+  \g@logline{[2c] (ht-dp)/2 of \unexpanded{阿} = \the\g@dima
+    ; 3*(that)+wd/4 = \the\g@dimb}
+  \g@dima=\dimexpr\wd\g@boxa/2\relax % half-width like 始め括弧類 (0.5zw)
+  \g@logline{[2c] wd/2 (half-width check) = \the\g@dima}
+
+  % ---- idiom (d): measure inside \begingroup...\expandafter\endgroup
+  %      pattern (jlreq.cls:543--555 \jlreq@box@putcenter and
+  %      jlreq-helpers.sty:482--497 \jlreq@resultdimen export).
+  %      Exact copy of jlreq.cls:543 with g registers substituted.
+  %      NOTE: the trailing \raise...\box is horizontal-mode material;
+  %      in jlreq \jlreq@box@putcenter is only ever expanded inside
+  %      typeset material, so we reproduce that runtime context here
+  %      with an outer \hbox (measured values are what matters).
+  \setbox\g@boxa=\hbox{X}% target box to re-center (like a heading box)
+  \begingroup
+    \g@dima=\dimexpr(\ht\g@boxa - \dp\g@boxa)/2\relax
+    \setbox\g@boxb=\hbox{阿}%
+    \g@dima=\dimexpr(\ht\g@boxb - \dp\g@boxb)/2 - \g@dima\relax
+    \edef\g@do{%
+      \unexpanded{\ht\g@boxa}=\the\dimexpr\ht\g@boxb - \g@dima\relax
+      \unexpanded{\dp\g@boxa}=\the\dimexpr\dp\g@boxb + \g@dima\relax
+      \noexpand\setbox\noexpand\g@boxc=\noexpand\hbox{%
+        \noexpand\raise\the\g@dima\unexpanded{\box\g@boxa}}%
+    }%
+  \expandafter\endgroup
+  \g@do
+  \g@logdim{[2d] putcenter-ed box (re-packed into g@boxc)}\g@boxc
+  \g@logline{[2d] raise amount was \the\g@dima\space
+    (0 when target already matches \unexpanded{阿}'s center)}
+  % the group export idiom: result dimen survives the group
+  \begingroup
+    \setbox\g@boxb=\hbox{漢}%
+    \edef\g@do{\noexpand\g@resultdimen=\the\wd\g@boxb\noexpand\relax}%
+  \expandafter\endgroup
+  \g@do
+  \g@logline{[2d] exported wd\unexpanded{(漢)} via edef/endgroup idiom = \the\g@resultdimen}
+
+  % ---- idiom (e): jlreq.cls:1333--1338 -- Cht/Cdp/Cwd/Cvs/Chs determination
+  %      (in real jlreq these lengths are pre-declared; here: local copies)
+  \newdimen\g@Cht \newdimen\g@Cdp \newdimen\g@Cwd
+  \newdimen\g@Cvs \newdimen\g@Chs
+  \mcfamily\selectfont\normalsize
+  \setbox\g@boxa=\hbox{阿}%
+  \g@Cht=\ht\g@boxa
+  \g@Cdp=\dp\g@boxa
+  \g@Cwd=\wd\g@boxa
+  \g@Cvs=\baselineskip
+  \g@Chs=\wd\g@boxa
+  \g@logline{[2e] Cht=\the\g@Cht\space Cdp=\the\g@Cdp\space
+    Cwd=\the\g@Cwd\space Cvs=\the\g@Cvs\space Chs=\the\g@Chs}
+
+  % ---- idiom (f): \hbox to <N*wd> (the full-width line idiom; jlreq
+  %      computes rule/line widths from measured wd, e.g. heading lines)
+  \setbox\g@boxa=\hbox{阿}%
+  \setbox\g@boxb=\hbox to \dimexpr\wd\g@boxa*10\relax{阿}%
+  \g@logdim{[2f] hbox to 10*wd(\unexpanded{阿}) with single \unexpanded{阿} inside}\g@boxb
+  \g@dima=\dimexpr\wd\g@boxb-\wd\g@boxa*10\relax
+  \g@logline{[2f] wd(box b) - 10*wd(box a) = \the\g@dima
+    (0pt: the 'to' forces exactly 10zw; single \unexpanded{阿} leaves 9zw of hfil)}
+
+\end{CJK}
+
+% =========================================================================
+% [3] \zw / \zh semantics emulation
+% =========================================================================
+% pdfTeX has NO zw/zh units. jlreq.cls:524 defines \def\zw{zw}\def\zh{zh}
+% (pTeX relative units: 1zw = width of the class-1st char in current JFM,
+%  1zh = its height+depth). The backend must substitute a measured dimen.
+\begin{CJK}{UTF8}{ipxm}%
+\makeatletter
+  \g@logline{-- [3] zw/zh emulation --}
+  \setbox\g@boxa=\hbox{阿}%
+  \edef\g@zw@val{\the\wd\g@boxa}%
+  \g@logline{[3] measured zw (wd of class-0 char) at normalsize = \g@zw@val}
+  % \zh: height+depth of a class-0 char = 0.88+0.12 = 1.0 zw
+  \g@dima=\dimexpr\ht\g@boxa+\dp\g@boxa\relax
+  \g@logline{[3] measured zh (ht+dp) = \the\g@dima}
+  % a "1zw wide" box containing 縦 (U+7E26), as \hbox to 1zw{...} would do:
+  \setbox\g@boxb=\hbox to \g@dima{\unexpanded{縦}\hss}%
+  \g@logdim{[3] hbox to 1zw containing \unexpanded{縦}}\g@boxb
+  % kanjiskip-like glue of exactly 1 zw (0.25 zw stretch, 0.125 zw shrink
+  % -> the jlreqxkanjiskip shape, jlreq.cls:788):
+  \setbox\g@boxb=\hbox{\hskip\g@dima plus 0.25\g@dima minus 0.125\g@dima}%
+  \g@logline{[3] 1zw-kanjiskip glue box: W=\the\wd\g@boxb
+    (natural=zw, stretch=0.25zw, shrink=0.125zw)}
+\end{CJK}
+
+% =========================================================================
+% [4] bold series: \CJKbold and \bfseries with ipaex-type1
+% =========================================================================
+\begin{CJK}{UTF8}{ipxm}%
+\makeatletter
+  \g@logline{-- [4] bold handling --}
+  % normal series
+  \setbox\g@boxa=\hbox{阿}%
+  \g@logdim{[4] m series \unexpanded{阿}}\g@boxa
+  % \CJKbold (CJK package fake-bold switch). bxcjkjatype loads its
+  % pdfTeX driver with CJKboldbyembolden active by default, so \CJKbold
+  % switches to PDF text-rendering Tr 2 (outline embolden), NOT metrics
+  % change.
+  \CJKbold
+  \setbox\g@boxb=\hbox{阿}%
+  \g@logdim{[4] CJKbold \unexpanded{阿} (Tr2 embolden; expect same metrics)}\g@boxb
+  \CJKnormal
+  % \bfseries inside CJK env: NFSS request. c70ipxm.fd maps bx -> CJKssub
+  % to m/n (no bold Type1 ipaex font exists), so shape falls back.
+  \bfseries
+  \g@logline{[4] after bfseries: f@series=\f@series,
+    curr@fontshape=\curr@fontshape, f@size=\f@size}
+  \setbox\g@boxb=\hbox{阿}%
+  \g@logdim{[4] bfseries \unexpanded{阿} (expect ssub -> same metrics)}\g@boxb
+  \mdseries
+  % \CJKbold *is* usable for headings that need faux-bold JP:
+  \CJKbold
+  \setbox\g@boxb=\hbox{漢字ボールド}%
+  \g@logdim{[4] CJKbold \unexpanded{漢字ボールド}}\g@boxb
+  \CJKnormal
+\end{CJK}
+
+% =========================================================================
+% [5] Latin font / CJK interplay
+% =========================================================================
+\g@logline{-- [5] latin/CJK font interplay --}
+% In ipaex-type1 mode \mcdefault becomes ipxm (bxcjkjatype:726), but that
+% only affects the *CJK* family selection (\mcfamily -> \CJKfamily{ipxm});
+% the Latin NFSS selection is untouched (OT1/cmr stays Latin).
+\begin{CJK}{UTF8}{ipxm}%
+\makeatletter
+  \g@logline{[5] mcdefault=\mcdefault, gtdefault=\gtdefault}
+  \g@logline{[5] latin rmfamily uses: \f@encoding/\f@family\space at \f@size}
+  \setbox\g@boxa=\hbox{abc}%
+  \g@logdim{[5] latin hbox{abc} inside CJK env}\g@boxa
+  \setbox\g@boxb=\hbox{abc\unexpanded{漢字}}%
+  \g@logdim{[5] mixed hbox abc+kanji}\g@boxb
+\end{CJK}
+% Outside the CJK env the Latin text is plain NFSS:
+\setbox\g@boxa=\hbox{abc}%
+\g@logline{[5] outside CJK env: latin hbox{abc} W=\the\wd\g@boxa
+  H=\the\ht\g@boxa\space D=\the\dp\g@boxa}
+\g@logline{[5] f@encoding/f@family outside env = \f@encoding/\f@family}
+
+% =========================================================================
+% [6] State across \begin{document}
+% =========================================================================
+\g@logline{-- [6] state across begin{document} --}
+\begin{CJK}{UTF8}{ipxm}%
+\makeatletter
+  \setbox\g@boxa=\hbox{阿}%
+  \g@logline{[6] last preamble measurement wd(\unexpanded{阿})=\the\wd\g@boxa}
+\end{CJK}
+% After \end{CJK}: measured values live in dimen/box registers and are
+% unaffected. Direct JP text would NOT work in the body without a new env
+% (bindings are local), so the backend hooks one env at begin-document,
+% exactly like the `whole' option does internally (bxcjkjatype:910):
+\AtBeginDocument{\begin{CJK}{UTF8}{ipxm}}
+\AtEndDocument{\end{CJK}}
+
+% =========================================================================
+% [7] Edge: \makeatletter boundaries and env nesting
+% =========================================================================
+\g@logline{-- [7] makeatletter / nesting edge cases --}
+\begin{CJK}{UTF8}{ipxm}%
+\makeatletter % required again: the lazy loads of env [6] reset @
+  \setbox\g@boxa=\hbox{阿}%
+  \g@logline{[7] inside CJK env + makeatletter: wd(\unexpanded{阿})=\the\wd\g@boxa}
+  % nested CJK env inside a CJK env (CJK env is a plain TeX group):
+  \begin{CJK}{UTF8}{ipxg}
+    \makeatletter
+    \setbox\g@boxa=\hbox{阿}%
+    \g@logline{[7] nested env (ipxg inside ipxm): wd(\unexpanded{阿})=\the\wd\g@boxa}
+    \makeatother
+  \end{CJK}
+  \makeatletter
+  \setbox\g@boxa=\hbox{阿}%
+  \g@logline{[7] after nested env closed: wd(\unexpanded{阿})=\the\wd\g@boxa
+    (outer ipxm restored)}%
+\end{CJK}
+
+\g@logline{== end of preamble measurements ==}
+\immediate\closeout\g@log
+
+\makeatother
+
+\begin{document}
+
+\section{本文確認 (body sanity check)}
+
+Measured at class-init time: the \texttt{Cht}/\texttt{Cdp}/\texttt{Cwd}%
+/\texttt{Cvs}/\texttt{Chs} equivalents were exported to
+g1-measurements.txt. This paragraph verifies that the preamble CJK activity
+did not disturb normal typesetting: 漢字と Latin mixed text (this works
+because of the AtBeginDocument CJK env from section [6]), plus a
+\begin{CJK}{UTF8}{ipxg}ゴシック切替\end{CJK} switch inline.
+
+\begin{CJK}{UTF8}{ipxm}
+プローン組版の確認: 和文 10pt 明朝，幅・高さ・深さは測定値どおり。
+Latin inside CJK env: abc def.
+\end{CJK}
+
+Back in the AtBeginDocument env: plain Latin abc again.
+
+% geometric verification of the measured zw in actual output (2nd run):
+\makeatletter
+\newbox\spbox
+\setbox\spbox=\hbox{阿}%
+\pdfsavepos\write-1{G1SP: baseline_x=\the\pdflastxpos}%
+\typeout{G1INFO: wd(阿)=\the\wd\spbox\space measured in body too}
+\makeatother
+
+\end{document}

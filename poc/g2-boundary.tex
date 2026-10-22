@@ -1,0 +1,173 @@
+% g2-boundary.tex --- G2 gate PoC: transparent JA<->latin boundary glue
+%                     on the CJK output layer (pdfLaTeX + bxcjkjatype).
+%
+% Run (default, CJKpunct=quanjiao):
+%   pdflatex -interaction=nonstopmode g2-boundary.tex
+% Run (noCJKpunct comparison):
+%   pdflatex -interaction=nonstopmode '\def\bndNOpunct{1}\input{g2-boundary.tex}'
+%
+% Evidence goes to stdout/log:
+%   G2|<tag>|...        state-machine trace per scenario
+%   G2M|<key>|<width>   measured widths (pt)
+%
+% Hook points (why: see README-g2.md):
+%   1. \CJKsymbol        -- fires for every non-punctuation CJK char
+%                           (UTF8.chr \CJK@altchar/\CJK@char call it per char).
+%                           -> LATIN->CJK glue goes here.
+%   2. \CJKpunctsymbol   -- fires for every CJK char routed through
+%                           \CJK@punctchar (UTF8.enc sends lead bytes e3/ef
+%                           there; non-punct chars fall back to \CJKsymbol
+%                           inside CJKpunct). Wrapped identically.
+%   3. \CJK@@@ignorespaces -- CJKspace's post-char token position in the
+%                           CJK* environment; used to \futurelet-peek the
+%                           token that follows a CJK char WITHOUT consuming
+%                           it. -> CJK->LATIN glue goes here.
+% State machine (global \count): 0=none/other, 1=cjk, 2=latin.
+
+\documentclass{article}
+\ifdefined\bndNOpunct
+  \usepackage[whole,ipaex-type1,noCJKpunct]{bxcjkjatype}
+\else
+  \usepackage[whole,ipaex-type1]{bxcjkjatype}
+\fi
+
+\makeatletter
+% ------------------------- boundary state machine -------------------------
+\newcount\bnd@state      % 0 = none/other, 1 = cjk, 2 = latin
+\bnd@state=0
+\let\bnd@tok\relax
+
+\newif\ifbnd@trace \bnd@tracetrue
+\def\bnd@tag{??}%
+\def\bnd@log#1{\ifbnd@trace\message{G2|\bnd@tag|#1}\fi}%
+
+% xkanjiskip-like glue (same metric as bxcjkjatype's \CJKecglue):
+\def\bnd@ecglue{\hskip.25em plus.125em minus.08em }%
+
+% --- entry hook: runs before every CJK char is typeset --------------------
+\def\bnd@cjk@enter{%
+  \ifmmode
+    \global\bnd@state=0 % CJK char inside math: no glue, reset state
+  \else
+    \ifhmode
+      \ifnum\bnd@state=2
+        \bnd@log{LATIN->CJK:glue}\bnd@ecglue
+      \fi
+    \fi
+    \global\bnd@state=1
+  \fi
+}%
+
+% --- exit peek: runs at the CJKspace position after a CJK char ------------
+% CJK -> latin glue is emitted when the token after a CJK char is latin.
+% The token is peeked, never consumed.
+\def\bnd@peek{\futurelet\bnd@tok\bnd@peek@a}%
+\def\bnd@lat{%
+  \ifhmode
+    \ifnum\bnd@state=1
+      \bnd@log{CJK->LATIN:glue}\bnd@ecglue
+    \fi
+  \fi
+  \global\bnd@state=2
+}%
+\def\bnd@peek@a{%
+  \ifx\bnd@tok\@sptoken
+    \global\bnd@state=0 % explicit space: manual spacing wins (scenario h)
+  \else
+    \ifcat\noexpand\bnd@tok a%      letter  -> latin
+      \bnd@lat
+    \else
+      \ifcat\noexpand\bnd@tok 1%     other (digits/latin punct) -> latin
+        \bnd@lat
+      \else
+        \ifx\bnd@tok\egroup% group end: resume observation after group
+          \aftergroup\bnd@peek
+        \fi
+        % everything else ($, {, control sequences, active CJK bytes):
+        % state stays as-is; no forced boundary glue at such boundaries
+      \fi
+    \fi
+  \fi
+}%
+
+% --- install hooks at begin document ---------------------------------------
+% Runs after CJKpunct's own \AtBeginDocument{\punctstyle{quanjiao}} (which
+% swaps \CJKsymbol -> \CJKpunct@CJKsymbol), so we wrap the *live* chain.
+\AtBeginDocument{%
+  \let\bnd@orig@CJKsymbol\CJKsymbol
+  \def\CJKsymbol#1{\bnd@cjk@enter\bnd@orig@CJKsymbol{#1}}%
+  \let\bnd@orig@CJKpunctsymbol\CJKpunctsymbol
+  \def\CJKpunctsymbol#1{\bnd@cjk@enter\bnd@orig@CJKpunctsymbol{#1}}%
+  \let\bnd@orig@igs\CJK@@@ignorespaces
+  \def\CJK@@@ignorespaces{\bnd@orig@igs\bnd@peek}%
+}
+
+% --- measurement helper ----------------------------------------------------
+\newbox\bnd@box
+\def\bnd@meas#1#2{\setbox\bnd@box=\hbox{#2}\typeout{G2M|#1|\the\wd\bnd@box}}%
+\makeatother
+
+\begin{document}
+\makeatletter
+
+% ---------- reference widths ----------
+\bnd@tag{ref}%
+\bnd@meas{glue-width}{\bnd@ecglue}%
+\bnd@meas{kanji2}{漢字}%
+\bnd@meas{latin3}{abc}%
+\bnd@meas{math}{${E=mc^2}$}%
+
+% ---------- (a) plain ----------
+\bnd@tag{a}%
+\bnd@meas{a-plain}{漢字abc漢字}%
+\bnd@meas{a-baseline-off}{漢字}%
+\setbox\bnd@box=\hbox{漢字}\setbox4=\hbox{abc}%
+\typeout{G2M|a-parts|\the\wd\bnd@box+\the\wd4}%
+
+% ---------- (b) macro transparency ----------
+\bnd@tag{b}%
+\newcommand\ja{漢字}%
+\bnd@meas{b-macro}{\ja abc\ja}%
+
+% ---------- (c) groups ----------
+\bnd@tag{c}%
+\bnd@meas{c-group}{{漢字}abc{漢字}}%
+
+% ---------- (d) math ----------
+\bnd@tag{d}%
+\bnd@meas{d-math}{漢字${E=mc^2}$漢字}%
+\bnd@meas{d-math-off-baseline}{漢字}%
+
+% ---------- (e) font switch ----------
+\bnd@tag{e}%
+\bnd@meas{e-fontswitch}{{\CJKfamily{ipxg}漢字}abc漢字}%
+\bnd@meas{e-cjk-after-switch}{{\CJKfamily{ipxg}漢字}漢字}%
+
+% ---------- (f) footnote / moving arg ----------
+\bnd@tag{f}%
+漢字\footnote{脚注abc脚注}漢字
+
+% ---------- (g) explicit CJK* environment ----------
+\bnd@tag{g}%
+\bnd@meas{g-star-env}{{\begin{CJK*}{UTF8}{ipxm}漢字abc漢字\end{CJK*}}}%
+
+% ---------- (h) explicit spacing ----------
+\bnd@tag{h}%
+\bnd@meas{h-hspace}{漢字\hspace{1em}abc}%
+\bnd@meas{h-space}{漢字 abc}%
+
+% ---------- (i) line-break torture (narrow box) ----------
+\bnd@tag{i}%
+\bnd@meas{i-full}{漢字abc漢字abc漢字}%
+\noindent\parbox{58pt}{漢字abc漢字abc漢字abc漢字}
+
+% ---------- CJKpunct interaction ----------
+\bnd@tag{punct}%
+\bnd@meas{punct-cjkrun}{あ」あ}%
+\bnd@meas{punct-latin}{あ」abc}%
+\bnd@meas{punct-latin-parts}{あ」}%
+\bnd@meas{punct-latin-word}{abc}%
+
+\message{G2|END|state=\number\bnd@state}%
+\makeatother
+\end{document}
