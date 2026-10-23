@@ -1,0 +1,37 @@
+% v3-basic.tex -- V1-re gate PoC 1 (plain article, no jlreq)
+% bxcjkvert vertical body text + the two bxcjkvert-specific behavioral
+% fixes vs raw CJKvert: baselinestretch retention and no \normalfont
+% reset on direction switch. Multi-paragraph flow + savepos probing of
+% glyph/column advance direction.
+\documentclass[a5paper]{article}
+\usepackage[margin=20mm]{geometry}
+\usepackage[utf8]{inputenc}
+\makeatletter\def\@begindocumenthook{\CJKvert}\makeatother
+\usepackage[ipaex-type1]{bxcjkjatype}
+\usepackage[main=retain]{bxcjkvert}
+\makeatletter
+\begin{document}
+\begin{CJK}{UTF8}{min}
+\makeatletter
+\typeout{V3-BLSTRETCH-BEFORE: \baselinestretch}
+\typeout{V3-FONT-BEFORE: \f@family/\f@series/\f@shape, \f@size pt}
+\CJKvert
+\typeout{V3-DIR-AFTER-VERT: \CJK@direction}
+\typeout{V3-BLSTRETCH-AFTER: \baselinestretch}
+\typeout{V3-FONT-AFTER: \f@family/\f@series/\f@shape, \f@size pt}
+私はその人を常に先生と呼んでいた。だからここでもただ先生と書くだけで
+本名は打ち明けないでしまう。これは世間を憚かる遠慮と言うより、
+その方が私にとって自然だからである。\par
+私はその人の記憶を呼び起すごとに、すぐ「先生」と言いたくなる。
+筆を執っても心持は同じ事である。よそよそしい頭文字などはとても
+使う気にならない。\par
+\begingroup
+\pdfsavepos\write\@auxout{\string\gdef\string\vposA{\the\pdflastxpos,\the\pdflastypos}}%
+阿\pdfsavepos\write\@auxout{\string\gdef\string\vposB{\the\pdflastxpos,\the\pdflastypos}}%
+阿\pdfsavepos\write\@auxout{\string\gdef\string\vposC{\the\pdflastxpos,\the\pdflastypos}}\par
+\endgroup
+\CJKhorz
+\typeout{V3-DIR-BACK: \CJK@direction, \baselinestretch}
+水平方向に戻った。ABC 123。
+\end{CJK}
+\end{document}

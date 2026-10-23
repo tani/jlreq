@@ -1,0 +1,30 @@
+% v3-punct.tex -- V1-re gate PoC 2 (plain article, no jlreq)
+% Punctuation position in vertical writing via bxcjkvert: measure ink
+% of 、。「 in their 1zw cells (savepos marks), then compare against
+% the uplatex tate ground truth (ujarticle[tate]) rendered separately.
+% Sheet-frame numbers are mapped to the reading frame by CW rotation
+% of the page (the CJKvert reading model); true vertical typesetting
+% answers are read directly off the ujarticle PDF.
+\documentclass[a5paper]{article}
+\usepackage[margin=20mm]{geometry}
+\usepackage[utf8]{inputenc}
+\makeatletter\def\@begindocumenthook{\CJKvert}\makeatother
+\usepackage[ipaex-type1]{bxcjkjatype}
+\usepackage{bxcjkvert}
+\makeatletter
+\def\markpos#1{\pdfsavepos\write\@auxout{\string\gdef\string#1{\the\pdflastxpos,\the\pdflastypos}}}
+\pagestyle{empty}
+\begin{document}
+\begin{CJK}{UTF8}{min}
+\CJKvert
+\noindent
+\markpos\cellA あ%
+\markpos\cellB 、%
+\markpos\cellC 。%
+\markpos\cellD 「%
+\markpos\cellE 」%
+\markpos\cellF
+\par
+\typeout{V3-PUNCT: done}
+\end{CJK}
+\end{document}

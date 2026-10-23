@@ -1,86 +1,119 @@
 # G4/M7 評価: pdfTeX バックエンドの縦組み(tate)可否判定
 
-## 結論(verdict)
+## 結論(verdict, 2026-10-23 再調査版)
 
-**縦組みは構造的に実装不可能 (structurally blocked)。** エンジンの方向プリミティブ不在に加え、「縦組みグリフの供給源」「縦組み JFM の解釈系」「jlreq の用紙モデルとの整合」の 3 層すべてに代替手段が存在しない。クラスが `pdflatex,tate` を明示エラーにする現行ゲート(jlreq.cls:524、`tests/run-pdftex-tests.sh` T2 で回帰監視)を**維持するのが正しい**。
+**jlreq の `tate` を動かす方向での実装は依然として構造的にブロックされている。**
+bxcjkvert (実在・取得済み) は生 CJKvert の副作用 2 点 (baselinestretch 強制変更・フォントリセット) を**正確に解消する**有用な薄層であり、回転レイヤとして検証した限りの動作は正しい。しかしパッケージの設計上の提供範囲は「グリフ回転 + 方向切替の副作用除去」までで、JLREQ の縦組みが要求する層 (縦用紙モデル・版面・約物の縦用配置・縦組み JFM・縦中横・方向感応のページ家具) には**仕様としても到達しない**(マニュアル自身がその意図を持たない)。
 
-以下、調達試行 → フォールバック(CJKvert)での実証 → 構造的理由、の順に記す。
+研究用 PoC として「回転ベースの疑似縦組み」を動かすことは可能 (後述のロード時互換問題の回避込みで rc=0)。ただしこれは jlreq の `tate` ではない。
 
-## 1. bxcjkvert 等の調達試行(全て失敗)
+## 1. bxcjkvert の調達(初回報告の誤りを訂正)
 
-| 手段 | 結果 |
+初回調査 (本ファイル旧版) では「bxcjkvert は CTAN/GitHub のどこにも存在しない」と判定したが、**それは誤り**。
+
+| 調査 | 結果 |
 |---|---|
-| `kpsewhich bxcjkvert.sty` | 空 (TeX Live 2025 nix store 内に存在しない) |
-| `tlmgr install bxcjkvert` | nix store が read-only で拒否 (`.../tlpkg/ is not writable`) |
-| `tlmgr init-usertree` + `tlmgr --usermode install bxcjkvert` | Local 2025 vs remote 2026 のクロスリリース更新拒否 |
-| `curl https://mirrors.ctan.org/install/macros/latex/contrib/bxcjkvert.tds.zip` | HTTP 404 (TDS zip 非存在) |
-| `https://ctan.org/pkg/bxcjkvert`, `.../tex-archive/macros/latex/contrib/bxcjkvert` | 両方 HTTP 404 — **CTAN にこのパッケージは存在しない** |
-| GitHub API `search/repositories?q=bxcjkvert` | `total_count: 0` — GitHub にも存在しない |
-| `zr-tex8r/{BXcjkvert,bxcjkvert,BXvert,BXtategaki}` 直打ち | 全て 404 |
+| `kpsewhich bxcjkvert.sty` (TL2025 nix store) | 空 — TeX Live 2025 には未収録 (2026-03-31 公開のため) |
+| `tlmgr install bxcjkvert` | nix store read-only + local2025/remote2026 クロスリリース拒否 (両方失敗) |
+| CTAN 個別 pkg ページ `ctan.org/pkg/bxcjkvert` | 404 — **単独パッケージとしては登録されていない** (初回はこれを存在なしと誤読) |
+| CTAN ディレクトリ直接 `mirrors.ctan.org/install/...bxcjkvert.tds.zip` | 404 (TDS zip なし) |
+| **本当の所在**: CTAN `language/japanese/BX/bxcjkjatype/` ディレクトリ配下 | **同梱されている** (zr-tex8r 氏作、MIT、`v0.5a [2026/03/31]`)。manual: bxcjkvert.pdf、ソース: bxcjkvert.tex |
+| GitHub search `bxcjkvert` | 0 件 (個別リポジトリなし; 作者: https://github.com/zr-tex8r) |
 
-**bxcjkvert は CTAN/GitHub のどこにも存在しない名前**である (設計書の記憶違いと思われる)。代替候補の調査結果:
+取得物 (Main 経由で入手・検証済み): `/tmp/bxcjkvert/{bxcjkvert.sty,bxcjkvert.tex,bxcjkvert.pdf}`。
+PoC 用ローカル設置 (コミット禁止のインテグレータ指示準拠): `texlive/tex/latex/bxcjkvert/bxcjkvert.sty` に配置し、`TEXINPUTS="texlive//:" pdflatex` で解決。**texlive/ ディレクトリ自体はコミットしないこと。**
 
-- **bxcjkjatype (バックエンドが使用中)**: 縦組み機能は**抹消済み**。`vertical` オプション指定で `\PackageError{bxcjkjatype}{Option 'vertical' is abolished}` (bxcjkjatype.sty:139-142)。パッケージ内部に CJKvert 用の `\CJKsymbol` パッチ経路 (bxcjkjatype.sty:799-854) は残るが、これは太字処理の差し替えであり縦組み機能そのものではない。
-- **CJK (基底レイヤ)**: 縦組みっぽい機能は **`CJKvert.sty`** (Werner Lemberg, v4.8.5 2021/10/16) のみ。TeX Live 2025 に収録 (`/tex/latex/cjk/texinput/CJKvert.sty`)。以降これをフォールバックとして M7 評価を行う。
+## 2. マニュアル能力抜粋 (bxcjkvert.tex 全読)
 
-## 2. CJKvert による実証 PoC(poc/ 配下、すべて現行バックエンド上で検証)
+bxcjkvert.sty v0.5a は CJKvert (v4.8.5) を内部で `\RequirePackage` する薄層で、提供は正確に以下の 3 オプションのみ:
 
-CJKvert の仕組み (CJKvert.sty 実読): `\CJKvert` で `\ifCJK@vertical@` を立て、`\CJKsymbol` を再定義して**各グリフを `\rotatebox{90}`(graphicx)で回転**する。組方向プリミティブは使わず、TeX の行組は横のまま。「縦書き」は各物理行(=段)を 90° 自転させたグリフ列として出し、**閲覧側でページを 90° 回転させて読む**方式である。縦グリフ別字形は要求しない (フォントの `.fdx` カスタマイズ `…/offset/v`, `…/fullheight/v`, `…/norotate/v` はデフォルト 0pt/未設定)。
+| オプション | 既定 | 効果 |
+|---|---|---|
+| `resetfont` | `false` | 既定で `\CJKvert`/`\CJKhorz` が `\normalfont` を発行しなくなる (CJKvert は発行する) |
+| `usebaselinestretch` | `retain` | 既定で `\baselinestretch` を一切触らなくなる (CJKvert は縦時に ×1.3 強制) |
+| `main` | `retain` | 文書開始時の方向を強制しない (CJKvert は縦開始固定) |
 
-PoC ファイル (すべて `pdflatex -interaction=nonstopmode -halt-on-error` で **rc=0**):
+マニュアル abstract 引用: *"a tailored version of the CJKvert package, accommodated for Japanese typesetting, where MIXTURE of horizontal and vertical writings is common."* — **MIXTURE = 文書内での横/縦ブロック混在**の意味であり、縦中横・約物配置・縦用 JFM・ページ回転などの仕組みは**コマンドとしても hook としても存在しない**。制限の明示: なし (単に言及がない)。実装詳細: CJKvert の `\CJKvert` の自動起動を `\@begindocumenthook` から剥がし `\AfterEndPreamble` で `\bxjt@main` だけ実行するパッチ (bxcjkvert.sty:103-108)。
 
-### M7-1 縦組みフォント代替 — poc/v1-tate-fonts.tex
+## 2.5 ロード時互換問題 (TeX Live 2025 で再現)
 
-- `V1-FONT-ENC: C70` / `V1-FONT-FAMILY: ipxm` / `V1-FONT-CURRENT: lmr/m/n`
-  → 縦でも横と同じ ipaex Type1 (C70/ipxm) が供給される。**縦組み用フォント・縦グリフへの代替はどこにも発生しない。**
-- TeX Live 2025 内に CJK 系の縦組みフォント定義 (`*.fdx` / `*vert*`) は **存在しない** (`find texmfdist/tex/latex/cjk -iname "*vert*" -o -iname "*.fdx"` → CJKvert.sty 自身のみ)。C70/ipxm 用の v メトリクスは未定義のまま全てデフォルト (offset/v=0pt) に落ちる。
+`\@begindocumenthook` は現行 LaTeX2e (TL2025) では **`undefined`** (計測: `HOOK-LEGACY: undefined`; CJKvert の `\AtBeginDocument` は新 hook システムに入り従来変数に残らない)。このため bxcjkvert.sty:104 のパッチ `\expandafter\bxjt@tmpa\@begindocumenthook\relax\bxjt@tmpa` が区切りマッチに失敗し、**素のロードで File-ended-while-scanning エラーになる**。
 
-### M7-2 行方向・段方向挙動 — poc/v1-tate-fonts.tex (\pdfsavepos で実測)
+回避 (PoC で採用・検証済み): ロード前に従来変数へ種を入れる。
 
-- 同一行内グリフ位置: posA(あの前)=(3640547,33256505)sp → posB(あの後)=(4295906,...) → posC=(4951265,...)。**各グリフ +655359sp ≒ +10.0pt = +1zw が +x 方向 (物理 LTR)**、y 座標変化なし。
-- 段 (物理行) は **上から下へ積まれる** (物理的な下方進行)。CJKvert はページを立てたまま閲覧者が 90° 時計回りに回して読むモデルなので、閲覧面では段が右→左に進む — が、**直立ページ上で右→左に段を積む jlreq の縦組み用紙モデル (監査書 B3-B5, B35) とは根本的に非整合**。
-- 段送りピッチ: CJKvert は `\baselinestretch` を強制 1.3 にし `\normalfont` を発行 (CJKvert.sty `\CJKvert` 本体)。実測:
-  - バックエンドのみ (CJKvert なし): `\baselineskip=17.0pt` (stretch 既定=空)
-  - CJKvert あり (VERT 状態): `V1-BASELINESTRETCH-AFTER-VERT: 1.3` / `V1-BASELINESKIP: 22.10005pt`
-  → クラスが版面設計時に確定した行数・行送り (jlreq.cls:1333以降の `\Cvs` 系計算) と出荷時ピッチが機械的にずれる。\textheight=435.0001pt / \textwidth=310.0001pt (a5) は横組み形状のまま不変。
+```tex
+\makeatletter\def\@begindocumenthook{\CJKvert}\makeatother
+\usepackage{bxcjkvert}   % パッチが `\CJKvert` を空回収して通る
+```
 
-### M7-3 約物の回転 — poc/v1-tate-punct.tex / v1-tate-compare.tex / v1-tate-ink.tex
+(右上のものをそのままにしても自動縦開始は起きず、方向は作者が命令で決める — `main=retain` 既定の意図通り)。恒久対応は上流課題 (zr-tex8r 氏に報告する価値がある)。
 
-- 回転は**幾何学的に発生する**ことをノードレベルで確認: `\hbox{あ}` (縦モード) の `\showbox` 内容に `\pdfsave` → `\pdfsetmatrix{0 1 -1 0}` (90° CCW 回転行列) → グリフ → `\pdfrestore` が出現する (poc 側では `showbox.tex` プローブで確認)。
-- しかし字形は横組み用のもの**そのまま** (M7-1 の通り代替なし):
-  - `、。` (yoko では字字枠の左下): 全セル 1zw の物理ボックス (実測 box=9.99998pt×(8.40005+1.59995)pt、あいう等と同一)。回転にともなう原点オフセット (C70/ipxm の `/offset/v` 相当) は一切定義されず、縦組みが要求する「セル右上寄せの縦用約物字形 + ベースライン移動」(JLREQ 4.2.2、JIS X 4051 の縦組み約物配置) には到達しない。**コーナー位置の保証が構造上取れない**。
-  - `「」` などの括弧類: 縦組みでは「別字形(縦用バリアント)に置き換える」のが組版規則 (Unicode の縦組み字形置換 / pTeX の JFM 縦用フォント)。Type1 IPAex に縦用グリフは存在せず回転は 90° 一律のため、括弧の**開き向きが規則通りにならない**。
-  - カギ括弧・句読点のぶら下げ・二分詰め: pdfTeX バックエンドの H1/クラス幅機構は横軸に沿って kern を出す規則 (jlreq-pdftex-rules.sty:344-377)。回転グリフに対して物理横軸のアキ加工は**読み面では段間方向にずれる**だけで、縦組みの約物詰めの意味を持たない。
-- 約物まわりのペア glue / 禁則ペナルティ (jlreq-pdftex-jfm.def 由来) は**横組み JFM データの値**を物理横軸に挿入し続ける。縦組み JFM (jlreq では `jfm-v` 系: 監査書 L5、フォント定義 664-674 行) の解釈系はバックエンドに存在しない。
+## 3. PoC (poc/v3-*.tex; plain article + bxcjkjatype + bxcjkvert、jlreq 不使用)
 
-### M7-4 縦横混在 — poc/v1-tate-mix.tex
+いずれも repo ルートから `TEXINPUTS="texlive//:" pdflatex -interaction=nonstopmode -halt-on-error`。
 
-- 文中の `\CJKhorz`↔`\CJKvert` 切り替えは rc=0 で通る。が、M7-2 の通り `\normalfont`+stretch 変更が混入し、行の物理ピッチが段落途中で変わる。jlreq の版面グリッド (行取り・行間計算) を破壊するため、実用上の「混在」として成立しない。
+### v3-basic.tex (縦組み本文・複数段落・副作用計測) — rc=0
 
-### M7-5 縦中横相当機能
+- `V3-BLSTRETCH-BEFORE/AFTER: ` 両方空 (=1)：**baselinestretch 変更ゼロ** (生 CJKvert は 1.3 強制で实测されていた: 旧版 §M7-2 の 22.1pt 記録)。bxcjkvert の修正が実働。
+- `V3-FONT-AFTER: cmr/m/n, 10pt`：**フォント保持** (`\normalfont` reset なし)。
+- グリフ進行: `vposB→vposC = +655359sp = +10.0pt` 物理 LTR、y 不変 → 回転済みグリフが 1zw ピッチで物理横進行し、物理行 (=段) は下に積む。CJKvert 方式 (閲覧時にページを時計回り 90° 回転) のまま。**組方向プリミティブは一切登場しない**。
+- 複数段落フロー: 2 段落縦組みで rc=0。行送りは文書既定値のまま (baselinestretch=1)。
 
-- **存在しない。** CJKvert.sty に縦中横相当の命令は皆無 (grep `tatechu` 0 件)。
-- jlreq.cls 側: `\jlreq@iftdir` は d 分岐で恒偽 (`jlreq.cls:657`)。`\tatechuyoko`(jlreq.cls:6589-6595)はスターなしで `ClassError{... not allowed in yoko mode}`、スター付きは `#2` をそのまま横のまま出すパススルー。**縦中横の本実装 (回転しない領域を段内に作る) は CJKvert の方式論では与えられない** (縦中横は「縦組み方向での長方形配置」が前提であり、方向プリミティブ抜きの回転絵付けでは隣接関係を作れない)。
+### v3-punct.tex (約物コーナー実測 + リーディング枠変換) — rc=0
 
-### M7-6 ページスタイル/脚注の sanity — poc/v1-tate-mix.tex
+シート上の実測 (`\pdfsavepos` + 300dpi ラスタ解析):
 
-- コンパイル rc=0 で通るが、柱・ノンブル・脚注は**直立ページ上の物理横要素のまま**。読み面に合わせてページを 90° 回転 (`\pdfpageattr{/Rotate 90}` 等) すると今度は柱と脚注が横向きになる。jlreq の縦組みでは柱配置は縦組み仕様 (B35: 柱のボックス寸法制御)、脚注は**傍注へ変換**される (監査書 B32、jlreq.cls:3726-3728) — どちらも方向プリミティブ前提であり CJKvert 方式では再現不能。
+```
+、(セル内) sheet xrel=0.14..0.31  y_above_baseline=+3.18..+5.11pt
+。          sheet xrel=0.10..0.29  y_above_baseline=+2.46..+4.63pt
+「          sheet xrel=0.72..0.96  y_above_baseline=-3.08..+6.31pt
+```
 
-## 3. 構造的ブロッカー(互換表用に整理)
+閲覧枠 (=シートを CW 90° 回転) への写像 `rel_y(reading) = 1 − sheet_xrel`、`rel_x(reading) ≈ (baseline 上の高さ)/1zw` で評価:
 
-1. **方向プリミティブ不在**: pdfTeX に `\tate`/`\yoko`/`\iftdir`/`\ifmdfdir` は存在しない (監査書 §0 基本前提)。`\jlreq@iftdir` は d 分岐で恒偽直打ち (jlreq.cls:657)、組方向追跡のステート変数化 (L6/B4 の代替) すら存在しない。
-2. **縦組みグリフの供給源がない**: bxcjkvert 不実在 (CTAN 404/GitHub 0 件)、bxcjkjatype 縦組みオプション抹消 (PackageError)、CJKvert は横フォントの幾何回転のみ (TeX Live 内に縦用 `.fdx` 0 件)。Type1 IPAex に縦グリフは存在しない。
-3. **縦組み JFM の解釈系がない**: バックエンドのペア glue/禁則/ぶら下げは全て横組み JFM (jlreq-pdftex-jfm.def) を物理横軸に適用する固定設計。`jfm-v` 相当のデータ解釈と縦軸適用は不可能 (glue/kern の向きが物理軸に縛られる)。
-4. **用紙モデルの非整合**: jlreq 縦組みは直立長辺縦の用紙に右→左の段組み。CJKvert は横向きグリフの直立ページであり、読み面でのみ 90° 回転 — ページ属性/基本版面 (\textheight/\textwidth の意味、柱・脚注の向き) が全ページで食い違う。/Rotate 強制も走り見出しを破壊する。
-5. **縦中横・割注・傍注の縦組み変種が実装不能**: いずれも「縦組み領域での配置」が前提 (監査書 B32/B34/M8/M9) で、回転絵付けモデルには載らない。
+- **、**: 閲覧枠で **rel_y ≈ 0.69..0.86 (セル下部)・rel_x ≈ 左寄り** → **下左エリアに置かれる**。
+- 真の縦組みでの正規位置 (JLREQ 4.2.2、JIS X 4051): **上右**である。upLaTeX 基準 (`poc/ref-tate-uplatex.tex`、ujarticle[tate]、36dpi 解析) でも「、」はセル上 3 分の 1 (`yrel=0.00..0.33`) に来る実測を得た。
+- **よって幾何回転では 、。は対角で正反対のコーナーに落ちる** (横組み字形の左下配置が回転で下左に出るため)。縦用グリフ別字形の代替は (Type1 ipaex にも bxcjkvert にも) 供給されない。
+- 「」の上下方向は (シート相対位置で) 概ね整合するが、字形は横組みのものを幾何回転したものであり、縦組み字形 (縦用バリアント) ではない。
 
-**互換表記入案**: tate — `structurally blocked (方向プリミティブ不在 + 縦組みグリフ/JFM/用紙モデル全層。)。bxcjkvert 実在せず(調達不能)、bxcjkjatype の vertical は廃止済 PackageError、CJKvert は横フォント幾何回転で縦組み規格要件を満たさない。現行の tate オプション明示エラーを維持。`
+### v3-mixture.tex (混在・縦中横候補・数式) — rc=0
 
-## 証跡ファイル
+- `\CJKhorz` を縦領域内に挟むと、**シート上では欧文が直立・横進行で入る** (実測: mixA→mixB→mixC = あ(+10.0pt)→ab(+10.55pt)→い)。しかし閲覧枠ではこの欧文は**文字が横向きに倒れて**見える (シートは読み面に対し CCW 90° されているため直立シート文字は読み面で 90° 回転する)。**縦中横 (読み面で直立の横書き挿入) ではない**。縦中横等価機能は CJKvert/bxcjkvert のいずれにも存在しない。
+- 数式 `\(...\)` の接続: rc=0 で通るが、数式はシート上物理水平のまま (閲覧枠で倒れる)。
+- 方向切替え自体は副作用なく往復する (`V3-DIR-AFTER-VERT: v`→`h`、約定通り)。
 
-- `poc/v1-tate-fonts.tex` (M7-1/M7-2: フォント・位置・ピッチ実測)
-- `poc/v1-tate-punct.tex` (M7-3: 約物ボックス実測)
-- `poc/v1-tate-mix.tex` (M7-4/M7-5/M7-6)
-- `poc/v1-tate-compare.tex`, `poc/v1-tate-ink.tex` (M7-3: savepos+ラスタ比較)
-- 全 PoC: `pdflatex -interaction=nonstopmode -halt-on-error` rc=0 (\showbox プローブのみ意図的停止で rc=1)
-- 調達試行ログ: 本文 §1 表
+### 旧 PoC (poc/v1-*.tex; jlreq バックエンド + 生 CJKvert)
+
+バックエンド共存下の参照証跡として残す。生 CJKvert でも rotation whatsit (`\pdfsetmatrix{0 1 -1 0}`) は発火する (v1-tate-showbox.tex) が、baselinestretch=1.3 強制・フォント reset などは旧版記録通り。bxcjkvert はこの 2 点を解消する。
+
+## 4. jlreq `tate` への接続可否 — ブロッカー表
+
+| # | ブロッカー | 判定 |
+|---|---|---|
+| 1 | bxcjkvert の存在・入手 | **gone** (bxcjkjatype CTAN dir 同梱; リリース配布では vendoring か上流 TL 取り込み待ちが必要) |
+| 2 | TL2025 でのロード失敗 (@begindocumenthook 非互換) | **workaroundable** (種入れ回避 実証済み; 恒久的には上流修正案件) |
+| 3 | CJKvert の副作用 (baselinestretch 強制・font reset) | **gone** (bxcjkvert 既定で解消、計測済み) |
+| 4 | 方向プリミティブ (`\tate`/`\iftdir`) | **structural**: 引き続き存在しない。レイアウト判断は横固定状態のまま |
+| 5 | 用紙モデル (jlreq の縦組み = 直立縦長用紙・左右域交換・版面計算) | **structural**: CJKvert 系は「直立用紙の物理横版面に倒れたグリフを並べ、閲覧回転する」モデル。jlreq の版面計算 (行送り・字詰め・柱・柱位置) と軸が整合しない。`/Rotate` 強制は柱・ノンブルを横倒しにする |
+| 6 | 縦組み JFM (開閉括弧の縦用組法・(x)kanjiskip 相当の縦軸適用) | **structural**: バックエンドの表は横組み JFM (jlreq-pdftex-jfm*.def) のみ。縦用は別データ + 縦軸挿入器が必要 |
+| 7 | 約物コーナー配置 (、。上右) | **structural**: 幾何回転では下左に落ちる (§3 实测)。救うには「縦用フォント/オフセット表」相当が必要で現状 Type1 供給なし |
+| 8 | 縦中横 | **structural**: CJKhorz 混在は閲覧枠で横向きに倒れる挿入であり、読み面直立の縦中横ではない (§3 实测) |
+| 9 | ページ家具 (柱・ノンブル・脚注→傍注転換 4.2.6・見出しの改丁) | **structural**: すべて方向感応の仕組みが未整備。回転絵付けでは整合しない |
+| 10 | ぶら下げ・禁則軸 | **structural**: バックエンドのぶら下げ kern は物理横軸。縦組みでは段側への半角空けで軸が違う |
+
+**判読**: jlreq クラスとしての `tate` (JLREQ 準拠の本実装) は引き続き **structurally blocked**。bxcjkvert は「回転レイヤを正しい副作用で供給する」点までは有用だが、JLREQ の縦組み仕様が要求する残りの層は、パッケージの設計範囲外の構造的事項である。
+
+## 5. スケジュール可否の最終判定
+
+**jlreq の `tate` を本仕様で pdfTeX に載せるスライスは依然として正当化されない。** 版面と用紙、約物字形と配置、縦用 JFM、家具、縦中横の全層で別実装が要求され、回転近似は JLREQ 準拠の検証 (4.2.2 の約物位置含む) を構造的に落とす。続けるなら低い目標に限定した別枠 (例: 「CJKvert 互換の縦組み近似を出す最小クラス」) であり、jlreq ブランドの tate としては出せない。
+
+現行の `pdflatex,tate` 明示エラーゲート (jlreq.cls:524、runner T2) は正しい状態であり維持する。
+
+## 証跡ファイル一覧
+
+- `poc/v3-basic.tex` — 副作用計測・複数段落 (rc=0)
+- `poc/v3-punct.tex` — 約物コーナー实测 (rc=0)
+- `poc/v3-mixture.tex` — 混在・縦中横候補・数式 (rc=0)
+- `poc/ref-tate-uplatex.tex` — upLaTeX 真の縦組み基準 (uplatex + dvipdfmx, rc=0)
+- `poc/v1-*.tex` — jlreq バックエンド + 生 CJKvert の参照証跡 (旧版)
+- ローカル設置: `texlive/tex/latex/bxcjkvert/bxcjkvert.sty` (コミット外、調達は §1)

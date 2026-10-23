@@ -1,0 +1,23 @@
+% v3-mixture.tex -- V1-re gate PoC 3 (plain article, no jlreq)
+% Mixture support: latin/number runs inside vertical text via \CJKhorz
+% (candidate substitute for tate-chu-yoko), direction switches, and
+% inline math adjacency.
+\documentclass[a5paper]{article}
+\usepackage[margin=20mm]{geometry}
+\usepackage[utf8]{inputenc}
+\makeatletter\def\@begindocumenthook{\CJKvert}\makeatother
+\usepackage[ipaex-type1]{bxcjkjatype}
+\usepackage{bxcjkvert}
+\makeatletter
+\def\markpos#1{\pdfsavepos\write\@auxout{\string\gdef\string#1{\the\pdflastxpos,\the\pdflastypos}}}
+\begin{document}
+\begin{CJK}{UTF8}{min}
+\CJKvert
+\noindent
+昭和\CJKhorz 90\CJKvert 年に書かれた文。アルファベットrun \CJKhorz ABCdef\CJKvert と
+混在させてみる。数字だけなら\CJKhorz 12345\CJKvert も同様。\par
+次は数式の接続を見る。漢字\(E=mc^2\)漢字、そして\CJKhorz \(x+y\)\CJKvert の後。
+\par
+\markpos\mixA あ\CJKhorz\markpos\mixB ab\CJKvert\markpos\mixC い\markpos\mixD\par
+\end{CJK}
+\end{document}

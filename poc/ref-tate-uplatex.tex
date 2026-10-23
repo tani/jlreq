@@ -1,0 +1,19 @@
+% ref-tate-uplatex.tex -- uplatex ground truth for v3 (NOT pdflatex)
+% True vertical typesetting reference: same cell layout as v3-punct.tex
+% so ink corners can be compared cell-by-cell in the reading frame.
+% Compile: uplatex + dvipdfmx.
+\documentclass[tate,a5paper]{ujarticle}
+\usepackage[margin=20mm]{geometry}
+\makeatletter
+\def\markpos#1{\pdfsavepos\write\@auxout{\string\gdef\string#1{\the\pdflastxpos,\the\pdflastypos}}}
+\pagestyle{empty}
+\begin{document}
+\noindent
+\markpos\cellA あ%
+\markpos\cellB 、%
+\markpos\cellC 。%
+\markpos\cellD 「%
+\markpos\cellE 」%
+\markpos\cellF
+\par
+\end{document}
