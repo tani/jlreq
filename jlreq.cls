@@ -525,11 +525,11 @@
 \ifx d\jlreq@engine
   \if@tate
     \ClassWarning{jlreq}{pdfTeX~tate~support~is~EXPERIMENTAL~(rotation-based).\MessageBreak
-      Out-of-scope~for~this~slice~and~expected~to~render~wrongly~or~trigger~errors:\MessageBreak
-      page~furniture~(running~heads)~placement,~footnote/sidenote~layout,~floats,\MessageBreak
+      Verified:~columns/kinsoku/punct-placement,~headings,~TOC,~page~furniture,\MessageBreak
+      footnote/endnote/sidenote/~\string\marginpar,~basic~floats,~inline/display~math.\MessageBreak
+      Still~out-of-scope~(expected~to~render~wrongly~or~error):\MessageBreak
       jlreq-trimmarks~banner~in~tate,~\string\tatechuyoko~(horizontal-in-vertical),\MessageBreak
-      math~adjacent~to~vertical~runs,~ruby,~tatechuyoko*-based~counters~(they~pass~through),\MessageBreak
-      tate-geometry-dependent~jlreqsetup~keys.%
+      ruby,~tate-geometry-dependent~jlreqsetup~keys.\MessageBreak
       See~docs/pdftex-tate-eval.md~and~the~pdflatex-tate~fixtures.}
   \fi
 \fi

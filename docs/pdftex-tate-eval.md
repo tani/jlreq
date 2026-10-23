@@ -1,11 +1,25 @@
 # G4/M7 評価: pdfTeX バックエンドの縦組み(tate)可否判定
 
-## 結論(verdict, 2026-10-23 再調査版)
+## 結論(verdict, 2026-10-23 最終版 — T1 実装により更新)
 
-**jlreq の `tate` を動かす方向での実装は依然として構造的にブロックされている。**
-bxcjkvert (実在・取得済み) は生 CJKvert の副作用 2 点 (baselinestretch 強制変更・フォントリセット) を**正確に解消する**有用な薄層であり、回転レイヤとして検証した限りの動作は正しい。しかしパッケージの設計上の提供範囲は「グリフ回転 + 方向切替の副作用除去」までで、JLREQ の縦組みが要求する層 (縦用紙モデル・版面・約物の縦用配置・縦組み JFM・縦中横・方向感応のページ家具) には**仕様としても到達しない**(マニュアル自身がその意図を持たない)。
+**bxcjkvert/CJKvert 直接経路は提供範囲外のままだが、異なる構成（shipout rotation）で縦組みコアは実現された。**
+本ファイル §2以降の「構造的ブロック」評価は「bxcjkvert を**経路**として使う」案に対しては正しい（§1の調達記録、副作用除去の実測、回転レイヤの限界）。しかしその後、**出力段でページ箱ごと回転させる構成**（V4 PoC → T1 実装、fixture群 `tests/fixtures/pdflatex-tate-*.tex`）が、プリミティブなし・外部パッケージなしで動作することが确立し、`tate` オプションは pdfTeX 経路で縦組み文書を組版する（実験的・対象外機能あり）。
 
-研究用 PoC として「回転ベースの疑似縦組み」を動かすことは可能 (後述のロード時互換問題の回避込みで rc=0)。ただしこれは jlreq の `tate` ではない。
+- 構成: 内枠は通常の横組み galley（`\hsize`=段の延長、`\vsize`=ブロック幅、`\baselineskip`=段ピッチ）。和文グリフを +90° 回転（`jlreq-pdftex-rules.sty` の F2 slot、クラス別 `off@` 補正で約物を規格方位へ配置）。`\@outputpage` で出力箱を −90° 回転して手縦の綴じ側・小口に載せる。
+- 実測: 読行 上→下、段 右→左、2ページ継起、禁則ゼロ違反（showbox ベースの boxdump 検査含む）、ペアグルーは tate テーブル一致。
+- 判定の反転点: 「グリフ回転レイヤでは縦組みが作れない」（glyph-layer rotation の限界）は真だが、「ページ箱の回転では inner frame が通常の組版世界なので禁則・改行・版面計算が全部そのまま動く」（page-level rotation の利得）が決定的差だった。
+
+対象外（T1 時点で WARN として残したもの、T2/T3/T4 で解決）:
+
+| 残件 | 状態 | 方法 |
+|---|---|---|
+| ページ家具（柱・ノンブル） | **implemented** | `\@outputpage` オーバーライドで家具横幅を版面巾に揃える（uplatex bbox一致）; 共通部分の `\if@newlist` が条件文 skip 内でトークン評価される問題は `\@firstofone` 化で解消 |
+| 縦組み見出し/目次 | **implemented** | `\jlreq@Kanji` (T1 側のマクロ化）+垂直見出し axis で動作、目次も垂直（実測） |
+| 脚注/後注/傍注/`\marginpar` | **implemented** | 検証の結果、**T1 コアのまま uplatex ground truth と一致**（変更不要: notes-fixture で bbox を明示照合） |
+| float (figure/table/caption) | **implemented** | これも検証により ground truth 一致を確認（傾けず回転のまま=正規動作） |
+| 数式隣接 | **implemented** | uplatex 実物挙動=式全体を自動的に90°倒す「寝かせ」を発見・そのまま採用。行内数式は δ=0.343zw の補正のみ（10pt実測）、別行数式は従来構造のまま |
+
+残（WARN 継続): jlreq-trimmarks banner in tate、`\tatechuyoko`（明示 ClassError）、ルビ、jlreqsetup の tate 連動キー。
 
 ## 1. bxcjkvert の調達(初回報告の誤りを訂正)
 

@@ -24,7 +24,7 @@ To use, simply write
 ### pdfLaTeX (experimental)
 Horizontal documents also compile with pdfLaTeX (experimental support). Pass the `pdflatex` class option, or let the engine be auto-detected. Internally it loads bxcjkjatype (CJKutf8 with IPAex Mincho/Gothic Type 1 fonts) and an experimental backend (`jlreq-pdftex.sty`), applying JFM-based inter-character glue, kinsoku (line-breaking rules) and Japanese/Latin spacing. Known limitations:
 
-* Vertical writing (`tate`) is not supported (an explicit error is raised).
+* Vertical writing (`tate`) has an experimental core implementation (shipout-rotation architecture): reading/column directions, kinsoku and punctuation placement are verified; page furniture, notes, floats, tate-chu-yoko, math etc. are out of scope and listed in a load-time warning (see `docs/pdftex-tate-eval.md`).
 * Hanging punctuation (`-b` variants) and Japanese in math mode (`\mathmc`/`\mathgt`, direct Japanese input) are supported.
 * Punctuation is typeset at its JFM class width (e.g. half-width), with the glyph placed per the JFM alignment (ink geometry matches the platex reference).
 

@@ -1,0 +1,18 @@
+% t2-furniture-probe.tex -- T2 probe: tate page furniture ground check.
+% Same content is compiled with pdflatex (this fixture) and uplatex
+% (sed swapped) for ground-truth comparison.
+\documentclass[pdflatex,tate,paper=a5]{jlreq}
+\pagestyle{headings}
+\begin{document}
+\tableofcontents
+\chapter{第一章の名}
+第一章本文である。\label{sec:one}
+節の参照テスト（第\ref{sec:one}節で出したラベルを指す）。
+\clearpage
+\section{第二節の名前}
+第二章に準じた本文。長めに書いて段を複数にする。
+本文本文本文本文本文本文本文本文本文本文本文本文本文本文本文本文。
+本章における記述は、組版の検証に必要な分量を含む文章である。
+\clearpage
+第三章相当の本文でページを作る。確認用。
+\end{document}

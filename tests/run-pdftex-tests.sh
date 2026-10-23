@@ -146,6 +146,28 @@ if kpsewhich jlreq-pdftex-jfm-tate.def > /dev/null 2>&1; then
       echo "PASS: $n-log-assertions ($(grep -c 'TATE-PASS' "$OUT/$n.log") assertions)"
     fi
   done
+  # T3: 注（脚注/後注/傍注）と浮遊体の縦組みフィクスチャ（uplatex GT と
+  # 配置一致を実測確認済み; ログ内 TATE-PASS/TATE-FAIL アサーション付き）
+  for f in tests/fixtures/pdflatex-tate-notes.tex tests/fixtures/pdflatex-tate-float.tex; do
+    name=$(basename "$f" .tex)
+    run "tate-$name" pdflatex -interaction=nonstopmode -halt-on-error -output-directory="$OUT" "$f"
+  done
+  for n in pdflatex-tate-notes pdflatex-tate-float; do
+    if grep -q 'TATE-FAIL' "$OUT/$n.log" || ! grep -q 'TATE-PASS' "$OUT/$n.log"; then
+      echo "FAIL: $n-log-assertions"; FAILED=$((FAILED+1))
+    else
+      echo "PASS: $n-log-assertions ($(grep -c 'TATE-PASS' "$OUT/$n.log") assertions)"
+    fi
+  done
+  # T4: 縦組み数式（math capture + δ 補正; uplatex ground truth 一致実測済み;
+  #     ログ内 TATE-PASS/TATE-FAIL アサーション付き）
+  run "tate-pdflatex-tate-math" pdflatex -interaction=nonstopmode -halt-on-error -output-directory="$OUT" \
+    tests/fixtures/pdflatex-tate-math.tex
+  if grep -q 'TATE-FAIL' "$OUT/pdflatex-tate-math.log" || ! grep -q 'TATE-PASS' "$OUT/pdflatex-tate-math.log"; then
+    echo "FAIL: pdflatex-tate-math-log-assertions"; FAILED=$((FAILED+1))
+  else
+    echo "PASS: pdflatex-tate-math-log-assertions ($(grep -c 'TATE-PASS' "$OUT/pdflatex-tate-math.log") assertions)"
+  fi
   # boxdump（\showbox の ! OK のため -halt-on-error 不使用; END マーカで成立確認）
   pdflatex -interaction=nonstopmode -output-directory="$OUT" \
     tests/fixtures/pdflatex-tate-boxdump.tex > /dev/null 2>&1 || true  # \showbox emits `! OK' -> rc=1 by design; set -e must not abort here

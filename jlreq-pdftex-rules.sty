@@ -628,6 +628,14 @@
       \ifx\jlreqpdf@next$%
         \jlreqpdf@peek@lat
       \else
+        % T4: tate では $ はアクティブ文字になる（jlreq-pdftex.sty の数式
+        % キャプチャ入口）．アクティブ$トークンの意味は
+        % \jlreqpdf@tate@dollar@cmp と一致するため，その \ifx で捕える．
+        % 横組みでは \jlreqpdf@tate@dollar@cmp は未定義のままで，
+        % この枝は常に偽（既存挙動と一致）．
+        \ifx\jlreqpdf@next\jlreqpdf@tate@dollar@cmp
+          \jlreqpdf@peek@lat
+        \else
         \ifcat\noexpand\jlreqpdf@next a%
           \jlreqpdf@peek@lat
         \else
@@ -637,6 +645,7 @@
             % CJK bytes, control sequences, groups: leave the state;
             % the follower's own hook handles the pair
           \fi
+        \fi
         \fi
       \fi
     \fi

@@ -1,0 +1,93 @@
+% pdflatex-tate-math.tex -- T4: 縦組み中の数式（shipout rotation + math capture）
+% ground truth: uplatex [tate]jlreq 同一ソース bbox 比較で，縦組み数式は
+% 数式行ごと CW-90° 回転（寝かせ）で，現行 T1 構成は向き一致（唯一の実測
+% ズレ定数 δ=3.43pt@10pt を行内数式に適用済み: jlreq-pdftex.sty T4節）。
+%
+% in-log アサーション（log 内 TATE-PASS/TATE-FAIL、テストランナーが検査）:
+%   BOUND-A/B: 和文→数式→和文の境界グルーがクラス27意味論（ltj の
+%              xkanjiskip フォールバック 0.25zw 自然長）で出ていること
+%              （$\hbox{漢$x$}$ 幅 = zw + 0.25zw + w($x$)）。
+%              露見ピークのアクティブ$腕が切れるとこの 0.25zw が消えて検出。
+%   SHIFT    : 行内数式が δ=0.343zw だけ内側送り（\ht が δ 減り \dp が δ 増、
+%              幅は不変）であること（生参照との差分測定）。
+%   KIN-A/B  : 数式直後の 、。が行（桁）端に置かれたとき桁頭に落ちない
+%              幾何（容量 95pt 桁で 2 行に収まる＝行頭禁則成立）。
+%   MIX      : 混在（\(..\)、\mathmc、\text{和文}、display）が通ること。
+\documentclass[pdflatex,tate,paper=a5]{jlreq}
+\usepackage{amsmath}
+\pagestyle{empty}
+\makeatletter
+\begin{document}
+% ---- BOUND-A/B: 境界グルー幅（0.25zw 自然長）----
+\setbox0=\hbox{漢}%
+\setbox1=\hbox{$x$}%
+\setbox2=\hbox{漢$x$}%
+\@tempdima=\dimexpr\wd2-\wd0-\wd1-0.25\jlreq@zw\relax
+\ifdim\@tempdima<\z@ \@tempdima=-\@tempdima\fi
+\ifdim\@tempdima<0.05pt\relax
+  \typeout{TATE-PASS: BOUND-A (\the\dimexpr\wd2-\wd0-\wd1\relax)}%
+\else
+  \typeout{TATE-FAIL: BOUND-A (\the\dimexpr\wd2-\wd0-\wd1\relax, expected 0.25zw)}%
+\fi
+\setbox3=\hbox{$x$漢}%
+\@tempdima=\dimexpr\wd3-\wd1-\wd0-0.25\jlreq@zw\relax
+\ifdim\@tempdima<\z@ \@tempdima=-\@tempdima\fi
+\ifdim\@tempdima<0.05pt\relax
+  \typeout{TATE-PASS: BOUND-B (\the\dimexpr\wd3-\wd1-\wd0\relax)}%
+\else
+  \typeout{TATE-FAIL: BOUND-B (\the\dimexpr\wd3-\wd1-\wd0\relax, expected 0.25zw)}%
+\fi
+% ---- SHIFT: δ 内側送り（幅不変、\ht −δ、\dp +δ）----
+\begingroup\catcode`\$=3\relax
+  \global\setbox4=\hbox{$x$}% キャプチャを通らない生参照（cat3-$）
+\endgroup
+\@tempdima=\dimexpr\ht4-\ht1-\jlreqpdf@tate@mathshift\relax
+\ifdim\@tempdima<\z@ \@tempdima=-\@tempdima\fi
+\ifdim\@tempdima<0.01pt\relax
+  \typeout{TATE-PASS: SHIFT-ht (\the\ht4->\the\ht1)}%
+\else
+  \typeout{TATE-FAIL: SHIFT-ht (\the\ht4->\the\ht1, delta \the\jlreqpdf@tate@mathshift)}%
+\fi
+\@tempdima=\dimexpr\wd4-\wd1\relax
+\ifdim\@tempdima<\z@ \@tempdima=-\@tempdima\fi
+\ifdim\@tempdima<0.01pt\relax
+  \typeout{TATE-PASS: SHIFT-wd (\the\wd1)}%
+\else
+  \typeout{TATE-FAIL: SHIFT-wd (\the\wd4 vs \the\wd1)}%
+\fi
+\@tempdima=\dimexpr\dp1-\dp4-\jlreqpdf@tate@mathshift\relax
+\ifdim\@tempdima<\z@ \@tempdima=-\@tempdima\fi
+\ifdim\@tempdima<0.01pt\relax
+  \typeout{TATE-PASS: SHIFT-dp (\the\dp4->\the\dp1)}%
+\else
+  \typeout{TATE-FAIL: SHIFT-dp (\the\dp4->\the\dp1, delta \the\jlreqpdf@tate@mathshift)}%
+\fi
+% ---- KIN-A/B: 数式直後の閉じ約物が桁端で列頭に落ちない ----
+% 容量 95pt 桁: [漢×7 約74.4pt][bk 2.49pt][$x$ 5.7pt][、]
+% = 約87.6pt で1行目に収まる。行頭禁則が効けば、は列頭に落ちず 2 行で組める。
+% （8 字版は自然長合計 98.2pt>95pt で正しく 3 行になるのを別途確認済み。）
+\setbox10=\vbox{\hsize=95pt\parindent=0pt
+  漢漢漢漢漢漢漢$x$、漢漢漢漢漢漢漢漢\par \global\count1=\prevgraf}%
+\unvbox10
+\ifnum\count1=2
+  \typeout{TATE-PASS: KIN-A comma-after-math lines=\the\count1}%
+\else
+  \typeout{TATE-FAIL: KIN-A comma-after-math lines=\the\count1}%
+\fi
+\setbox10=\vbox{\hsize=95pt\parindent=0pt
+  漢漢漢漢漢漢漢$x$。漢漢漢漢漢漢漢漢\par \global\count1=\prevgraf}%
+\unvbox10
+\ifnum\count1=2
+  \typeout{TATE-PASS: KIN-B stop-after-math lines=\the\count1}%
+\else
+  \typeout{TATE-FAIL: KIN-B stop-after-math lines=\the\count1}%
+\fi
+% ---- MIX: 行内各種・表示数式・数式中和文 ----
+混在確認: 公式 \(E=mc^2\) と $\sqrt{x^2+y^2}$、分数 $\frac{1}{2}$。
+表示:
+\[
+  \int_0^1 t^2\,dt = \frac{1}{3}, \qquad \sum_{i=1}^{n} i = \frac{n(n+1)}{2}
+\]
+表示のあとの和文。$$a^2+b^2=c^2$$ のあとも和文。
+数式中和文: $\text{和文}$、$\mathmc{漢}$ を含む式。
+\end{document}

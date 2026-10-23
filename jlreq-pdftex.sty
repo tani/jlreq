@@ -208,18 +208,165 @@
   \fi}
 \def\jlreq@pdf@kansuji@stop{\jlreq@pdf@kansuji@stop}
 
-%. ----------------------------------------------------------- tate (T1)
-% 出荷時回転（shipout rotation）: 本文ボックス(\@outputbox)のみ時計回り90°
-% 回転し、柱・フッタはカーネル既定の横組み機構のまま出す。ページ家具の
-% 縦組み対応は後続スライス（本スライスの範囲外、クラスがロード時に警告）。
-\if@tate
-  \AtBeginDocument{%
+%. ----------------------------------------------------------- tate (T1..T2)
+% 出荷時回転（shipout rotation）: 本文ボックス(\@outputbox)を時計回り90°
+% 回転して出す。柱・ノンブル・フッタはカーネル既定の横組み機構で出すが、
+% 縦組みでは家具行の幅は段長（\textwidth、内側枠組み = 送り方向）ではなく
+% 版面巾(\textheight、内側枠組み総高 = 最終枠巾)にする必要がある
+% （uplatex 対照で確立）。T1では家具を簡易ラップしていたが、T2で
+% \@outputpage を完全オーバーライドして家具を版面巾に揃える。
+% NOTE: the \@outputpage body below contains \if@newlist (a \newif conditional
+% token).  A plain `\if@tate ... \fi' wrapper would mis-skip when tate is
+% false: TeX's conditional skip counts \if@newlist as an open, EOF hits ->
+% "Incomplete \iffalse".  The \expandafter\@firstofone/\@gobble idiom closes
+% the conditional BEFORE the block is read as a macro argument.
+\if@tate\expandafter\@firstofone\else\expandafter\@gobble\fi
+  {\AtBeginDocument{%
     \expandafter\let\expandafter\jlreqpdf@saved@outputpage\csname @outputpage\endcsname
     \expandafter\def\csname @outputpage\endcsname{%
-      \setbox\@outputbox=\hbox{\rotatebox{-90}{\box\@outputbox}}%
-      \jlreqpdf@saved@outputpage}%
-  }%
-\fi
+      \UseHook {build/page/before}%
+      \begingroup
+        \language\document@default@language
+        \@resetactivechars
+        \global\let\@@if@newlist\if@newlist
+        \global\@newlistfalse
+        \@parboxrestore
+        \UseHook {build/page/reset}%
+        \let \protect \noexpand
+        \shipout \vbox{%
+          \set@typeset@protect
+          \aftergroup \endgroup
+          \aftergroup \set@typeset@protect
+        \if@specialpage
+          \global \@specialpagefalse
+          \@nameuse {ps@\@specialstyle}%
+        \fi
+        \if@twoside
+          \ifodd\count\z@
+            \let \@thehead \@oddhead
+            \let \@thefoot \@oddfoot
+            \let \@themargin \oddsidemargin
+          \else
+            \let \@thehead \@evenhead
+            \let \@thefoot \@evenfoot
+            \let \@themargin \evensidemargin
+          \fi
+        \fi
+        \reset@font
+        \normalsize
+        \normalsfcodes
+        \let \label \@gobble@with@sphack@om
+        \let \index \@gobble@with@sphack@som
+        \let \glossary \@gobble@with@sphack@om
+        \baselineskip \z@skip
+        \lineskip \z@skip
+        \lineskiplimit \z@
+          \@begindvi
+          \vskip \topmargin
+          \moveright\@themargin \vbox {%
+            \setbox\@tempboxa \vbox to\headheight {%
+              \vfil
+              \pdfannot@link@off@@
+              \UseTaggingSocket{build/page/header}{}%
+                {
+                  \color@hbox
+                    \normalcolor
+                    \hb@xt@ \textheight {\@thehead }%
+                  \color@endbox
+                }
+              \pdfannot@link@on@@
+            }
+            \dp \@tempboxa \z@
+            \box \@tempboxa
+            \vskip \headsep
+            \hbox{\rotatebox{-90}{\box\@outputbox}}%
+            \baselineskip \footskip
+            \pdfannot@link@off@@
+            \UseTaggingSocket{build/page/footer}{}%
+               {
+                  \color@hbox
+                     \normalcolor
+                     \hb@xt@ \textheight {\@thefoot }%
+                   \color@endbox
+               }
+            \pdfannot@link@on@@
+            }
+          }
+        \global \let \if@newlist \@@if@newlist
+        \global \@colht \textheight
+        \stepcounter{page}%
+        \UseHook {build/page/after}%
+    }%
+  }}
+
+%. ------------------------------------------------------ tate math (T4)
+% 縦組み中の行内数式．ground truth（uplatex 同一ソース bbox 比較）では
+% uplatex 縦組数式は数式行ごと CW-90° 回転（寝かせ: 頭右・読み下し）で
+% あり，T1 の出荷時 −90° 回転構成はこの向きと一致する（グリフ単位の画素
+% プロファイル一致・トークン縦位置完全一致）。よって向きの補正は不要で，
+% 唯一の実測ズレはベースライン横位置の定数 δ: 我々の式は CJK 列中心基準で
+% 3.43pt@10pt だけ頭側（読冊枠 +x）に寄っていた（行内・\[..\] 表示とも
+% 同一の定数）。行内数式 $...$ と \(...\) をキャプチャして内容を自然幅
+% ボックスに組み，\raise で内側送り（枠 y 負 = 最終枠の内側）する。
+% 表示数式: 自 strip 内の 3.43pt は目立たず現行（GT 一致 strip 配置）の
+% まま。$$ 二連はキャプチャ内で cat3-$ 群に入れ替えて TeX 本来の display
+% を実行するため、センタリング・改ページ等はカーネル互換のまま変わらない．
+% 境界状態: 直前和文→数式の境界は rules の露見ピークのアクティブ$腕が
+% peek@lat に誘導（クラス27 意味論は横組みと同一）．ここでは触らない．
+% yoko 側への影響: 下記の機構定義は無害な常設マクロ（$ のアクティブ化は
+% \if@tate 時の \AtBeginDocument 内のみ）．
+% δ: uplatex 同一ソース bbox 実測による較正（T4 解析ログ）
+\newdimen\jlreqpdf@tate@mathshift
+\newbox\jlreqpdf@tate@mathbox
+% cat3-$ トークンのマクロ保持（キャプチャ内で数式へ復帰するため）
+\expandafter\let\expandafter\jlreqpdf@dollar@plain\expandafter=$%
+% 行内数式の組版: 自然幅 \hbox（\textstyle系）を δ 内側に下げる。
+% \mathsurround は jlreq 規定 0pt で、そもそも出荷元の $..$ にも入らない
+% （キャプチャ時落ちるが無影響）。#1 はブレース引数（\( 経路と共有）。
+\long\def\jlreqpdf@tate@imath#1{%
+  \setbox\jlreqpdf@tate@mathbox=\hbox{\jlreqpdf@dollar@plain#1\jlreqpdf@dollar@plain}%
+  \raise-\jlreqpdf@tate@mathshift\hbox{\box\jlreqpdf@tate@mathbox}%
+}
+% $...$ 経路の捕捉: 区切り子=アクティブ$（`$#1$' 署名）本体は上に集約．
+\begingroup
+\catcode`\$=\active
+\long\gdef\jlreqpdf@tate@dollar@grab#1${\jlreqpdf@tate@imath{#1}}%
+\endgroup
+% アクティブ$ 群: catcode 変更はグループ内局所、定義は \gdef で常設化．
+% $$ の区切り子はアクティブ$同士 2 連、cmp は rules.sty 側の露見ピーク腕
+% （アクティブ$トークンとの \ifx 一致用）への意味コピー．
+\begingroup
+\catcode`\$=\active
+\gdef${\futurelet\jlreqpdf@tate@mnext\jlreqpdf@tate@dollar}%
+\global\let\jlreqpdf@tate@dollar@cmp=$%
+% $$ の形式: \jlreqpdf@tate@dollar 経由で呼ばれると入力は
+% <$ 2個目><本文><$ 3個目><$ 4個目> なので、パラメタ `$#1$$' で
+% 2個目捨て・本文捕捉・終端2個消費になる。
+\long\gdef\jlreqpdf@tate@ddollar$#1$${%
+  % 表示数式: 従来どおり。cat3-$ の群に入れ替えて本来の $$ を実行
+  \begingroup
+    \catcode`$=3\relax
+    \jlreqpdf@dollar@plain\jlreqpdf@dollar@plain#1\jlreqpdf@dollar@plain\jlreqpdf@dollar@plain
+  \endgroup
+  \ignorespaces
+}%
+\endgroup
+\def\jlreqpdf@tate@dollar{%
+  \ifx\jlreqpdf@tate@mnext\jlreqpdf@tate@dollar@cmp
+    \expandafter\jlreqpdf@tate@ddollar
+  \else
+    \expandafter\jlreqpdf@tate@dollar@grab
+  \fi
+}
+% tate 時だけ $ をアクティブ化し、\( \)（カーネル凍結 cat3-$ マクロで
+% アクティブ腕を通らない）をキャプチャ経路に載せ替える。
+% （amsmath は \( を上書きしない。math 環境は対象外。）
+\if@tate\expandafter\@firstofone\else\expandafter\@gobble\fi
+{\AtBeginDocument{%
+  \catcode`\$=\active
+  \jlreqpdf@tate@mathshift=0.343\jlreq@jareg
+  \protected\def\(#1\){\jlreqpdf@tate@imath{#1}}%
+}}
 
 % NB: jlreq.cls reads us mid-class where @ is a letter; keep it that way.
 \makeatletter

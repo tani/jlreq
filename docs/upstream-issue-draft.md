@@ -96,17 +96,23 @@ engine-API gate; see below).
 ### 明示的な制限 / Explicit limitations (per the basic principle: no
 unsupported claims)
 
-- 縦組み（`tate`）: pdfTeX lacks `\tate`/`\iftdir`/縦用JFM etc. — explicit
-  error under d (G4 gate decision: structurally blocked; see
-  docs/pdftex-tate-eval.md — re-evaluated 2026-10-23 against the real
-  bxcjkvert v0.5a, which IS bundled under CTAN
-  `language/japanese/BX/bxcjkjatype/`: it removes CJKvert's side effects
-  but supplies only glyph rotation + direction switching; rotated yoko
-  punctuation lands cell bottom-left vs the required top-right (bbox
-  vs uplatex tate), no tate-chu-yoko, no vertical JFM, no paper-model
-  hooks — a rotation approximation cannot reach JLREQ 4.2.2 conformance).
-  `tate`-dependent features (縦中横, 縦組見出し定義, 縦組
-  `\kansuji`/`和暦\today`) share the gate.
+- 縦組み（`tate`）: **experimental core implemented** (T1, 2026-10-23 —
+  see docs/pdftex-tate-eval.md). bxcjkvert/CJKvert as a *dependency path*
+  is insufficient (glyph-level rotation only; punctuation lands wrong
+  corner, no tate-chu-yoko/JFM/paper model), so instead of that package
+  we use a shipout-rotation architecture (horizontal inner galley,
+  +90° CJK glyphs with per-class metric offsets, whole output box
+  rotated −90°): reading top→bottom, columns right→left, kinsoku
+  verified from galley dumps, 2-page verified, pair glue matches the
+  tests/fixtures/pdflatex-tate-*.tex). Follow-up slices additionally
+  verified page furniture (running heads placement, `\@outputpage`
+  furniture-width override), vertical headings/TOC, footnote/endnote/
+  sidenote/`\marginpar` and basic floats (**T1 core unchanged — bbox/cm
+  parity with uplatex ground truth**), and math adjacency (ground truth
+  is the uplatex "寝かせ" style: whole formula rotated CW-90°, matched
+  with a δ=0.343zw inboard correction; edges bitwise). Remaining:
+  jlreq-trimmarks banner in tate, `\tatechuyoko` (explicit ClassError
+  as on other engines in non-tate spots), ruby, tate-keyed jlreqsetup.
 - Priority-ordered stretch/shrink (`stretch_priority`/`shrink_priority`) and
   line-end-only `end_adjust`: approximated (single-priority shrink); the
   exact semantics are inexpressible on the stock breaker — documented and
