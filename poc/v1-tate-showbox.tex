@@ -1,0 +1,18 @@
+% v1-tate-showbox.tex -- M7 task 3 node-level evidence (G4 tate gate)
+% Shows that under jlreq-pdftex + CJKvert, glyphs DO pass through
+% CJKvert's \pdfsetmatrix{0 1 -1 0} 90-degree CCW rotation whatsit.
+% Run: pdflatex -interaction=nonstopmode -halt-on-error ... -> rc=1 by
+% design (halted at the intentional \showbox). Check the log:
+% the \box0 dump contains
+%   \pdfsave \pdfsetmatrix{0 1 -1 0} \hbox(..) \pdfrestore
+% i.e. rotation is geometric per glyph; the surrounding box keeps the
+% yoko metrics (8.40005+1.59995)x9.99998, so no tate-specific metrics
+% are anywhere involved.
+\documentclass[paper=a5]{jlreq}
+\usepackage{CJKvert}
+\makeatletter
+\showboxbreadth=40 \showboxdepth=3
+\begin{document}
+\typeout{FLAG=\ifCJK@vertical@ TRUE\else FALSE\fi}
+\setbox0=\hbox{あ}\showbox0
+\end{document}

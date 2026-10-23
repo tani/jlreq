@@ -10,6 +10,10 @@
   caption_label_format={表#1:},
   itemization_itemsep=0.2\baselineskip,
   warichu_opening=（, warichu_closing=）,
+  % U1/U3追加分: pdfTeXでもQ/H単位（級・歯，1Q=1H=0.25mm）とリテラルzwが
+  % 使える（クラスの書換えパスで寸法式/単位マクロへ変換）．2Q=0.5mm, 1H=0.25mm．
+  quote_indent=2Q, quote_end_indent=1H,
+  footnote_indent=1zw,
 }
 \begin{document}
 \section{版面オプションの掃引}
@@ -19,4 +23,9 @@
 \begin{table}[htbp]\centering\caption{キャプション書式検証}
 \begin{tabular}{cc} あ & い \\ う & え \\\end{tabular}\end{table}
 \subsection{小見出し}
+\makeatletter
+\typeout{SWEEP-QI=\the\dimexpr\jlreq@quote@indent\relax}% 2Q=0.5mmの実測
+\typeout{SWEEP-QEI=\the\dimexpr\jlreq@quote@end@indent\relax}% 1H=0.25mmの実測
+\typeout{SWEEP-FNI=\the\dimexpr\jlreq@footnoteindent\relax}% 1zw=12pt（fontsize=12pt）
+\makeatother
 \end{document}

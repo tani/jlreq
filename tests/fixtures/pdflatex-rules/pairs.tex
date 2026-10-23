@@ -5,7 +5,7 @@
 \makeatletter
 \newbox\mboxa
 \def\meas#1#2#3{%
-  \global\jlreqpdf@lastclass=90
+  \ifx d\jlreq@engine\global\jlreqpdf@lastclass=90\fi
   \setbox\mboxa=\hbox{#3}%
   \ifdim\wd\mboxa=#1\relax
     \typeout{PASS: #2 = \the\wd\mboxa}%
@@ -15,18 +15,20 @@
 }
 % kanjiskip自然長0: かな連続は追加空きなし (10+10)
 \meas{20pt}{kanji-kanji (kanjiskip nat 0)}{漢字}
-% 90->1: 行頭括弧に空きなし (10)
-\meas{10pt}{parbdd-bracket (90->1 = 0)}{「}
-% 1->1: 括弧連続も空きなし (10+10)
-\meas{20pt}{bracket-bracket (pair 1->1 = 0)}{「「}
-% 15->1: かな→開き括弧は二分アキ(jfm-jlreq.lua:592) (10+5+10)
-\meas{25pt}{kanji-bracket (pair 15->1 nat 0.5zw)}{あ「}
-% 2->15: 閉じ括弧→かな 0.5zw (10+5+10)
-\meas{25pt}{bracket-kanji (pair 2->15 nat 0.5zw)}{」あ}
-% 0->1: 漢字→開き括弧 0.5zw (10+5+10)
-\meas{25pt}{kanji0-bracket (pair 0->1 nat 0.5zw)}{漢「}
-% JA->LA: xkanjiskip 0.25zw (10+2.5+abc)
-\meas{25.27779pt}{ja-la boundary (xkanjiskip 0.25zw)}{漢abc}
+% 90->1: 行頭括弧に空きなし (F2: 開き括弧グリフ自体が0.5zw箱 → 5)
+\meas{5pt}{parbdd-bracket (90->1 = 0)}{「}
+% 1->1: 括弧連続も空きなし (F2: 5+5)
+\meas{10pt}{bracket-bracket (pair 1->1 = 0)}{「「}
+% 15->1: かな→開き括弧は二分アキ(jfm-jlreq.lua:592) (F2: 10+5+5)
+\meas{20pt}{kanji-bracket (pair 15->1 nat 0.5zw)}{あ「}
+% 2->15: 閉じ括弧→かな 0.5zw (F2: 5+5+10)
+\meas{20pt}{bracket-kanji (pair 2->15 nat 0.5zw)}{」あ}
+% 0->1: 漢字→開き括弧 0.5zw (F2: 10+5+5)
+\meas{20pt}{kanji0-bracket (pair 0->1 nat 0.5zw)}{漢「}
+% JA->LA: xkanjiskip 0.25zw (F-peek修正後は境界グルーが実際に出る:
+% 10 + 2.5 + abcの実幅15.27779 = 27.77779。修正前はpeekが\fi デブリを
+% 見て境界グルーが出ず、abc幅との数値偶然で25.27779が通っていた)
+\meas{27.77779pt}{ja-la boundary (xkanjiskip 0.25zw)}{漢abc}
 % 既知の制限: 段落先頭のLA->JA境界はxkanjiskipが入らない
 % （直前CJKがいないためpeekが働かない．M4の制限として記録）
 \makeatother

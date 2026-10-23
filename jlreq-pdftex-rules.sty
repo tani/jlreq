@@ -255,11 +255,28 @@
     \ifdim\jlreqpdf@shr>0pt minus\jlreqpdf@shr\fi
   \fi
 }
-% end_adjust {default}{shrink}: 詰め量（第2フィールド）をshrinkへ加算
-\def\jlreqpdf@addendadj#1#2{%
-  \jlreqpdf@ea=#2\jlreq@jareg
-  \advance\jlreqpdf@shr\jlreqpdf@ea
+% end_adjust の全フィールドをブレース群駆動で走査し，正の値（詰め量，zw）
+% をすべて shrink へ加算する。負の値（-b 変種クラス6/7のぶら下げ突出し
+% 量）はグルー意味論に畳み込めないためここでは捨てる（G3-bis H1 ブロック
+% の \pdfprotrudechars が担う）。
+% 旧2引数版は csname 構築直後の \fi を第2引数として食い，条件分岐が途中
+% 閉じして \jlreqpdf@ea が常にデータ無関係の 1zw（=\jlreq@jareg）になって
+% いた（M5 既知バグ，2026-10-23 修正）。
+\def\jlreqpdf@addendadj#1{\expandafter\jlreqpdf@eawalk#1\jlreqpdf@eaend}
+% \jlreqpdf@eawalk{<field>}: フィールド列を1つずつ処理，センチネル
+% \jlreqpdf@eaend で停止（フィールドはブレース群なので #1 で1個ずつ取れる）
+\def\jlreqpdf@eawalk#1{%
+  \def\jlreqpdf@eafield{#1}%
+  \ifx\jlreqpdf@eafield\jlreqpdf@eaendmark
+    \expandafter\@gobble
+  \else
+    \jlreqpdf@ea=#1\jlreq@jareg
+    \ifdim\jlreqpdf@ea>0pt \advance\jlreqpdf@shr\jlreqpdf@ea\fi
+    \expandafter\@firstofone
+  \fi
+  {\jlreqpdf@eawalk}%
 }
+\def\jlreqpdf@eaendmark{\jlreqpdf@eaend}
 
 % post-break penalty of the glyph just typeset (class \jlreqpdf@curclass)
 \def\jlreqpdf@setpost{%
@@ -277,6 +294,27 @@
 % post-penalty keeps an opening bracket on the old line, a break at the
 % pre-penalty keeps a closing bracket glued to the char after it.)
 \def\jlreqpdf@beforeglyph{%
+  % F1 (kinsoku residual, docs/pdftex-compatibility.md M4 note): the CJK
+  % decoder machinery can leave a ZERO glue (\lastnodetype=11, natural 0)
+  % between the preceding latin/CJK char and this prebreak char. That glue
+  % is a legal breakpoint whose in-effect penalty predates our kinsoku
+  % penalties (they are emitted AFTER it), so a break there drops the
+  % prebreak char (」）。，etc.) to the next line head even though the
+  % following \penalty10000 forbids all adjacent positions. Manual
+  % \penalty10000/\mbox in the source cannot fix it (probed: the break
+  % happens at the glue, ignoring later penalties). Remove the zero glue
+  % (\unskip) when this char is prebreak and the last node is a zero glue;
+  % real (non-zero) glue is left alone. Our own pair glue to prebreak
+  % chars is already suppressed (kernmode), so the only zero glue here is
+  % foreign and safe to eat.
+  \expandafter\ifx\csname jlreqpdf@kin@pre@\number\jlreqpdf@curclass\endcsname\relax
+  \else
+    \ifnum\lastnodetype=11
+      \ifdim\lastskip=0pt
+        \unskip
+      \fi
+    \fi
+  \fi
   \ifnum\jlreqpdf@pend>0 \penalty\jlreqpdf@pend \fi
   \global\jlreqpdf@pend=0
   % 行頭禁則クラスの直前: pair glueをkern化する（glueは新たな
@@ -298,6 +336,70 @@
 % いずれも行頭相当（90→c）はグルーなし。
 \newcount\jlreqpdf@jidorimode \global\jlreqpdf@jidorimode=0
 \newskip\jlreqpdf@akiskip
+% H1（ぶら下げ，G3-bis）フック実装。jfm-jlreq データでは ぶら下げ対象は
+% クラス6（句点）・7（読点）のみで，-b 変種の end_adjust 第1優先 -0.5zw
+% がその定義である。pdfTeX の \pdfprotrudechars=2 + \rpcode で行末突出しを
+% 行う（仕組みの検証は poc/g3-protrusion.tex のパネル証拠）:
+%   - \jlreqpdf@hangglyph : placeglyph の w<1zw 経路で，クラス6/7を hbox
+%       ではなく裸 char で出す（hbox は行端走査 cp_skipable を止めるため）
+%   - \jlreqpdf@hangkern  : peek で \kern -0.5zw を CJK マーカー直後に出す。
+%       行中では 0.5zw 詰め（F2 の hbox と同じ光学），行末のカーンブレイク
+%       ではパック時に0化され，\rpcode のマージンカーン -1em と残りの伸長
+%       でグリフが 0.5zw マージン側に出る
+%   - \jlreqpdf@rpcode@ensure : グリフごとに，そのフォントインスタンス
+%       （\curr@fontshape/\f@size/\CJK@plane）の当該スロットへ
+%       \rpcode=1000（突出し量1em）を一度だけ設定（代入は pdf_mem 直書き
+%       ＝常にグローバルなのでCJKのグループ内からでよい）
+\newif\ifjlreqpdf@hang \jlreqpdf@hangfalse
+\newcount\jlreqpdf@hanged \jlreqpdf@hanged=0
+% -b 変種選択時にのみ有効化（\jlreq@burasage はクラスオプション
+% hanging_punctuation で真；この時点で既に確定）。
+\ifjlreq@burasage
+  \jlreqpdf@hangtrue
+  \pdfprotrudechars=2
+\fi
+\def\jlreqpdf@hangglyph#1{%
+  \ifjlreqpdf@hang
+    \ifnum\jlreqpdf@curclass=6 \jlreqpdf@hangglyph@do{#1}\fi
+    \ifnum\jlreqpdf@curclass=7 \jlreqpdf@hangglyph@do{#1}\fi
+  \fi
+}
+\def\jlreqpdf@hangglyph@do#1{%
+  \global\jlreqpdf@hanged=1
+  \jlreqpdf@rpcode@ensure{#1}%
+  \jlreqpdf@orig@CJKsymbol{#1}%
+}
+\def\jlreqpdf@hangkern{%
+  \ifjlreqpdf@hang
+    \ifnum\jlreqpdf@lastclass=6 \kern-0.5\jlreq@zw \fi
+    \ifnum\jlreqpdf@lastclass=7 \kern-0.5\jlreq@zw \fi
+  \fi
+}
+\def\jlreqpdf@rpcode@ensure#1{%
+  \expandafter\ifx\csname\curr@fontshape/\f@size/\CJK@plane\endcsname\relax
+    % まだ当該プレーンのフォントが生成されていない（通常あり得ない）
+  \else
+    \expandafter\ifx\csname jlreqpdf@rpc@\curr@fontshape/\f@size/\CJK@plane @\number#1\endcsname\relax
+      \expandafter\global\expandafter\let
+        \csname jlreqpdf@rpc@\curr@fontshape/\f@size/\CJK@plane @\number#1\endcsname\@empty
+      % #1 はプレーン内バイト値（0-255）＝フォントスロットそのもの
+      % （setclassof の入注と同値）。\rpcode 代入は pdf_mem 直書きで
+      % 常にグローバルなのでグループ内から発行してよい。
+      \expandafter\rpcode\csname\curr@fontshape/\f@size/\CJK@plane\endcsname#1=1000 %
+    \fi
+  \fi
+}
+% 行端走査（cp_skipableみなし判定）は，非ゼロ幅の「明示」カーンを越えて
+% グリフに到達できない。CJK の目印カーン（\kern -2sp\kern2sp /
+% \kern -1sp\kern1sp）は第1要素が非ゼロの明示カーンなので，ぶら下げ時は
+% 両方とも無効化する（glues は既に無効化済み。\lastkern 系の CJK 機構は
+% 本バックエンドのペアグルー出方で元来発火しない）。
+\AtBeginDocument{%
+  \ifjlreqpdf@hang
+    \global\def\CJK@kern{}%
+    \global\def\CJK@CJK{}%
+  \fi
+}
 
 %. ------------------------------------------------- codepoint -> class
 % The hooks receive the DECIMAL codepoint; the .def dispatch is keyed
@@ -452,12 +554,29 @@
 % \jlreqpdf@peek: installed as \CJK@ignorespaces; runs after every CJK
 % glyph. Detects a latin (or math-shift) follower and emits the
 % CJK->LA boundary glue, flushing the pending post-penalty first.
+% M1: 「\ifmmode\else\futurelet..\fi」形は CJKutf8 の \CJK@XXX 末尾条件
+% （\expandafter\CJK@ignorespaces\else..\fi\fi の残り \fi 群内）で展開され
+% ると壊れる: \else スキップで消えたはずの \jlreqpdf@peek@a が古い
+% \jlreqpdf@next で実行され，\CJK@XXX 末尾の \fi 群と突いて Extra \fi
+% （再現条件: 直前に和文がある状態の $あ$ / 行列セル内和文）．
+% 未来let 本体を \else スキップ域の外へ出し，数式時は引数ごと捨てる
+% \@gobble イディオムに変える（引数形なのでスキップ域に未来letが残らない）．
 \def\jlreqpdf@peek{%
   \ifmmode
-    % inside math: no boundary handling at all
+    \expandafter\@gobble
   \else
-    \futurelet\jlreqpdf@next\jlreqpdf@peek@a
+    \expandafter\@firstofone
   \fi
+  {\jlreqpdf@peek@do}%
+}
+% 非数式モードのときだけ実行される本体．
+\def\jlreqpdf@peek@do{%
+  % H1（ぶら下げ）: 直前のクラス6/7（、。）が裸charで出力されているとき，
+  % その直後に負のカーンを置いて字送りを0.5zwに戻す（\jlreqpdf@hangkern
+  % は\ifjlreqpdf@hangが偽のとき何もしないフック）。futureletより先に
+  % 出力することで，行端ノード走査が[char][kern]を見る。
+  \jlreqpdf@hangkern
+  \futurelet\jlreqpdf@next\jlreqpdf@peek@a
 }
 \def\jlreqpdf@peek@lat{%
   \ifnum\jlreqpdf@pend>0 \penalty\jlreqpdf@pend \fi
@@ -499,6 +618,101 @@
     \fi
   \fi
 }
+% re-peek continuation after escaping the decoder groups (see peek@a):
+% futurelet only -- \jlreqpdf@peek@do's hangkern must NOT run twice.
+\def\jlreqpdf@peek@cont{\futurelet\jlreqpdf@next\jlreqpdf@peek@a}
+
+% \jlreqpdf@glyph{<cp>}: the glyph typesetter called from the inner
+% \CJKsymbol hook (all UTF-8 routes funnel here under noCJKpunct).
+% F2: JFM class metrics say the glyph advance may be < 1zw (class@<n>
+% {w}{h}{d}{align}: e.g. 約物 class 1/2/6/7 = 0.5zw, 半角 class 192
+% = 0.333zw). The font glyph is always full-width (IPAex), so the
+% JFM width is realized by typesetting the glyph in an \hbox of the
+% JFM width and positioning it per the class align field
+% (ltj/luatexja-jfm.lua: the "align" table shifts the glyph inside
+% the char box):
+%   left   = glyph at the LEFT edge of the box (overhangs right)
+%   middle = glyph centered (overhangs both)
+%   right  = glyph at the RIGHT edge of the box (overhangs left)
+% w = 1zw (or no metrics: default CJK class) -> unchanged typesetting
+% (no box, byte-identical node stream, marker-kern machinery safe).
+% The JFM h/d stay font-natural: align placement is horizontal only
+% (the box keeps the glyph's own height/depth, as in ltj where the
+% vertical metrics are untouched). The IPAex glyph is always
+% FULL-width (1zw) while the box is w<1zw, so the box is SHORTER than
+% its content: the spacers must be \hss (negative shrink). \hfil
+% (plus-only) cannot shrink and turns every narrowed punct into an
+% overfull box.
+\newbox\jlreqpdf@charbox
+\def\jlreqpdf@glyph#1{%
+  \ifmmode
+    % 数式内: \hboxに包んで出す．数式中の\charはバイト値を「ASCIIのmathcode」
+    % で再解釈してしまう（あ=U+3042→サブフォントバイト0x42が欧文フォントの
+    % 「B」と化ける）ため、\charがテキストモード扱いに戻る\hboxが必須．
+    % C70フォント選択は\CJK@punctchar側の\usefont群が済ませているので
+    % フォントはボックス内に引き継がれる．
+    % \jlreqpdf@preは数式でクラス更新しないためJFM狭めボックス等も使わず，
+    % 常に自然幅．状態には触れない．
+    \hbox{\jlreqpdf@orig@CJKsymbol{#1}}%
+  \else
+    \expandafter\ifx\csname jlreqpdf@jfm@class@\number\jlreqpdf@curclass\endcsname\relax
+      \jlreqpdf@orig@CJKsymbol{#1}%
+    \else
+      \expandafter\jlreqpdf@placeglyph
+        \csname jlreqpdf@jfm@class@\number\jlreqpdf@curclass\endcsname
+        {#1}%
+    \fi
+  \fi
+}
+% #1 = {{w}{h}{d}{align}{left}}, #2 = codepoint
+\def\jlreqpdf@placeglyph#1#2{%
+  \expandafter\jlreqpdf@splitcls#1%
+  \edef\jlreqpdf@tmpw{\jlreqpdf@cls@w\jlreq@zw}%
+  \ifdim\jlreqpdf@tmpw=1\jlreq@zw
+    \jlreqpdf@orig@CJKsymbol{#2}%
+  \else
+    \jlreqpdf@hanged=0
+    \jlreqpdf@hangglyph{#2}%
+    \ifnum\jlreqpdf@hanged=1
+      % ぶら下げ（-b変量）: 該当約物は裸charで出力（\jlreqpdf@hangglyphが
+      % 出力済み）。\hboxで包むと行端ノード走査がhlistで止まり，
+      % \pdfprotrudecharsのマージンカーンが効かなくなるため。
+    \else
+      \setbox\jlreqpdf@charbox=\hbox{\jlreqpdf@orig@CJKsymbol{#2}}%
+      \hbox to \jlreqpdf@cls@w\jlreq@zw{%
+        \jlreqpdf@placealign
+        \box\jlreqpdf@charbox
+        \jlreqpdf@placealign@post}%
+    \fi
+  \fi
+}
+% {<w>}{<h>}{<d>}{<align>}{<left>} -- brace-group delimited (the .def
+% values are exactly one brace group each; digit-bearing control words
+% are formed via \csname at the caller, never by \def here)
+\def\jlreqpdf@splitcls#1#2#3#4#5{%
+  \def\jlreqpdf@cls@w{#1}%
+  \def\jlreqpdf@cls@align{#4}%
+}
+% leading spacer: absent for left (glyph flush left), \hss otherwise
+\def\jlreqpdf@placealign{%
+  \def\jlreqpdf@tmpb{left}%
+  \ifx\jlreqpdf@cls@align\jlreqpdf@tmpb
+    \expandafter\@gobble
+  \else
+    \expandafter\@firstofone
+  \fi
+  {\hss}%
+}
+% trailing spacer: absent for right (glyph flush right), \hss otherwise
+\def\jlreqpdf@placealign@post{%
+  \def\jlreqpdf@tmpb{right}%
+  \ifx\jlreqpdf@cls@align\jlreqpdf@tmpb
+    \expandafter\@gobble
+  \else
+    \expandafter\@firstofone
+  \fi
+  {\hss}%
+}
 
 %. -------------------------------------------------------- installation
 % Everything touching CJK/bxcjkjatype definitions must run AFTER those
@@ -520,11 +734,39 @@
   \expandafter\let\expandafter\jlreqpdf@orig@CJKsymbol
     \csname CJKsymbol \endcsname
   \expandafter\def\csname CJKsymbol \endcsname#1{%
-    \jlreqpdf@pre{#1}\jlreqpdf@orig@CJKsymbol{#1}%
+    \jlreqpdf@pre{#1}\jlreqpdf@glyph{#1}%
   }%
   % (c) post-glyph peek: the byte macros append \CJK@ignorespaces after
-  %     each char (M2 issued \CJKspace which sets it to \@empty)
-  \global\let\CJK@ignorespaces\jlreqpdf@peek
+  %     each char (M2 issued \CJKspace which sets it to \@empty).
+  %     F-peek fix: \CJK@ignorespaces runs INSIDE the helper's \ifx..\else
+  %     branch (CJK@X/XX/XXX/XXXX, CJK.sty:975-1012), so a \futurelet there
+  %     sees the helper's own trailing \fi, never the real follower --
+  %     peek@lat (CJK->LA xkanjiskip) could never fire. Instead, restore
+  %     \CJK@ignorespaces to its passive job (\@empty via \CJKspace) and
+  %     wrap the four helpers so our peek runs AFTER the helper returns,
+  %     i.e. after its \ifx has closed: \futurelet then sees the real
+  %     next token.
+  \global\let\CJK@ignorespaces\@empty
+  \expandafter\let\csname jlreqpdf@orig@CJK@X\expandafter\endcsname
+    \csname CJK@X\endcsname
+  \expandafter\def\csname CJK@X\endcsname#1{%
+    \csname jlreqpdf@orig@CJK@X\endcsname{#1}%
+    \futurelet\jlreqpdf@next\jlreqpdf@peek@a}%
+  \expandafter\let\csname jlreqpdf@orig@CJK@XX\expandafter\endcsname
+    \csname CJK@XX\endcsname
+  \expandafter\def\csname CJK@XX\endcsname#1#2{%
+    \csname jlreqpdf@orig@CJK@XX\endcsname{#1}{#2}%
+    \futurelet\jlreqpdf@next\jlreqpdf@peek@a}%
+  \expandafter\let\csname jlreqpdf@orig@CJK@XXX\expandafter\endcsname
+    \csname CJK@XXX\endcsname
+  \expandafter\def\csname CJK@XXX\endcsname#1#2#3{%
+    \csname jlreqpdf@orig@CJK@XXX\endcsname{#1}{#2}{#3}%
+    \futurelet\jlreqpdf@next\jlreqpdf@peek@a}%
+  \expandafter\let\csname jlreqpdf@orig@CJK@XXXX\expandafter\endcsname
+    \csname CJK@XXXX\endcsname
+  \expandafter\def\csname CJK@XXXX\endcsname#1#2#3#4{%
+    \csname jlreqpdf@orig@CJK@XXXX\endcsname{#1}{#2}{#3}{#4}%
+    \futurelet\jlreqpdf@next\jlreqpdf@peek@a}%
   % (d) document-start state: paragraph-boundary class
   \global\jlreqpdf@lastclass=90 \global\jlreqpdf@pend=0
 }

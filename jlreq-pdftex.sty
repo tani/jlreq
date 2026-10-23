@@ -118,5 +118,95 @@
     \@ehc}%
 }
 
+%. --------------------------------------------------- math (B19, M6)
+% pTeX 系の \DeclareSymbolFont{mincho}/\jfam は pdfTeX には無いため，
+% 数式内和文は「テキスト字体のボックス」で供給する
+% （docs/pdftex-audit.md B19 の設計指示どおり）．\mathmc/\mathgt 本体の
+% 宣言は enablejfam 時に jlreq.cls 側が行う（disablejfam では未定義＝
+% (u)pTeX と同じ意味論）．
+% \jlreq@pdftex@mathja{<mc|gt>}{<本文>}:
+%   数式内: \mathchoice で text/script/scriptscript のサイズを切り替え，
+%     対応サイズの \hbox に本文を \mcfamily/\gtfamily で組む．\hbox 内は
+%     テキストモードなので CJK アクティブ文字→組版ルール機構（ペアグルー・
+%     禁則）がそのまま働き，直打入力和文との整合も取れる．
+%   数式外: 単に {\<fam>family 本文} に展開する（数式外 \mathmc は
+%     (u)pTeX ではエラーだが，ここでは寛容にフォント切替として扱う）．
+\def\jlreq@pdftex@mathja#1#2{%
+  \ifmmode
+    \def\jlreq@pdftex@mathja@fam{#1}%
+    \def\jlreq@pdftex@mathja@body{#2}%
+    \mathchoice
+      {\jlreq@pdftex@mathja@box{\f@size}}%
+      {\jlreq@pdftex@mathja@box{\f@size}}%
+      {\jlreq@pdftex@mathja@box{\sf@size}}%
+      {\jlreq@pdftex@mathja@box{\ssf@size}}%
+  \else
+    {\csname #1family\endcsname #2}%
+  \fi
+}
+% #1 = サイズ指定マクロ（\f@size/\sf@size/\ssf@size；pt省略数値を展開する）
+\def\jlreq@pdftex@mathja@box#1{%
+  \hbox{%
+    \fontsize{#1}{#1}\selectfont
+    \csname\jlreq@pdftex@mathja@fam family\endcsname
+    % ボックス先頭は parbdd 相当: lastclass=93（中立）でペアグルー抑制し，
+    % 直前文脈の pending 禁則ペナルティはボックス内へ持ち込まない
+    \global\jlreqpdf@lastclass=93 \global\jlreqpdf@pend=0
+    \jlreq@pdftex@mathja@body
+  }%
+  % 数式は欧文境界（peek@lat と同じく lastclass=27 に戻す: jlreq.cls の
+  % 「数式は欧文とみなす」仕様整合）
+  \global\jlreqpdf@lastclass=27
+}
+
+%. ------------------------------------------- kanji numerals (\kansuji)
+% pTeXの\kansujiに相当するプリミティブはpdfTeXには無い．uplatex/platexでの
+% 実測（0–1000000をtypeout照合）により，pTeXの仕様は「十進の各桁を
+% 〇一二三四五六七八九に置き換える」桁置換であり（10→一〇，100→一〇〇，
+% 2025→二〇二五），十・百・千の位取りは行わない．0→〇，負数→空．
+% これを完全展開可能なマクロで再現する．
+%
+% always-on CJK下では和文リテラル（UTF-8活字化バイト列）を\edefや素の
+% \writeで展開するとCJK内部の条件分岐（\CJK@XXX）が破綻するため，字形
+% への置換は組版時まで遅延させる設計:
+%  * \jlreq@kjczero..\jlreq@kjcnine : 各桁の生文字マクロ（UTF-8リテラル）．
+%  * \jlreq@kansuji@digit{<d>} : 1桁印字．\protectedなので\edef/\write/
+%    \mark/\typeoutのすべてで凍結され，TOC・柱・見出しラベルを安全に
+%    通過する（組版時に展開されて生文字を出力）．
+%  * \jlreq@pdf@kansuji{<num>} : 完全展開可能．<num>は\numexpr式または
+%    単一トークン（\c@chapter等）．展開結果は\jlreq@kansuji@digitの列．
+%    jlreq.clsの\jlreq@Kanji（d側）からカウンタ名経由で呼ばれる．
+%  * \jlreq@pdf@kansuji@run{<printer>}{<num>} : プリンタ差替口．テストが
+%    \detokenize系プリンタを渡してログ照合に用いる．
+\def\jlreq@kjczero{〇}
+\def\jlreq@kjcone{一}
+\def\jlreq@kjctwo{二}
+\def\jlreq@kjcthree{三}
+\def\jlreq@kjcfour{四}
+\def\jlreq@kjcfive{五}
+\def\jlreq@kjcsix{六}
+\def\jlreq@kjcseven{七}
+\def\jlreq@kjceight{八}
+\def\jlreq@kjcnine{九}
+\protected\def\jlreq@kansuji@digit#1{%
+  \ifcase#1 \jlreq@kjczero\or \jlreq@kjcone\or \jlreq@kjctwo\or \jlreq@kjcthree\or
+    \jlreq@kjcfour\or \jlreq@kjcfive\or \jlreq@kjcsix\or \jlreq@kjcseven\or
+    \jlreq@kjceight\or \jlreq@kjcnine\fi}
+\def\jlreq@pdf@kansuji#1{\jlreq@pdf@kansuji@run\jlreq@kansuji@digit{#1}}
+\def\jlreq@pdf@kansuji@run#1#2{%
+  \expandafter\jlreq@pdf@kansuji@norm\expandafter#1\expandafter{\the\numexpr#2\relax}}
+% #1=プリンタ，#2=符号付き10進文字列（\the\numexpr済み）．負数は空．
+\def\jlreq@pdf@kansuji@norm#1#2{%
+  \ifnum#2<\z@\else\jlreq@pdf@kansuji@loop#1#2\jlreq@pdf@kansuji@stop\fi}
+% 再帰呼出しは \expandafter で自身の \fi を先に閉じる（さもないと次桁ではなく
+% \fi が #2 として拾われて無限再帰になる，定番の罠）．
+\def\jlreq@pdf@kansuji@loop#1#2{%
+  \ifx#2\jlreq@pdf@kansuji@stop
+  \else
+    #1{#2}%
+    \expandafter\jlreq@pdf@kansuji@loop\expandafter#1%
+  \fi}
+\def\jlreq@pdf@kansuji@stop{\jlreq@pdf@kansuji@stop}
+
 % NB: jlreq.cls reads us mid-class where @ is a letter; keep it that way.
 \makeatletter

@@ -1,0 +1,19 @@
+% v1-tate-compare.tex -- M7 task 3 controlled experiment (G4 tate gate)
+% Identical glyph runs once under \CJKhorz and once under \CJKvert.
+% savepos marks at each cell start allow pixel-level comparison of the
+% ink inside each 1zw cell. If CJKvert rotation fires, the vertical
+% run's 、。「 ink moves to other corners; metrics identical => rotation
+% did NOT fire (glyphs served unmodified from the yoko font).
+\documentclass[paper=a5]{jlreq}
+\usepackage{CJKvert}
+\makeatletter
+\def\markpos#1{\pdfsavepos\write\@auxout{\string\gdef\string#1{\the\pdflastxpos,\the\pdflastypos}}}
+\pagestyle{empty}
+\begin{document}
+\noindent\CJKhorz
+\markpos\hA あ\markpos\hB 、\markpos\hC 。\markpos\hD 「\markpos\hE ー\markpos\hF
+\par\vspace{5mm}
+\noindent\CJKvert
+\markpos\vA あ\markpos\vB 、\markpos\vC 。\markpos\vD 「\markpos\vE ー\markpos\vF
+\par
+\end{document}

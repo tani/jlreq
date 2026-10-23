@@ -1,0 +1,123 @@
+% poc/g3-protrusion.tex — G3-bis: pdfTeX によるぶら下げ組（行末突出し）
+% の可否判定 PoC。結論: 可能（条件つき）。根拠は各パネルの \typeout
+% マーカと \rightmarginkern 読み戻し値（ログ証拠）＋同梱 PDF の行構造。
+%
+% 背景: 先行メモは「pdfTeX には行末突出し機構がないため不可能（確定制
+% 限）」としていたが、pdfTeX には \pdfprotrudechars=2 と \rpcode/\lpcode
+% による文字突出し（microtype の基盤）がある。本 PoC はバックエンドと
+% 同一のフォント系（bxcjkjatype[ipaex-type1,noCJKpunct] + always-on）で
+% 以下を検証する:
+%   (a) 行末ちょうどに来た 、 が \rpcode で視覚的に突出するか
+%   (b) バックエンドのノード列（ペアグルー/禁則ペナルティ/カーン/箱）が
+%       突出しを阻害しないか
+%
+% 判明した機構（pdfTeX ソース pdftex.web で裏付け）:
+%   - 突出しは「margin kern」が行末文字の側に挿入され、行内グルーの
+%     再配分（両端揃えの伸長）によって実現する。パック時の行端走査
+%     （cp_skipable）は、非ゼロ幅の「明示」カーン（\kern: subtype=exp-
+%     licit）や空でない箱を越えて行端文字に到達できない。
+%   - カーン直後のブレイク（kern_break）は「直後が glue」で成立し、
+%     パック時にそのカーンは 0 化され走査上 skipable になる。
+%     「クラス幅 < グリフ幅」の詰めに使える唯一の形。
+%   - \rpcode の値は quad（1em）の千分率 ⇒ rpcode=1000 で margin kern
+%     = -1em（全角グリフちょうど全幅分）。
+%
+% パネル構成（emulated ノード列。実装は jlreq-pdftex-rules.sty の
+% \ifjlreqpdf@hang ブロック）:
+%   A: 裸 、 + 補正カーン + グルー + CJK マーカ OFF + rpcode → 期待 YES
+%   B: A + CJK マーカーカーン（-2sp/+2sp） → 期待 NO（マーカが行端走査を
+%      止める）⇒ ぶら下げ時にマーカを無効化する根拠
+%   C: 箱詰めグリフ（現行 F2 の幅補正方式）+ rpcode → 期待 NO（箱が走査を
+%      止める）⇒ 既定バリアントでは突出ししない（設計意図どおり）
+%   D: 補正カーンとグルーの間に whatsit（\pdfsavepos） → 期待 NO
+%      （ブレイクが glue に移りカーンが残る）
+%   E: 禁則ペナルティ 10000 前置 → 期待 YES（penalty は skipable）
+%
+% 実行: pdflatex -interaction=nonstopmode poc/g3-protrusion.tex
+% 判定: ログの G3-PANEL-X=YES/NO（YES=右マージンカーン非ゼロ）が期待と
+% 一致すること。PDF の該当行の 、 が行長を 0.5zw だけ超えて見える。
+\documentclass{article}
+\usepackage[ipaex-type1,noCJKpunct]{bxcjkjatype}
+\makeatletter
+\let\CJK@global\global
+\let\CJK@active\global
+\let\CJK@local\global
+\CJK@envStart{}{UTF8}{ipxm}%
+\CJKspace
+\makeatletter
+\pdfprotrudechars=2
+\parindent=0pt
+
+\newdimen\zw \zw=10pt
+
+% \panel{<id>}{<body>}: hsize=95pt の段落を組み、行端（最終から2行目=
+% 、 が来る側）の右マージンカーンを \rightmarginkern で読んで判定し、
+% G3-PANEL-<id>=YES/NO (<value>) をログに出す。
+\def\panel#1#2{%
+  \setbox10=\vbox{\hsize=95pt #2\par}%
+  % 行ボックスの取出しはコピーから行う（原本から \lastbox で抜くと
+  % 組上がりが失われて出荷されなくなる）
+  \setbox20=\vbox{\unvcopy10
+    \global\setbox11=\lastbox \unskip\unpenalty
+    \global\setbox12=\lastbox}%
+  \edef\g@rmk{\rightmarginkern12}%
+  \ifnum\pdfstrcmp{\g@rmk}{0pt}=0
+    \typeout{G3-PANEL-#1=NO (rightmargin=\g@rmk)}%
+  \else
+    \typeout{G3-PANEL-#1=YES (rightmargin=\g@rmk)}%
+  \fi
+  \box10\penalty0\relax}
+
+\begin{document}
+% フォントと rpcode: 、(U+3001=plane30 slot1), 。(slot2)
+\setbox0=\hbox{、。漢}
+\expandafter\let\expandafter\pfont\csname C70/ipxm/m/n/10/30\endcsname
+\typeout{G3-FONT=\fontname\pfont}
+\rpcode\pfont1=1000 \rpcode\pfont2=1000
+
+% ---- Panel A: 本実装の原理形（裸 char＋補正カーン＋グルー、マーカ OFF）
+\panel{A}{%
+  \def\CJKglue{}\def\CJK@kern{}\def\CJK@CJK{}%
+  漢\hskip 0pt plus 3pt 漢\hskip 0pt plus 3pt 漢\hskip 0pt plus 3pt
+  漢\hskip 0pt plus 3pt 漢\hskip 0pt plus 3pt 漢\hskip 0pt plus 3pt
+  漢\hskip 0pt plus 3pt 漢\hskip 0pt plus 3pt 漢
+  、\kern -0.5\zw \hskip 0.5\zw plus 0.25\zw minus 0.5\zw
+  漢漢漢漢漢漢漢漢漢}
+
+% ---- Panel B: CJK マーカーカーンを残したまま
+\panel{B}{%
+  \def\CJKglue{}%
+  漢\hskip 0pt plus 3pt 漢\hskip 0pt plus 3pt 漢\hskip 0pt plus 3pt
+  漢\hskip 0pt plus 3pt 漢\hskip 0pt plus 3pt 漢\hskip 0pt plus 3pt
+  漢\hskip 0pt plus 3pt 漢\hskip 0pt plus 3pt 漢
+  、\CJK@kern \kern -0.5\zw \hskip 0.5\zw plus 0.25\zw minus 0.5\zw
+  漢漢漢漢漢漢漢漢漢}
+
+% ---- Panel C: 箱詰めグリフ（F2 現行方式）＋ rpcode
+\panel{C}{%
+  \def\CJKglue{}\def\CJK@kern{}\def\CJK@CJK{}%
+  漢\hskip 0pt plus 3pt 漢\hskip 0pt plus 3pt 漢\hskip 0pt plus 3pt
+  漢\hskip 0pt plus 3pt 漢\hskip 0pt plus 3pt 漢\hskip 0pt plus 3pt
+  漢\hskip 0pt plus 3pt 漢\hskip 0pt plus 3pt 漢
+  \hbox to 0.5\zw{、\hss}\hskip 0.5\zw plus 0.25\zw minus 0.5\zw
+  漢漢漢漢漢漢漢漢漢}
+
+% ---- Panel D: 補正カーンとグルーの間に whatsit
+\panel{D}{%
+  \def\CJKglue{}\def\CJK@kern{}\def\CJK@CJK{}%
+  漢\hskip 0pt plus 3pt 漢\hskip 0pt plus 3pt 漢\hskip 0pt plus 3pt
+  漢\hskip 0pt plus 3pt 漢\hskip 0pt plus 3pt 漢\hskip 0pt plus 3pt
+  漢\hskip 0pt plus 3pt 漢\hskip 0pt plus 3pt 漢
+  、\kern -0.5\zw \pdfsavepos\hskip 0.5\zw plus 0.25\zw minus 0.5\zw
+  漢漢漢漢漢漢漢漢漢}
+
+% ---- Panel E: 禁則ペナルティは阻害しない
+\panel{E}{%
+  \def\CJKglue{}\def\CJK@kern{}\def\CJK@CJK{}%
+  漢\hskip 0pt plus 3pt 漢\hskip 0pt plus 3pt 漢\hskip 0pt plus 3pt
+  漢\hskip 0pt plus 3pt 漢\hskip 0pt plus 3pt 漢\hskip 0pt plus 3pt
+  漢\hskip 0pt plus 3pt 漢\hskip 0pt plus 3pt 漢
+  \penalty 10000 、\kern -0.5\zw \hskip 0.5\zw plus 0.25\zw minus 0.5\zw
+  漢漢漢漢漢漢漢漢漢}
+
+\end{document}

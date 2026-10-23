@@ -416,13 +416,15 @@
   onecolumn,final
 }
 \ProcessKeyOptions [jlreq]
-% pdfTeX：長さ系オプション値中のリテラルzw/zhを単位マクロに置換する．
-% （pTeXはzw/zhがネイティブ単位だがpdfTeXにはないため．これにより
+% pdfTeX：長さ系オプション値中のリテラルzw/zhを単位マクロに，Q/H
+% （1Q=1H=0.25mm，pTeXの級・歯）を寸法式に置換する．
+% （pTeXはzw/zh/Q/Hがネイティブ単位だがpdfTeXにはないため．これにより
 % \jlreq@speciallengthは可展開のまま#1を\dimexprに渡せる．
-% 実行時の\jlreqsetupによる変更はM4で対応する．）
-% 対象は「値にzw/zhを含み得る」オプション格納マクロ．
+% 実行時の\jlreqsetupによる変更は同じ書換えを引数経路で行う．）
+% 対象は「値にzw/zh/Q/Hを含み得る」オプション格納マクロ．
 % （実行は\jlreq@engine確定・\jlreq@zw定義後に続くブロックで行う）
 \clist_const:Nn \c__jlreq_lenopt_clist {
+  jlreq@option@fontsize, jlreq@option@jafontsize,
   jlreq@option@number@of@lines, jlreq@option@line@length,
   jlreq@option@head@space, jlreq@option@foot@space,
   jlreq@option@gutter, jlreq@option@fore@edge,
@@ -450,11 +452,21 @@
 
 \tl_new:N \g__jlreq_jlreqsetup_finally_tl
 \NewDocumentCommand{\jlreqsetup} { +m } {
-  % pdfTeX注: footnote_indent / footnote_second_indent / quote_indent /
-  % quote_end_indent の値にリテラル「2zw」等を渡す場合，pdfLaTeXでは
-  % \zw 形式（例: 2\zw）を使ってください（zw はpdfTeXの単位ではない
-  % ため．\zw はバックエンドが実寸マクロとして定義）．
-  \keys_set:nn { jlreqsetup } {#1}
+  % pdfTeX：キー値中の「数字直後の」リテラルzw/zhを\jlreq@zw/\jlreq@zhに，
+  % Q/H（1Q=1H=0.25mm，級・歯）を\dimexpr 0.25mm\relaxに書き換えてから
+  % キー解析する．数字直後でないzw/zh/Q/H（マクロ名の一部等）は触らない．
+  % p/u/lではこれらはすべてネイティブ単位なのでそのまま\keys_set:nnに渡す．
+  % \__jlreq_rewriteunittokens:Nと\keys_set:nVは\jlreq@engine確定後の
+  % d分岐ブロック（\jlreq@zw定義直後）で用意される．\jlreqsetupの実行は
+  % 必ずそれ以降（\@onlypreamble）なので，ここでの参照は安全．
+  % （この時点では\jlreq@engineが未確定のことがあるため，実行時に分岐する．）
+  \ifx d\jlreq@engine
+    \tl_set:Nn \l__jlreq_tmpa_tl {#1}
+    \__jlreq_rewriteunittokens:N \l__jlreq_tmpa_tl
+    \keys_set:nV { jlreqsetup } \l__jlreq_tmpa_tl
+  \else
+    \keys_set:nn { jlreqsetup } {#1}
+  \fi
   \tl_use:N \g__jlreq_jlreqsetup_finally_tl
 }
 % \jlreqsetupの最後に必ず実行される処理を入れる．
@@ -572,16 +584,45 @@
 % \jlreq@gol(Gyo Okuri Length), \jlreq@mol (Moji Okuri Length)を定義
 \let\jlreq@gol=\zh
 \let\jlreq@mol=\zw
-% pdfTeX：長さ系オプション値中のリテラルzw/zhを単位マクロに置換する．
+% pdfTeX：長さ系オプション値中のリテラルzw/zhおよびQ/Hを寸法式に置換する．
 % （この時点で\jlreq@engineは確定済み，\jlreq@zw/\jlreq@zhも定義済み．）
 \ifx d\jlreq@engine
+  % トークン列中の単位リテラルを書き換える．「数字直後の」zw/zhのみを
+  % 単位マクロ\jlreq@zw/\jlreq@zhに，Q/H（1Q=1H=0.25mm，pTeXの級・歯）を
+  % \dimexpr 0.25mm\relaxにする．数字直後でないzw/zh/Q/H（マクロ名の
+  % 一部等）は一切触らないため，\jlreqsetupの引数経路でも共用する．
+  \cs_set:Npn \__jlreq_rewriteunittokens:N #1 {
+    \tl_map_inline:nn { 0123456789 } {
+      \tl_replace_all:Nnn #1 { ##1 zw } { ##1 \jlreq@zw }
+      \tl_replace_all:Nnn #1 { ##1 zh } { ##1 \jlreq@zh }
+      \tl_replace_all:Nnn #1 { ##1 Q } { ##1 \dimexpr 0.25mm\relax }
+      \tl_replace_all:Nnn #1 { ##1 H } { ##1 \dimexpr 0.25mm\relax }
+    }
+  }
   \cs_set:Npn \__jlreq_rewritezwzh:N #1 {
     \tl_set:Nx #1 {#1}
-    \tl_replace_all:Nnn #1 { zw } { \jlreq@zw }
-    \tl_replace_all:Nnn #1 { zh } { \jlreq@zh }
+    \__jlreq_rewriteunittokens:N #1
   }
   \clist_map_inline:Nn \c__jlreq_lenopt_clist {
     \exp_args:Nc \__jlreq_rewritezwzh:N { #1 }
+  }
+  % \jlreqsetupの引数経路で書換え済みトークン列を渡すための変種．
+  \cs_generate_variant:Nn \keys_set:nn { nV }
+  % fontsize/jafontsizeは\jlreq@zwの実寸（\jlreq@jareg）が初期化される前
+  % （フォントサイズ確定処理）に解決されるため，zw/zhを参照する値は
+  % 黙って0ptになってしまう．その場合は明示エラーとし，pt/Q/Hまたは
+  % jafontscaleでの指定を案内する（他の長さ系オプションは初期化後に
+  % 解決されるのでzw/zhリテラルをそのまま使える）．
+  \cs_set:Npn \__jlreq_fontsize_nozwerror: {
+    \ClassError{jlreq}{zw~(or~zh)~unit~cannot~be~used~in~fontsize~or~jafontsize~under~pdfTeX}{%
+      1zw~is~relative~to~the~Japanese~font~size~itself,~so~it~cannot~\MessageBreak
+      be~used~to~determine~the~font~sizes.~Use~pt~or~Q/H~units~(e.g.~\MessageBreak
+      fontsize=13Q)~or~a~ratio~via~jafontscale=...~instead.\MessageBreak
+      \@ehc}
+  }
+  \tl_map_inline:nn { \jlreq@zw \jlreq@zh \jlreq@jareg } {
+    \tl_if_in:NnT \jlreq@option@fontsize { #1 } { \__jlreq_fontsize_nozwerror: }
+    \tl_if_in:NnT \jlreq@option@jafontsize { #1 } { \__jlreq_fontsize_nozwerror: }
   }
 \fi
 
@@ -1300,8 +1341,16 @@
 \fi
 
 % 数式フォント設定
-% pdfTeXでは数式内和文は未対応（M6）のためスキップ．
-\ifx d\jlreq@engine\else
+\ifx d\jlreq@engine
+% pdfTeXではjfam相当をボックス供給で実現する（docs/pdftex-audit.md B19）．
+% 実体は jlreq-pdftex.sty の \jlreq@pdftex@mathja．enablejfam（既定）の
+% み \mathmc/\mathgt を定義し，disablejfam では未定義のまま（(u)pTeX と
+% 同じ意味論）．
+\ifjlreq@option@enablejfam
+  \DeclareRobustCommand{\mathmc}[1]{\jlreq@pdftex@mathja{mc}{#1}}
+  \DeclareRobustCommand{\mathgt}[1]{\jlreq@pdftex@mathja{gt}{#1}}
+\fi
+\else
 \ifjlreq@option@enablejfam
   \ifx l\jlreq@engine\else
     \DeclareSymbolFont{mincho}{\jlreq@yokokanjiencoding}{mc}{m}{n}
@@ -1441,7 +1490,14 @@
     % pdfTeXでは(x)kanjiskipプリミティブがない（M4）．
     % 代わりに\zw/\zhの実寸（\jlreq@jareg）をサイズに追従させる．
     \tl_put_right:Nn \g__jlreq_setfontsizehook_tl {%
-      \jlreq@jareg=\dimexpr\f@size\jlreq@jafontscale pt\relax
+      % \f@size（"10" のようなポイント数の文字列）にjafontscale（同 "1"）を
+      % 掛けてpt寸法にする．\dimexpr\f@size\jlreq@jafontscale pt\relax と
+      % 1式で書くと数字列がそのまま連結されてしまう（"10"+"1"+"pt" → 101pt
+      % となる．これにより\jlreq@jareg=実寸zwが10倍化し，例えば\marginpar内の
+      % \footnotesizeで \dimexpr115\jlreq@tempdima/170 が Dimension too large
+      % となる）ため，先にpt寸法を作ってから係数を掛ける2段構えとする．
+      \jlreq@jareg=\dimexpr\f@size pt\relax
+      \jlreq@jareg=\jlreq@jafontscale\jlreq@jareg
     }
   \else
     \tl_put_right:Nn \g__jlreq_setfontsizehook_tl {%
@@ -1589,12 +1645,9 @@
 
 %. plextから拝借
 \ifx d\jlreq@engine
-  % pdfTeXには\kansujiがない．縦組見出しでのみ到達するため，使用時エラーにする．
-  \def\jlreq@Kanji#1{%
-    \ClassError{jlreq}{pdfTeX~backend:~kanji~numerals~(\string\kansuji)~are~not~supported.}{%
-      Kanji~numerals~for~vertical~headings~are~a~pTeX~feature~and~are~pending~milestone~M7.\MessageBreak
-      \@ehc}%
-  }
+  % pdfTeXには\kansujiがないので，jlreq-pdftex.styの\jlreq@pdf@kansuji（各桁を
+  % 〇一…九に置換する，pTeXの\kansujiと同一仕様の展開可能マクロ）に接続する．
+  \def\jlreq@Kanji#1{\expandafter\jlreq@pdf@kansuji\expandafter{\csname c@#1\endcsname}}
 \else
   \def\jlreq@Kanji#1{\expandafter\kansuji\csname c@#1\endcsname}
 \fi
@@ -1637,8 +1690,23 @@
   \setlength{\pagewidth}{\paperwidth}
   \setlength{\pageheight}{\paperheight}
 \else
-  \setlength{\pdfpagewidth}{\paperwidth}
-  \setlength{\pdfpageheight}{\paperheight}
+  \ifx d\jlreq@engine
+    % pdfTeX：\mag後出しでpTeX DVI経路（uplatex実測）と同じ意味論に揃える．
+    % pTeX側は\mag=1200でも用紙は物理固定（papersize specialは未拡大）・
+    % 原点1in固定で版面のオフセットだけが拡大される．一方pdfTeXは出荷時に
+    % \pdfpagewidthと\pdfhoriginまで\mag倍してしまうため（前者は用紙拡大，
+    % 後者は余白のずれになる），ここで相殺する．truein再代入は「現在の
+    % \magで割った1in」を格納し出荷時にちょうど1inに戻る，ページ寸法は
+    % 1000/\mag倍を掛ける．\mag=1000ではいずれも無変換で無害．
+    \pdfhorigin=1truein
+    \pdfvorigin=1truein
+    \jlreq@helper@divide{1000pt}{\the\mag pt}%
+    \pdfpagewidth=\strip@pt\jlreq@resultdimen\dimexpr\paperwidth\relax
+    \pdfpageheight=\strip@pt\jlreq@resultdimen\dimexpr\paperheight\relax
+  \else
+    \setlength{\pdfpagewidth}{\paperwidth}
+    \setlength{\pdfpageheight}{\paperheight}
+  \fi
 \fi
 
 \ifx l\jlreq@engine
@@ -3627,7 +3695,14 @@
       }
 \else\ifx d\jlreq@engine
       % pdfTeXでは\lastnodecharがない（\jlreq@lastnodecharは-1固定）．
-      \def\jlreq@hook@prenote{}%
+      % 直前文字との間のグルー/禁則はバックエンドの状態機械が担うので，
+      % ここでは合印～脚注本文処理で汚れる直前クラス・保留ペナルティを
+      % 退避し，postnoteで復帰する．
+      \def\jlreq@hook@prenote{%
+        \edef\jlreq@pdf@restorestate{%
+          \global\jlreqpdf@lastclass=\the\jlreqpdf@lastclass\relax
+          \global\jlreqpdf@pend=\the\jlreqpdf@pend\relax}%
+      }%
 \else
       % (u)platexの時は代入すると\inhibitglueが効かなくなる
       \def\jlreq@hook@prenote{%
@@ -3636,7 +3711,21 @@
       }
 \fi
 \fi
-    \def\jlreq@hook@postnote{\jlreq@fixjfm}
+    % pdfTeX: \jlreq@fixjfm は \lastnodechar 依存のため常に無挿入
+    % （\jlreq@lastnodechar=-1固定，jlreq.cls:855-866）．後続文字との間の
+    % 処理はバックエンドのpeek機構（jlreq-pdftex-rules.sty:594-620）に
+    % 再委譲する: 次がCJKバイトなら状態を残して次字のpre hookが直前クラス
+    % からpair glueを計算し，欧文文字・数式シフトならxsp境界glue
+    % （\jlreqxkanjiskip相当）と保留禁則ペナルティをここで出す．pTeXの
+    % postnote=\jlreq@fixjfm と同じ意味論である．ぶら下げkernは前字直後の
+    % peekで出力済みなので peek@a から再入する（二重実行防止）．
+    \ifx d\jlreq@engine
+      \def\jlreq@hook@postnote{%
+        \jlreq@pdf@restorestate
+        \futurelet\jlreqpdf@next\jlreqpdf@peek@a}%
+    \else
+      \def\jlreq@hook@postnote{\jlreq@fixjfm}%
+    \fi
   }
 }
 % \@footnotemarkをシンプルなものにする
@@ -4171,7 +4260,16 @@
         {\unexpanded{\reset@font\jlreq@sidenote@keywordfont}#1}%
         \noexpand\jlreq@hook@prenote
         \ifx\jlreq@sidenote@defaultmark\@empty\else
-          \expandafter\edef\exp_not:c {\jlreq@sidenotemarkname}{\exp_not:o {\jlreq@sidenote@defaultmark}}%
+          % pdfTeX：sidenote_symbolの既定＊（U+FF0A）はCJK utf8下では
+          % アクティブ文字であり，素の\edefで展開すると\CJK@punctchar経路の
+          % 内部（\def\CJK@tempa##1...）がアクティブ文字のまま再展開されて
+          % エラーになる．\protected@edefなら\protectが効いて文字トークンが
+          % 保持される（number型側の\protected@xdefと同じ経路）．
+          % pTeX/upTeX/LuaTeXでは和文文字トークンは展開不能なので
+          % \protected@edefでも\edefと同じ結果であり影響なし．
+          % （外側の\edef\jlreq@sidenotemark内に置くため\exp_not:Nで
+          % \protected@edef自身の展開は抑止し，実行時に定義させる．）
+          \exp_not:N \protected@edef \exp_not:c {\jlreq@sidenotemarkname}{\exp_not:o {\jlreq@sidenote@defaultmark}}%
           \noexpand\@sidenotemark
         \fi
       }
@@ -6693,7 +6791,8 @@
 
 % 日にち
 % pdfTeX（always-on CJK）では漢字制御綴（\if西暦等）が作れないため，
-% pdfTeXではASCII名条件変数で同等機構を提供する．縦組\kansujiは未対応（M7）．
+% pdfTeXではASCII名条件変数で同等機構を提供する．漢数字変換は
+% jlreq-pdftex.styの\jlreq@pdf@kansujiが提供する（pTeXの\kansujiと同一仕様）．
 \newif\ifjlreq@seireki
 \ifx d\jlreq@engine\else
 % \西暦true等は「\西暦＋true」と綴られる名前ではなく，元の\newifが
@@ -6725,7 +6824,8 @@
   \int_compare:nTF { #1 = #2 } {元年} { #3\int_eval:n { #1 - #2 + 1 } 年 }
 }
 \ifx d\jlreq@engine
-  % pdfTeX：\hour/\minute/\kansujiは使えない．\todayは横組・西暦固定．
+  % pdfTeX：\hour/\minuteは使えない．\todayは横組・西暦固定．
+  % （漢数字は\jlreq@Kanji→\jlreq@pdf@kansujiで利用可だが\todayでは使わない）
   \jlreq@seirekitrue
   \def\today{%
     \number\year 年\number\month 月\number\day 日%

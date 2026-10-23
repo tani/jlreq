@@ -692,7 +692,11 @@
           }%
           \vrule height\dimexpr 10mm + \jlreq@trimmarks@bleed@top\relax width\@tombowwidth depth\z@
           \jlreq@trimmarks@outputbanner{tate@top@left}{%
-            \setbox\jlreq@tempboxa=\hbox to 0pt{\tate\adjustbaseline\jlreq@trimmarks@bannerfont##1\hss}%
+            \ifx d\jlreq@trimmarks@engine
+              \setbox\jlreq@tempboxa=\hbox to 0pt{\jlreq@trimmarks@pdf@rotatebanner{\jlreq@trimmarks@bannerfont##1}\hss}%
+            \else
+              \setbox\jlreq@tempboxa=\hbox to 0pt{\tate\adjustbaseline\jlreq@trimmarks@bannerfont##1\hss}%
+            \fi
             \ifx l\jlreq@trimmarks@engine
               \jlreq@tempdima=\dimexpr 4pt + \ht\jlreq@tempboxa\relax
              \else
@@ -702,7 +706,11 @@
             \kern-\jlreq@tempdima\raise-5mm\box\jlreq@tempboxa\kern\jlreq@tempdima
           }%
           \jlreq@trimmarks@outputbanner{intate@top@left}{%
-            \setbox\jlreq@tempboxa=\hbox to 0pt{\tate\adjustbaseline\jlreq@trimmarks@bannerfont##1\hss}%
+            \ifx d\jlreq@trimmarks@engine
+              \setbox\jlreq@tempboxa=\hbox to 0pt{\jlreq@trimmarks@pdf@rotatebanner{\jlreq@trimmarks@bannerfont##1}\hss}%
+            \else
+              \setbox\jlreq@tempboxa=\hbox to 0pt{\tate\adjustbaseline\jlreq@trimmarks@bannerfont##1\hss}%
+            \fi
             \jlreq@tempdima=\dimexpr\jlreq@trimmarks@bleed@left \ifx l\jlreq@trimmarks@engine + \ht\jlreq@tempboxa\fi\relax
             \wd\jlreq@tempboxa=0pt \ht\jlreq@tempboxa=0pt \dp\jlreq@tempboxa=0pt
             \kern\jlreq@tempdima\box\jlreq@tempboxa\kern-\jlreq@tempdima
@@ -712,13 +720,21 @@
         \hbox to\z@{% \@Tr
           \yoko
           \jlreq@trimmarks@outputbanner{tate@top@right}{%
-            \setbox\jlreq@tempboxa=\hbox to 0pt{\tate\adjustbaseline\jlreq@trimmarks@bannerfont##1\hss}%
+            \ifx d\jlreq@trimmarks@engine
+              \setbox\jlreq@tempboxa=\hbox to 0pt{\jlreq@trimmarks@pdf@rotatebanner{\jlreq@trimmarks@bannerfont##1}\hss}%
+            \else
+              \setbox\jlreq@tempboxa=\hbox to 0pt{\tate\adjustbaseline\jlreq@trimmarks@bannerfont##1\hss}%
+            \fi
             \jlreq@tempdima=\dimexpr 4pt \ifx l\jlreq@trimmarks@engine + \dp\jlreq@tempboxa\fi\relax
             \ht\jlreq@tempboxa=0pt \dp\jlreq@tempboxa=0pt \wd\jlreq@tempboxa=0pt
             \kern\jlreq@tempdima\raise -5mm\box\jlreq@tempboxa\kern-\jlreq@tempdima
           }%
           \jlreq@trimmarks@outputbanner{intate@top@right}{%
-            \setbox\jlreq@tempboxa=\hbox to 0pt{\tate\adjustbaseline\jlreq@trimmarks@bannerfont##1\hss}%
+            \ifx d\jlreq@trimmarks@engine
+              \setbox\jlreq@tempboxa=\hbox to 0pt{\jlreq@trimmarks@pdf@rotatebanner{\jlreq@trimmarks@bannerfont##1}\hss}%
+            \else
+              \setbox\jlreq@tempboxa=\hbox to 0pt{\tate\adjustbaseline\jlreq@trimmarks@bannerfont##1\hss}%
+            \fi
             \ifx l\jlreq@trimmarks@engine
               \jlreq@tempdima=\dimexpr\jlreq@trimmarks@bleed@top + \ht\jlreq@tempboxa\relax
             \else
@@ -738,7 +754,11 @@
           \yoko\hss
           \g__jlreq_trimmarks_pattern_center_left_tl
           \jlreq@trimmarks@outputbanner{before@center@left}{%
-            \setbox\jlreq@tempboxa=\hbox to 0pt{\tate\hss\adjustbaseline\jlreq@trimmarks@bannerfont##1\hskip 5mm}%
+            \ifx d\jlreq@trimmarks@engine
+              \setbox\jlreq@tempboxa=\hbox to 0pt{\hss\jlreq@trimmarks@pdf@rotatebanner{\jlreq@trimmarks@bannerfont##1}\hskip 5mm}%
+            \else
+              \setbox\jlreq@tempboxa=\hbox to 0pt{\tate\hss\adjustbaseline\jlreq@trimmarks@bannerfont##1\hskip 5mm}%
+            \fi
             \ifx l\jlreq@trimmarks@engine
               \jlreq@tempdima=\dimexpr 4pt + \ht\jlreq@tempboxa\relax
              \else
@@ -748,7 +768,11 @@
             \kern-\jlreq@tempdima\box\jlreq@tempboxa\kern\jlreq@tempdima
           }%
           \jlreq@trimmarks@outputbanner{after@center@left}{%
-            \setbox\jlreq@tempboxa=\hbox to 0pt{\tate\hskip 5mm\adjustbaseline\jlreq@trimmarks@bannerfont##1\hss}%
+            \ifx d\jlreq@trimmarks@engine
+              \setbox\jlreq@tempboxa=\hbox to 0pt{\hskip 5mm\jlreq@trimmarks@pdf@rotatebanner{\jlreq@trimmarks@bannerfont##1}\hss}%
+            \else
+              \setbox\jlreq@tempboxa=\hbox to 0pt{\tate\hskip 5mm\adjustbaseline\jlreq@trimmarks@bannerfont##1\hss}%
+            \fi
             \ifx l\jlreq@trimmarks@engine
               \jlreq@tempdima=\dimexpr 4pt + \ht\jlreq@tempboxa\relax
              \else
@@ -758,7 +782,11 @@
             \kern-\jlreq@tempdima\box\jlreq@tempboxa\kern\jlreq@tempdima
           }%
           \jlreq@trimmarks@outputbanner{in@center@left}{%
-            \setbox\jlreq@tempboxa=\hbox{\tate\adjustbaseline\jlreq@trimmarks@bannerfont##1}%
+            \ifx d\jlreq@trimmarks@engine
+              \setbox\jlreq@tempboxa=\hbox{\jlreq@trimmarks@pdf@rotatebanner{\jlreq@trimmarks@bannerfont##1}}%
+            \else
+              \setbox\jlreq@tempboxa=\hbox{\tate\adjustbaseline\jlreq@trimmarks@bannerfont##1}%
+            \fi
             \ifx l\jlreq@trimmarks@engine
               \jlreq@tempdima=\dimexpr\jlreq@trimmarks@bleed@left + \ht\jlreq@tempboxa\relax
               \jlreq@tempdimb=.5\wd\jlreq@tempboxa
@@ -774,7 +802,11 @@
         \hbox to\z@{% \@CR
           \yoko
           \jlreq@trimmarks@outputbanner{in@center@right}{%
-            \setbox\jlreq@tempboxa=\hbox{\tate\adjustbaseline\jlreq@trimmarks@bannerfont##1}%
+            \ifx d\jlreq@trimmarks@engine
+              \setbox\jlreq@tempboxa=\hbox{\jlreq@trimmarks@pdf@rotatebanner{\jlreq@trimmarks@bannerfont##1}}%
+            \else
+              \setbox\jlreq@tempboxa=\hbox{\tate\adjustbaseline\jlreq@trimmarks@bannerfont##1}%
+            \fi
             \ifx l\jlreq@trimmarks@engine
               \jlreq@tempdima=\dimexpr\jlreq@trimmarks@bleed@right  + \ht\jlreq@tempboxa\relax
               \jlreq@tempdimb=0.5\wd\jlreq@tempboxa
@@ -786,13 +818,21 @@
             \kern-\jlreq@tempdima\raise\jlreq@tempdimb\box\jlreq@tempboxa\kern\jlreq@tempdima
           }%
           \jlreq@trimmarks@outputbanner{before@center@right}{%
-            \setbox\jlreq@tempboxa=\hbox to 0pt{\tate\hss\adjustbaseline\jlreq@trimmarks@bannerfont##1\hskip 5mm}%
+            \ifx d\jlreq@trimmarks@engine
+              \setbox\jlreq@tempboxa=\hbox to 0pt{\hss\jlreq@trimmarks@pdf@rotatebanner{\jlreq@trimmarks@bannerfont##1}\hskip 5mm}%
+            \else
+              \setbox\jlreq@tempboxa=\hbox to 0pt{\tate\hss\adjustbaseline\jlreq@trimmarks@bannerfont##1\hskip 5mm}%
+            \fi
             \jlreq@tempdima=\dimexpr 4pt \ifx l\jlreq@trimmarks@engine + \dp\jlreq@tempboxa\fi\relax
             \dp\jlreq@tempboxa=0pt \ht\jlreq@tempboxa=0pt \wd\jlreq@tempboxa=0pt
             \kern\jlreq@tempdima\box\jlreq@tempboxa\kern-\jlreq@tempdima
           }%
           \jlreq@trimmarks@outputbanner{after@center@right}{%
-            \setbox\jlreq@tempboxa=\hbox to 0pt{\tate\hskip 5mm\adjustbaseline\jlreq@trimmarks@bannerfont##1\hss}%
+            \ifx d\jlreq@trimmarks@engine
+              \setbox\jlreq@tempboxa=\hbox to 0pt{\hskip 5mm\jlreq@trimmarks@pdf@rotatebanner{\jlreq@trimmarks@bannerfont##1}\hss}%
+            \else
+              \setbox\jlreq@tempboxa=\hbox to 0pt{\tate\hskip 5mm\adjustbaseline\jlreq@trimmarks@bannerfont##1\hss}%
+            \fi
             \jlreq@tempdima=\dimexpr 4pt \ifx l\jlreq@trimmarks@engine + \dp\jlreq@tempboxa\fi\relax
             \dp\jlreq@tempboxa=0pt \ht\jlreq@tempboxa=0pt \wd\jlreq@tempboxa=0pt
             \kern\jlreq@tempdima\box\jlreq@tempboxa\kern-\jlreq@tempdima
@@ -808,7 +848,11 @@
           \vrule width10mm depth\@tombowwidth height\z@
           \vrule depth\dimexpr 10mm + \jlreq@trimmarks@bleed@bottom\relax width\@tombowwidth height\z@
           \jlreq@trimmarks@outputbanner{tate@bottom@left}{%
-            \setbox\jlreq@tempboxa=\hbox to 0pt{\tate\adjustbaseline\hss\jlreq@trimmarks@bannerfont##1}%
+            \ifx d\jlreq@trimmarks@engine
+              \setbox\jlreq@tempboxa=\hbox to 0pt{\hss\jlreq@trimmarks@pdf@rotatebanner{\jlreq@trimmarks@bannerfont##1}}%
+            \else
+              \setbox\jlreq@tempboxa=\hbox to 0pt{\tate\adjustbaseline\hss\jlreq@trimmarks@bannerfont##1}%
+            \fi
             \ifx l\jlreq@trimmarks@engine
               \jlreq@tempdima=\dimexpr 4pt + \ht\jlreq@tempboxa\relax
              \else
@@ -818,7 +862,11 @@
             \kern-\jlreq@tempdima\raise 5mm\box\jlreq@tempboxa\kern\jlreq@tempdima
           }%
           \jlreq@trimmarks@outputbanner{intate@bottom@left}{%
-            \setbox\jlreq@tempboxa=\hbox to 0pt{\tate\adjustbaseline\hss\jlreq@trimmarks@bannerfont##1}%
+            \ifx d\jlreq@trimmarks@engine
+              \setbox\jlreq@tempboxa=\hbox to 0pt{\hss\jlreq@trimmarks@pdf@rotatebanner{\jlreq@trimmarks@bannerfont##1}}%
+            \else
+              \setbox\jlreq@tempboxa=\hbox to 0pt{\tate\adjustbaseline\hss\jlreq@trimmarks@bannerfont##1}%
+            \fi
             \jlreq@tempdima=\dimexpr\jlreq@trimmarks@bleed@left \ifx l\jlreq@trimmarks@engine + \ht\jlreq@tempboxa\fi\relax
             \wd\jlreq@tempboxa=0pt \ht\jlreq@tempboxa=0pt \dp\jlreq@tempboxa=0pt
             \kern\jlreq@tempdima\box\jlreq@tempboxa\kern-\jlreq@tempdima
@@ -828,13 +876,21 @@
         \hbox to\z@{% \@Br
           \yoko
           \jlreq@trimmarks@outputbanner{tate@bottom@right}{%
-            \setbox\jlreq@tempboxa=\hbox to 0pt{\tate\adjustbaseline\hss\jlreq@trimmarks@bannerfont##1}%
+            \ifx d\jlreq@trimmarks@engine
+              \setbox\jlreq@tempboxa=\hbox to 0pt{\hss\jlreq@trimmarks@pdf@rotatebanner{\jlreq@trimmarks@bannerfont##1}}%
+            \else
+              \setbox\jlreq@tempboxa=\hbox to 0pt{\tate\adjustbaseline\hss\jlreq@trimmarks@bannerfont##1}%
+            \fi
             \jlreq@tempdima=\dimexpr\ifx l\jlreq@trimmarks@engine\ht\jlreq@tempboxa + \fi 4pt\relax
             \ht\jlreq@tempboxa=0pt \dp\jlreq@tempboxa=0pt \wd\jlreq@tempboxa=0pt
             \kern\jlreq@tempdima\raise5mm\box\jlreq@tempboxa\kern-\jlreq@tempdima
           }%
           \jlreq@trimmarks@outputbanner{intate@bottom@right}{%
-            \setbox\jlreq@tempboxa=\hbox to 0pt{\tate\adjustbaseline\hss\jlreq@trimmarks@bannerfont##1}%
+            \ifx d\jlreq@trimmarks@engine
+              \setbox\jlreq@tempboxa=\hbox to 0pt{\hss\jlreq@trimmarks@pdf@rotatebanner{\jlreq@trimmarks@bannerfont##1}}%
+            \else
+              \setbox\jlreq@tempboxa=\hbox to 0pt{\tate\adjustbaseline\hss\jlreq@trimmarks@bannerfont##1}%
+            \fi
             \ifx l\jlreq@trimmarks@engine
               \jlreq@tempdima=\dimexpr\jlreq@trimmarks@bleed@right + \ht\jlreq@tempboxa\relax
             \else

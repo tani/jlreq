@@ -40,15 +40,27 @@ engine-API gate; see below).
    Runtime needs **no Lua** (static `.def` files are committed).
 4. **M4/M5 — horizontal rules**: pair glue (exact JFM values incl. 二分アキ
    before opening brackets), kinsoku (行頭/行末 penalties per jlreq's own
-   class lists), JA↔LA spacing (xkanjiskip), and an end_adjust approximation
-   (squeeze folded into glue shrink — line-end-only semantics and priority
-   order are documented as pdfTeX-inexpressible). Measured: 7/7 pair
-   fixtures PASS at exact pt values; kinsoku verified by bbox (no line-head
-   closing brackets); squeeze verified (85pt natural content fits 78.5pt
-   line, 0 Overfull).
+   class lists), JA↔LA spacing (xkanjiskip), punctuation JFM widths (glyph
+   boxed at class width w<1zw with tentsuki overhang — identical ink
+   geometry vs platex reference), hanging punctuation (`hanging_punctuation`
+   via `\pdfprotrudechars=2` + `\rpcode`, `-b`/`-bz` variants), and an
+   end_adjust approximation (squeeze folded into glue shrink — line-end-only
+   semantics and priority order are documented as pdfTeX-inexpressible;
+   priority loss measured harmless: poc/README-m5-numeric.md). Measured:
+   pair fixtures PASS at exact pt values; kinsoku verified by bbox (no
+   line-head closing brackets); hanging verified (right margin kern −10pt,
+   ink ends 0.5zw past the nominal edge); squeeze verified (0 Overfull).
 5. **M6 — class integration**: `jlreq-complements.sty` gained a `pdflatex`
    option (thebibliography/theindex/theorems work; the class loads it under
-   d); coexistence verified with hyperref (Japanese bookmarks via UTF-16BE
+   d); `jlreq-trimmarks.sty` gained pdfTeX tombow + TrimBox/BleedBox +
+   rotated banner (`\rotatebox{-90}`); `\sidenote` (both `sidenote_type`
+   variants) works; `reference_mark=interlinear` works; Q/H units work in
+   all length options and `\jlreqsetup` values (1Q=1H=0.25mm), incl. literal
+   `2zw`; Japanese in math (`\mathmc`/`\mathgt`, direct JA chars, matrix
+   cells) works behind enablejfam; `\kansuji` is implemented as an
+   expandable digitwise macro (13 values verified against upLaTeX);
+   `\mag`-based runs are geometry-exact vs the pTeX DVI route.
+   Coexistence verified with hyperref (Japanese bookmarks via UTF-16BE
    outlines), amsmath, graphicx/xcolor, lists, tables, and a class-options
    sweep (paper/fontsize/line_length/… + `\jlreqsetup` keys; 割注 works).
 6. **M8 — packaging/docs**: README ja/en describe the experimental support
@@ -62,16 +74,21 @@ engine-API gate; see below).
   (timestamp-normalized) for p/u; **PDF date-normalized byte-identical** for
   lualatex, before vs after the whole backend work.
 - pdflatex: mixed doc + rule-measurement fixtures (7 pair measurements exact
-  to pt) + 10 coexistence fixtures (hyperref JP bookmarks, amsmath,
-  graphicx/xcolor, lists, tables, options sweep, microtype+twocolumn,
-  trimmarks with TrimBox/BleedBox, warichu, headings-toc-aux, footnotes-rules)
-  — all rc=0; `pdftotext` extraction correct; IPAex Type 1 embedded.
+  to pt) + 23 coexistence fixtures (hyperref JP bookmarks, amsmath,
+  graphicx/xcolor, lists, tables, options sweep incl. Q/H units,
+  jlreqsetup literal-zw, microtype+twocolumn, trimmarks with
+  TrimBox/BleedBox, trimmarks rotated banner, warichu, headings-toc-aux,
+  footnotes-rules, sidenote & sidenote-symbol, math-jfm &
+  math-jfm-disablejfam & math-matrix, eqref-hyperref, kanji-numbers,
+  reference-mark-interlinear) — all rc=0; `pdftotext` extraction correct;
+  IPAex Type 1 embedded.
 - Kinsoku: line-head punctuation machine-scanned from PDF bbox across all
   fixtures — **0 violations** (closing brackets, stops, commas never start a
-  line). One rare edge (latin→closing-bracket in narrow columns via the
-  CJK decoder's internal node) is documented in the compatibility matrix.
-- Test base: `tests/run-pdftex-tests.sh` (46 checks: T1 JFM data, T2 error
-  conditions, T3/T4 rule measurements + bbox scan, T5 documents, T7
+  line). The formerly documented rare edge (latin→closing-bracket `（x）`
+  in narrow columns) is fixed: the zero-glue CJK-decoder residue before
+  prebreak classes is now `\unskip`ped (fixture preclose-latin.tex).
+- Test base: `tests/run-pdftex-tests.sh` (65 checks: T1 JFM data, T2 error
+  gate, T3/T4 rule measurements + bbox scan, T5 documents, T7
   3-engine regression + backend isolation).
 - Performance: (B) backend 1.5× the raw bxcjkjatype baseline; 0.375s vs
   upLaTeX 0.191s / LuaLaTeX 0.961s on the 2-page stress fixture.
@@ -80,34 +97,43 @@ engine-API gate; see below).
 unsupported claims)
 
 - 縦組み（`tate`）: pdfTeX lacks `\tate`/`\iftdir`/縦用JFM etc. — explicit
-  error under d (G4 gate decision: horizontal-first).
-- ぶら下げ組み: pdfTeX has no line-end protrusion mechanism — unsupported
-  (the `-b` variant data exists for the future).
+  error under d (G4 gate decision: structurally blocked; see
+  docs/pdftex-tate-eval.md — bxcjkvert does not exist on CTAN/GitHub;
+  CJKvert's per-glyph rotation supplies no vertical glyphs/JFM/paper
+  model). `tate`-dependent features (縦中横, 縦組見出し定義, 縦組
+  `\kansuji`/`和暦\today`) share the gate.
 - Priority-ordered stretch/shrink (`stretch_priority`/`shrink_priority`) and
   line-end-only `end_adjust`: approximated (single-priority shrink); the
-  exact semantics are inexpressible on the stock breaker — documented.
-- `\eqref` (hyperref+math) and Japanese in math matrix cells: CJK active
-  character interaction — known limitation, fixtures document workarounds.
-- `jlreq-trimmarks` under pdfTeX: still an explicit error (deep pTeX tombow
-  machinery dependency; a prototype worked but was withdrawn after a p/u
-  regression — needs its own careful PR).
-- `jlreqsetup` length keys under pdfLaTeX: use `2\zw` (macro) instead of the
-  literal `2zw` in key values like `footnote_indent`.
-- `\sidenote` / `\sidenotemark` / `\sidenotetext` (both `sidenote_type`
-  variants): `number` fails with `Dimension too large` inside the marginpar
-  box-adjust path; `symbol` hits a `\CJK@punctchar` internal error — blocked
-  pending a dedicated integration pass. `\marginpar` plain, `\footnote` and
-  `\endnote` work as alternatives (tested).
+  exact semantics are inexpressible on the stock breaker — documented and
+  measured harmless on the reference corpus (poc/README-m5-numeric.md).
+- Japanese `\label` names: active-byte expansion inside
+  `\csname r@…\endcsname` — agreed unfixable without breaking hyperref
+  bookmarks; ASCII labels are the documented workaround (see comments in
+  tests/fixtures/pdflatex-coexist/eqref-hyperref.tex). (`\eqref` +
+  hyperref with Japanese section context itself works; fixture proves
+  refs resolve.)
+- Paragraph-start LA→JA boundary gets no xkanjiskip: detecting a latin
+  predecessor in unshifted horizontal mode is structurally unsound under
+  pdfTeX (latin chars are unhookable; indent/kern signatures ambiguous) —
+  limitation agreed after probe (paragraph-boundary reset itself works).
 - `\　` (single-U+3000 control-sequence spelling): U+3000 is not a letter
   under the CJKutf8 route, so the spelling cannot tokenize — blocked by
   design. Use the literal U+3000 character (outputs as a CJK space) or
   `\jaspace{zenkaku/nibu/shibu}` (tested rc=0).
-- `reference_mark=interlinear` (行間合印): position computation depends on
-  `\lastnodechar`, fixed at -1 under pdfTeX — `reference_mark=inline` is the
-  supported mode (tested rc=0).
-- `hanging_punctuation`: as above, terminal limitation agreed (G3) — option
-  selects the `-b` JFM variant without runtime error, but the protrusion
-  mechanism itself does not exist in pdfTeX.
+- Font set is IPAex only (`ipaex-type1`, with `\CJKbold` synthetic bold);
+  other Japanese font presets are future work.
+- fontsize/jafontsize in `zw`/`zh` units is self-referential under pdfTeX
+  and raises an explicit ClassError (jlreq.cls:611–626) — previously it
+  silently became 0pt. Q/H units and `jafontscale` ratios are the supported
+  alternatives (tested).
+- Tombow *drawing coordinates* with `\mag≠1000`: text-block parity is
+  bitwise (y ≤0.065bp vs uplatex at mag=1000/1200 via
+  jlreq-trimmarks-pdftex.def:61–71), but the drawn marks themselves sit
+  ~14bp off under mag=1200 (shipout `\put` coordinate model; bit-exact at
+  mag=1000). Fix deferred to a tombow-under-mag slice.
+- Hanging punctuation is implemented (`-b`/`-bz` variants) but degrades
+  silently if a whatsit (e.g. hyperref `\label`) lands between the 、。 and
+  the following pair glue (node-level constraint, poc/README-g3b.md).
 
 ### 提案 / Proposed PR series (per PLAN.md §8)
 
@@ -123,5 +149,7 @@ unsupported claims)
    for a first merge (vertical gated behind G4)?
 2. Default font configuration `ipaex-type1` — or should another preset be
    the pdfTeX default?
-3. Should `jlreq-trimmarks` pdfTeX support land separately later, given the
-   pTeX tombow machinery dependency?
+3. `jlreq-trimmarks` pdfTeX support is implemented (tombow, TrimBox/BleedBox,
+   rotated banner via `\rotatebox{-90}`). Should it ship in the same PR
+   series as the class integration, or as its own PR for separate review of
+   the reimplemented tombow machinery?

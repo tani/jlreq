@@ -1,0 +1,27 @@
+% v1-tate-punct.tex -- M7 evaluation task 3 (G4 tate gate)
+% Punctuation rotation behavior: measure physical advance of 、。「」ー
+% under CJKvert with the yoko ipaex Type1 font. If vertical writing were
+% real, each cell would advance exactly 1zw along the column axis.
+% A rotated yoko glyph advances by its HEIGHT (< 1zw for 、。) and the
+% glyph lands at the wrong corner of the em box (no vertical variants in
+% Type1; rotation is geometric, not glyph-substitution).
+\documentclass[paper=a5]{jlreq}
+\usepackage{CJKvert}
+\makeatletter
+\def\probe#1{%
+  \setbox0=\hbox{#1}% the glyph as the backend places it (CJKvert rotates inside)
+  \typeout{V1-PUNCT \meaning#1: box wd=\the\wd0, ht=\the\ht0, dp=\the\dp0}}
+\begin{document}
+\probe{あ}
+\probe{、}
+\probe{。}
+\probe{「}
+\probe{」}
+\probe{ー}
+\typeout{V1-PUNCT 1zw = \the\dimexpr1\jlreq@zw\relax}
+% kinsoku probe: 、。post-penalties of the backend table are defined for
+% the yoko axis only; check they still fire in vertical mode by widening
+% a line so a 、falls at margin. (qualitative: compile must rc=0)
+あいうえおかきくけこ、さしすせそたちつてと。
+「縦書き」のテスト。
+\end{document}

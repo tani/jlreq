@@ -1,0 +1,72 @@
+% H1/G3-bis: ぶら下げ（hanging_punctuation, -b 変種）の実測検証
+% pdfTeX の \pdfprotrudechars + \rpcode による句読点の行末突出し:
+%   case A: クラス7（、）, case B: クラス6（。）, case C: 混在長文の安定性。
+% 検証（すべてログ内判定）:
+%   - 突出し機構の発火: 行ボックスの右マージンカーンを \rightmarginkern で
+%     読み戻す（-10.0pt = -1em で固定: rpcode=1000 × quad）。グリフ全幅1zw
+%     の突出し量を持つマージンカーンが組み込まれていれば HANG-PASS。
+%   - 段落行数: 漢×9、漢×9 が hsize 95pt で2行に組めること（\prevgraf=2）。
+% 注意: このフィクスチャは段落中に \pdfsavepos 等の whatsit を置かない。
+% 、の直後の補正カーンとペアグルーの間に whatsit が入るとブレイク成立条件
+% が変わり突出しが発火しないことがある（poc/README-g3b.md 参照）。
+\documentclass[pdflatex,hanging_punctuation]{jlreq}
+\makeatletter
+\parindent=0pt
+
+
+\begin{document}
+% ---- case A: 読点「、」の行末突出し
+% hsize=95pt（全角9.5文字分）: 漢×9、漢×9 → 1行目=[漢×9][、+マージンカーン]，
+% 2行目=[漢×9] の2行組になるはず。
+\setbox10=\vbox{\hsize=95pt
+  漢漢漢漢漢漢漢漢漢、漢漢漢漢漢漢漢漢漢\par
+  \global\setbox11=\lastbox \unskip\unpenalty
+  \global\setbox12=\lastbox
+  \global\count1=\prevgraf}
+\unvbox10
+\edef\h@rmk{\rightmarginkern12}
+\ifnum\pdfstrcmp{\h@rmk}{-10.0pt}=0 
+  \typeout{HANG-PASS:A margin-kern=\h@rmk}%
+\else
+  \typeout{HANG-FAIL:A margin-kern=[\h@rmk] expected=[-10.0pt]}%
+\fi
+\ifnum\count1=2
+  \typeout{HANG-PASS:A lines=2}%
+\else
+  \typeout{HANG-FAIL:A lines=\the\count1 expected=2}%
+\fi
+
+% ---- case B: 句点「。」の行末突出し（クラス6）
+\setbox10=\vbox{\hsize=95pt
+  漢漢漢漢漢漢漢漢漢。漢漢漢漢漢漢漢漢漢\par
+  \global\setbox11=\lastbox \unskip\unpenalty
+  \global\setbox12=\lastbox
+  \global\count1=\prevgraf}
+\unvbox10
+\edef\h@rmk{\rightmarginkern12}
+\ifnum\pdfstrcmp{\h@rmk}{-10.0pt}=0 
+  \typeout{HANG-PASS:B margin-kern=\h@rmk}%
+\else
+  \typeout{HANG-FAIL:B margin-kern=[\h@rmk] expected=[-10.0pt]}%
+\fi
+\ifnum\count1=2
+  \typeout{HANG-PASS:B lines=2}%
+\else
+  \typeout{HANG-FAIL:B lines=\the\count1 expected=2}%
+\fi
+
+% ---- case C: 混在長文の安定性（ぶら下げ＋禁則＋ペアグルーが共存して
+% エラーなく組めること：行数だけ簡易確認）
+\setbox10=\vbox{\hsize=200pt
+  昔々，あるところにお爺さんとお婆さんがありました。お爺さんは山へ
+  芝刈りに，お婆さんは川へ洗濯に行きました。川を下ってきた大きな桃を
+  拾って帰ると，桃が割れて中から元気な男の子が飛び出しました。%
+  \par\global\count1=\prevgraf}
+\unvbox10
+\ifnum\count1>0
+  \typeout{HANG-PASS:C lines=\the\count1}%
+\else
+  \typeout{HANG-FAIL:C lines=\the\count1}%
+\fi
+
+\end{document}

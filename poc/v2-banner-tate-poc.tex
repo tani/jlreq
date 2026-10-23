@@ -1,0 +1,12 @@
+% v2-banner-tate-poc.tex -- tate-positioned banner probe (V2 phase 2).
+% Expected TODAY: PackageError from the \tate placeholder macro in
+% jlreq-trimmarks-pdftex.def ("the rotated banner requires pTeX
+% primitives"). That error text is the pre-V2 blocked state evidence.
+\documentclass[pdflatex,paper=b5]{jlreq}
+\usepackage[show={trimmarks,banner}]{jlreq-trimmarks}
+\jlreqtrimmarkssetup{
+  banner={top-left={tate={TATEBANNER-PROBE 2026-10-23}}}
+}
+\begin{document}
+縦バナーのテスト。
+\end{document}

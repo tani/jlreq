@@ -1,0 +1,22 @@
+% v1-tate-mix.tex -- M7 evaluation tasks 4,5,6 (G4 tate gate)
+% vertical/horizontal mixing, \tatechuyoko equivalent, pagestyle/footnote
+% sanity under the jlreq pdfTeX backend with CJKvert.
+\documentclass[paper=a5]{jlreq}
+\usepackage{CJKvert}
+\makeatletter
+\begin{document}
+\section{混在テスト}
+% --- task 4: vertical/horizontal mixing
+あいうえお\CJKhorz ABC def 123 \CJKvert かきくけこ。
+% --- task 5: \tatechuyoko equivalent?
+% CJKvert.sty contains no tate-chu-yoko command (grep tatechu: 0 hits).
+% jlreq.cls \tatechuyoko is gated behind \if@tate / pTeX \tate.
+\@ifundefined{tatechuyoko}{%
+  \typeout{V1-TATECHUYOKO: undefined under pdfTeX backend}
+}{%
+  \typeout{V1-TATECHUYOKO: defined (meaning: \meaning\tatechuyoko)}
+}
+% --- task 6: pagestyle + footnote sanity
+テスト脚注\footnote{脚注テスト：あいうえお。}の直後。
+漢字かな交じりの本文で柱と脚注が壊れないかを見る。
+\end{document}

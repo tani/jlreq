@@ -1,0 +1,9 @@
+% v2-banner-poc.tex -- banner under pdfTeX, current behavior probe (V2).
+% Phase 1: show={trimmarks,banner} with the default banner (yoko slot).
+% Phase 2 (separate fixture): tate-positioned banner -> currently errors
+% via the \tate placeholder in jlreq-trimmarks-pdftex.def.
+\documentclass[pdflatex,paper=b5]{jlreq}
+\usepackage[show={trimmarks,banner}]{jlreq-trimmarks}
+\begin{document}
+トンボとバナーのテスト。既定バナー(yoko@top@left)が出るか。
+\end{document}

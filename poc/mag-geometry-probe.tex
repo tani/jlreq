@@ -1,0 +1,29 @@
+% \mag 幾何の検証プローブ（docs/pdftex-compatibility.md 更新用の実測根拠）。
+% 使い方:
+%   pdflatex mag-geometry-probe.tex        → \mag=1000 の基準値
+%   pdflatex '\def\MAG{1200}\input{mag-geometry-probe.tex}' → \mag=1200
+%   uplatex + dvipdfmx でも同じ手順で比較可（\typeout行は共通。
+%   uplatexでは\pdf*系レジスタが未定義のためガードしてある）。
+% 要点: jlreq.cls の d 分岐で \pdfhorigin/\pdfvorigin=1truein と
+% \pdfpagewidth/height ← (1000/\mag)×\paperwidth を行うため，
+% \mag=1200 でも物理用紙は A4 固定・原点 1in 固定で版面オフセットのみ
+% ×1.2 される（uplatex+dvipdfmx と同じ意味論。最初の語の x は表組み
+% 座標として uplatex と一致する）。
+\ifdefined\MAG\mag=\MAG\relax\fi
+\documentclass[a4paper]{jlreq}% エンジン自動判定（pdflatex/uplatex共用）
+\begin{document}
+\typeout{MAG:\the\mag}
+\typeout{PW:\the\paperwidth}
+\typeout{PH:\the\paperheight}
+\ifdefined\pdfpagewidth\typeout{PPW:\the\pdfpagewidth}\fi
+\ifdefined\pdfpageheight\typeout{PPH:\the\pdfpageheight}\fi
+\ifdefined\pdfhorigin\typeout{HOR:\the\pdfhorigin}\fi
+\ifdefined\pdfvorigin\typeout{VOR:\the\pdfvorigin}\fi
+\typeout{OSM:\the\oddsidemargin}
+\typeout{ESM:\the\evensidemargin}
+\typeout{TMGM:\the\topmargin}
+\typeout{HOFF:\the\hoffset}
+\typeout{VOFF:\the\voffset}
+\typeout{TW:\the\textwidth}
+\noindent MARKa 本文テスト
+\end{document}

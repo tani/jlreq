@@ -1,0 +1,23 @@
+% v1-tate-ink.tex -- M7 task 3 numeric evidence (G4 tate gate)
+% One line: あ 、 。 ー 「 under CJKvert. Marks the cell start of each
+% glyph with \pdfsavepos so the ink position inside each 1zw cell can be
+% measured on a rasterized render.  Correct vertical (tate) placement of
+% 、。is the TOP-RIGHT corner of the cell (JLREQ 4.2.2); geometric 90deg
+% rotation of the yoko glyph puts it in the WRONG corner because Type1
+% fonts have no vertical glyph variants.
+\documentclass[paper=a5]{jlreq}
+\usepackage{CJKvert}
+\makeatletter
+\def\markpos#1{\pdfsavepos\write\@auxout{\string\gdef\string#1{\the\pdflastxpos,\the\pdflastypos}}}
+\pagestyle{empty}
+\begin{document}
+\noindent
+\markpos\cellA あ%
+\markpos\cellB 、%
+\markpos\cellC 。%
+\markpos\cellD ー%
+\markpos\cellE 「%
+\markpos\cellF
+\par
+\typeout{V1-INK: marks written to aux}
+\end{document}

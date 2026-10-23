@@ -25,8 +25,8 @@ To use, simply write
 Horizontal documents also compile with pdfLaTeX (experimental support). Pass the `pdflatex` class option, or let the engine be auto-detected. Internally it loads bxcjkjatype (CJKutf8 with IPAex Mincho/Gothic Type 1 fonts) and an experimental backend (`jlreq-pdftex.sty`), applying JFM-based inter-character glue, kinsoku (line-breaking rules) and Japanese/Latin spacing. Known limitations:
 
 * Vertical writing (`tate`) is not supported (an explicit error is raised).
-* Hanging punctuation and Japanese in math mode are not supported.
-* Punctuation glyphs are rendered full-width from IPAex; the JFM half-width specification is reflected in the spacing rules.
+* Hanging punctuation (`-b` variants) and Japanese in math mode (`\mathmc`/`\mathgt`, direct Japanese input) are supported.
+* Punctuation is typeset at its JFM class width (e.g. half-width), with the glyph placed per the JFM alignment (ink geometry matches the platex reference).
 
 See `docs/pdftex-compatibility.md` for details.
 

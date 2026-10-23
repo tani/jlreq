@@ -1,0 +1,36 @@
+% v1-tate-fonts.tex -- M7 evaluation task 1+2 (G4 tate gate)
+% Vertical font substitution + line direction behavior under the
+% jlreq pdfTeX backend with CJKvert (the only remaining vertical
+% facility: bxcjkvert does not exist; bxcjkjatype abolished its
+% 'vertical' option with a hard PackageError).
+\documentclass[paper=a5]{jlreq}
+\usepackage{CJKvert}
+\makeatletter
+\begin{document}
+% --- task 1: which fonts serve the "vertical" run?
+\typeout{V1-FONT-ENC: \CJK@enc}
+\typeout{V1-FONT-FAMILY: \CJK@family}
+\typeout{V1-FONT-CURRENT: \f@family/\f@series/\f@shape}
+% --- task 2: glyph order and line advance directions
+\noindent
+\pdfsavepos\write\@auxout{\string\gdef\string\posA{\the\pdflastxpos,\the\pdflastypos}}%
+あ%
+\pdfsavepos\write\@auxout{\string\gdef\string\posB{\the\pdflastxpos,\the\pdflastypos}}%
+い%
+\pdfsavepos\write\@auxout{\string\gdef\string\posC{\the\pdflastxpos,\the\pdflastypos}}%
+\par
+\noindent う\par
+\begingroup
+% physical advance of one rotated glyph (should equal glyph HEIGHT,
+% not 1zw, if the yoko font is rotated unmodified)
+\setbox0=\hbox{あ}%
+\typeout{V1-GLYPH-ROTATED-BOX: wd=\the\wd0, ht=\the\ht0, dp=\the\dp0}
+\setbox2=\hbox{\symbol{48}}% '0' in current (CJK) font via CJK? plain ascii below
+\message{V1-ZW: \the\dimexpr1\jlreq@zw\relax, V1-ZH: \the\dimexpr1\jlreq@zh\relax}
+\endgroup
+\CJKhorz
+\typeout{V1-BASELINESTRETCH-AFTER-HORZ: \baselinestretch}
+\CJKvert
+\typeout{V1-BASELINESTRETCH-AFTER-VERT: \baselinestretch}
+\typeout{V1-BASELINESKIP: \the\baselineskip}
+\end{document}

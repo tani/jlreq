@@ -40,11 +40,19 @@ if grep -q 'Overfull' "$OUT/endadjust.log"; then
 else
   echo "PASS: endadjust-overfull-check"
 fi
+# hanging-punct.tex はログ内判定（HANG-PASS/FAIL: 右マージンカーン読み戻し
+# と段落行数）を検証（ぶら下げ発火の直接証拠）
+if grep -q 'HANG-FAIL' "$OUT/hanging-punct.log" || ! grep -q 'HANG-PASS' "$OUT/hanging-punct.log"; then
+  echo "FAIL: hanging-punct-log-assertions"; FAILED=$((FAILED+1))
+else
+  echo "PASS: hanging-punct-log-assertions ($(grep -c 'HANG-PASS' "$OUT/hanging-punct.log") assertions)"
+fi
 # 行頭禁則のbbox機械検証（閉じ約物が行頭に来ないこと）
 python3 tests/check-kinsoku.py "$OUT"/kinsoku.pdf "$OUT"/punctuation-consecutive.pdf \
+  "$OUT"/punct-width.pdf "$OUT"/preclose-latin.pdf "$OUT"/boundary-ja-la.pdf \
   > "$OUT/kinsoku-check.out" 2>&1
 if [ $? -eq 0 ]; then
-  echo "PASS: kinsoku-bbox-line-head-scan (2 fixtures)"
+  echo "PASS: kinsoku-bbox-line-head-scan (5 fixtures)"
 else
   echo "FAIL: kinsoku-bbox-line-head-scan (see $OUT/kinsoku-check.out)"
   FAILED=$((FAILED+1))
@@ -59,6 +67,29 @@ for f in tests/fixtures/pdflatex-coexist/*.tex; do
   name=$(basename "$f" .tex)
   run "coexist-$name" pdflatex -interaction=nonstopmode -output-directory="$OUT" "$f"
 done
+# kanji-numbers.tex はログ内判定も検証（\jlreq@pdf@kansuji の桁置換結果が
+# リテラル漢数字＝pTeX \kansuji 実測値（uplatex/platex照合済み）と一致すること）
+if grep -q 'KANSUJI-FAIL' "$OUT/kanji-numbers.log" || ! grep -q 'KANSUJI-PASS' "$OUT/kanji-numbers.log"; then
+  echo "FAIL: kanji-numbers-log-assertions"; FAILED=$((FAILED+1))
+else
+  echo "PASS: kanji-numbers-log-assertions ($(grep -c 'KANSUJI-PASS' "$OUT/kanji-numbers.log") assertions)"
+fi
+# trimmarks-banner.tex はログ内判定も検証（show=banner で回転バナー枠組が
+# pdfTeX 用に配線されたことの印 BANNER-PD-PASS。placed ピクセル対称表は
+# fixture コメント参照）
+if ! grep -q 'BANNER-PD-PASS' "$OUT/trimmarks-banner.log"; then
+  echo "FAIL: trimmarks-banner-log-assertions"; FAILED=$((FAILED+1))
+else
+  echo "PASS: trimmarks-banner-log-assertions"
+fi
+# reference-mark-interlinear.tex はログ内判定も検証（合印を跨ぐpair glue・
+# 境界・文字クラス状態復帰。全て INTER-PASS であること）
+if grep -q 'INTER-FAIL' "$OUT/reference-mark-interlinear.log" || \
+   [ "$(grep -c 'INTER-PASS' "$OUT/reference-mark-interlinear.log")" -ne 3 ]; then
+  echo "FAIL: interlinear-log-assertions"; FAILED=$((FAILED+1))
+else
+  echo "PASS: interlinear-log-assertions (3 assertions)"
+fi
 
 echo "== T7: 3エンジン回帰（コンパイル成立 + バックエンド非読込） =="
 for f in tests/fixtures/basic-mixed.tex tests/fixtures/math-japanese.tex tests/fixtures/tate-vertical.tex; do
