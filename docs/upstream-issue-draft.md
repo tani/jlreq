@@ -98,9 +98,14 @@ unsupported claims)
 
 - 縦組み（`tate`）: pdfTeX lacks `\tate`/`\iftdir`/縦用JFM etc. — explicit
   error under d (G4 gate decision: structurally blocked; see
-  docs/pdftex-tate-eval.md — bxcjkvert does not exist on CTAN/GitHub;
-  CJKvert's per-glyph rotation supplies no vertical glyphs/JFM/paper
-  model). `tate`-dependent features (縦中横, 縦組見出し定義, 縦組
+  docs/pdftex-tate-eval.md — re-evaluated 2026-10-23 against the real
+  bxcjkvert v0.5a, which IS bundled under CTAN
+  `language/japanese/BX/bxcjkjatype/`: it removes CJKvert's side effects
+  but supplies only glyph rotation + direction switching; rotated yoko
+  punctuation lands cell bottom-left vs the required top-right (bbox
+  vs uplatex tate), no tate-chu-yoko, no vertical JFM, no paper-model
+  hooks — a rotation approximation cannot reach JLREQ 4.2.2 conformance).
+  `tate`-dependent features (縦中横, 縦組見出し定義, 縦組
   `\kansuji`/`和暦\today`) share the gate.
 - Priority-ordered stretch/shrink (`stretch_priority`/`shrink_priority`) and
   line-end-only `end_adjust`: approximated (single-priority shrink); the
