@@ -131,11 +131,15 @@ unsupported claims)
   and raises an explicit ClassError (jlreq.cls:611–626) — previously it
   silently became 0pt. Q/H units and `jafontscale` ratios are the supported
   alternatives (tested).
-- Tombow *drawing coordinates* with `\mag≠1000`: text-block parity is
-  bitwise (y ≤0.065bp vs uplatex at mag=1000/1200 via
-  jlreq-trimmarks-pdftex.def:61–71), but the drawn marks themselves sit
-  ~14bp off under mag=1200 (shipout `\put` coordinate model; bit-exact at
-  mag=1000). Fix deferred to a tombow-under-mag slice.
+- ~~Tombow *drawing coordinates* with `\mag≠1000`~~ → resolved: tombow
+  marks now match uplatex at `\mag=1200` too (HiRes ink-bbox identical:
+  `42.048 42.174 845.082 1140.894`), via the `\put` origin correction in
+  jlreq-trimmarks-pdftex.def:58–77 (cancels the `\hoffset`/`\voffset`
+  leakage into stored drawing coords; content-stream verified; mag=1000
+  stream byte-unchanged). Regression gate: `tests/fixtures/pdflatex-coexist/
+  mag-tombow.tex` + `tests/check-tombow-mag.py` asserting the mag-invariant
+  stored rule coordinates (35.05, 922.444) and the ×1.2 page CTM. Text-block
+  parity stays bitwise (y ≤0.065bp vs uplatex, jlreq-trimmarks-pdftex.def:79–89).
 - Hanging punctuation is implemented (`-b`/`-bz` variants) but degrades
   silently if a whatsit (e.g. hyperref `\label`) lands between the 、。 and
   the following pair glue (node-level constraint, poc/README-g3b.md).

@@ -55,8 +55,26 @@
   }
   % lltjcore 221-223
   \AddToHook{build/page/reset}[jlreq-trimmarks/pdftex]{\@tombowreset@@paper}%
+  % \mag≠1000 補正: pdfTeX の shipout ボックス内の cm 座標はすべて出荷時に
+  % mag 倍され，カーネルの background フック原点補正（\pdfhorigin 相殺）は
+  % 効くが \hoffset/\voffset 成分は描画の stored 座標に混入する．
+  % 実測（コンテントストリーム照合）: uplatex+dvipdfmx ではストック左上
+  % 隅から全描画が単純 mag 倍 (stored 座標は mag 不変) だが，d 側は
+  % x に +\hoffset・y に -\voffset が足されて物理位置が (hoff,voff)×mag
+  % だけずれる（@1200 で両軸 +14.45pt ずれ＝ink-bbox 56 27 860 1127 vs
+  % u 42 42 846 1141）．\put 原点から同量を差し引けば stored 座標は
+  % mag 不変となり u と一致する．\mag=1000 では hoffset/voffset≒0 かつ
+  % 従来値にビット一致させるため分岐する．
+  \ifnum\mag=1000
+    \def\jlreq@trimmarks@pdftex@tombowput{\put(72.27,-72.27)}%
+  \else
+    \def\jlreq@trimmarks@pdftex@tombowput{%
+      \put(\strip@pt\dimexpr72.27pt-\hoffset\relax,%
+           \strip@pt\dimexpr-72.27pt+\voffset\relax)}%
+  \fi
   \AddToHook{shipout/background}[jlreq-trimmarks/pdftex]{%
-    \put(72.27,-72.27){\lineskip\z@skip\lineskiplimit\z@\@outputtombow}%
+    \jlreq@trimmarks@pdftex@tombowput
+    {\lineskip\z@skip\lineskiplimit\z@\@outputtombow}%
   }%
   % plcoreの\@outputpageは\iftombow時に\vskip\@@topmargin（=\topmargin+1inを
   % jlreq側sty:556-563が1trueinに読替）して本文ブロックをストック中央へ

@@ -74,6 +74,13 @@ if grep -q 'KANSUJI-FAIL' "$OUT/kanji-numbers.log" || ! grep -q 'KANSUJI-PASS' "
 else
   echo "PASS: kanji-numbers-log-assertions ($(grep -c 'KANSUJI-PASS' "$OUT/kanji-numbers.log") assertions)"
 fi
+# mag-tombow.tex（\mag=1200）はトンボ描画のPDFコンテントストリーム座標を検証
+# （描画 stored 座標の mag 不変性＝uplatex との描画一致の必要十分条件）
+if python3 tests/check-tombow-mag.py "$OUT/mag-tombow.pdf" > "$OUT/check-tombow-mag.out" 2>&1; then
+  echo "PASS: tombow-mag1200-stream-parity"
+else
+  echo "FAIL: tombow-mag1200-stream-parity (see $OUT/check-tombow-mag.out)"; FAILED=$((FAILED+1))
+fi
 # trimmarks-banner.tex はログ内判定も検証（show=banner で回転バナー枠組が
 # pdfTeX 用に配線されたことの印 BANNER-PD-PASS。placed ピクセル対称表は
 # fixture コメント参照）
