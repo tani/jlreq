@@ -7,7 +7,10 @@ MAKEJVFCNF:=$(shell ls -R $(shell kpsewhich --var-value=TEXMFDIST)/fonts/source 
 # texlua.  Regeneration-diff-zero is checked by `make check-pdftex-jfm`
 # (run it in CI / after touching jfm-jlreq.lua or make_pdftex_jfm.lua).
 PDFTEX_JFM_DEFS = jlreq-pdftex-jfm.def jlreq-pdftex-jfm-b.def \
-	jlreq-pdftex-jfm-z.def jlreq-pdftex-jfm-bz.def
+	jlreq-pdftex-jfm-z.def jlreq-pdftex-jfm-bz.def jlreq-pdftex-jfm-tate.def
+
+# IPAex Type1 平面フォント（tate off@ 表の ink bbox 算出に使用）。
+IPAEX_TYPE1_DIR:=$(shell kpsewhich ipxm-r-u30.pfb | xargs dirname)
 
 TFMS = jlreq.tfm bjlreq.tfm zjlreq.tfm bzjlreq.tfm \
 	ujlreq.tfm ubjlreq.tfm uzjlreq.tfm ubzjlreq.tfm \
@@ -50,20 +53,34 @@ jfm: jfm-jlreqv.lua jfm-jlreqv-jidori.lua $(VFS) $(TFMS)
 # 全4バリアントを生成する。出力は決定的（タイムスタンプなし・ソート済み）。
 pdftex-jfm: $(PDFTEX_JFM_DEFS)
 
-$(PDFTEX_JFM_DEFS): make_pdftex_jfm.lua jfm-jlreq.lua
+# tate variant: the off@ punctuation-offset table is derived from the
+# IPAex Type1 charstring ink bboxes (poc/extbbox3.py + poc/tate_off.lua).
+# Inputs u30/uff plane disassemblies are build artifacts and removed after
+# the off-table is written.
+tate-off.lua: poc/extbbox3.py poc/tate_off.lua
+	t1disasm $(IPAEX_TYPE1_DIR)/ipxm-r-u30.pfb > u30.dis
+	t1disasm $(IPAEX_TYPE1_DIR)/ipxm-r-uff.pfb > uff.dis
+	python3 poc/extbbox3.py u30.dis > /dev/null && cp bboxes.json bboxes-30.json
+	python3 poc/extbbox3.py uff.dis > /dev/null && cp bboxes.json bboxes-ff.json
+	texlua poc/tate_off.lua
+	rm -f u30.dis uff.dis bboxes.json bboxes-30.json bboxes-ff.json
+
+$(PDFTEX_JFM_DEFS): make_pdftex_jfm.lua jfm-jlreq.lua jfm-jlreqv-pl.lua tate-off.lua
 	texlua make_pdftex_jfm.lua --all-variants
 
 # 再生成してコミット済みファイルとの差分ゼロを検査する（CI 用）。
 # このターゲットは `all` には含めない: 通常のビルド（make jfm）は
 # pTeX/upTeX/LuaTeX 用であり、pdfTeX 用データの検査は独立に実行する。
-check-pdftex-jfm: $(PDFTEX_JFM_DEFS)
+check-pdftex-jfm: tate-off.lua
 	rm -rf pdftex-jfm-check
 	mkdir -p pdftex-jfm-check
+	cp tate-off.lua pdftex-jfm-check/
 	texlua make_pdftex_jfm.lua --all-variants --outdir=pdftex-jfm-check
 	cmp pdftex-jfm-check/jlreq-pdftex-jfm.def jlreq-pdftex-jfm.def
 	cmp pdftex-jfm-check/jlreq-pdftex-jfm-b.def jlreq-pdftex-jfm-b.def
 	cmp pdftex-jfm-check/jlreq-pdftex-jfm-z.def jlreq-pdftex-jfm-z.def
 	cmp pdftex-jfm-check/jlreq-pdftex-jfm-bz.def jlreq-pdftex-jfm-bz.def
+	cmp pdftex-jfm-check/jlreq-pdftex-jfm-tate.def jlreq-pdftex-jfm-tate.def
 	texlua check_jfm_pdftex.lua
 	rm -rf pdftex-jfm-check
 	@echo "check-pdftex-jfm: regeneration diff zero, all variants validated"

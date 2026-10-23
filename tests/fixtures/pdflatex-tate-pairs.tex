@@ -1,0 +1,44 @@
+% pdflatex-tate-pairs.tex -- pair glue table-drive assertions (tate).
+% For each (from,to) class pair: reads the natural glue the table emits
+% (\jlreqpdf@emitpair) and compares with the value read back from the
+% pair@<from>@<to> entry via the \jlreqpdf@fixedpair capture shim.
+% Asserts pair emission is driven by the loaded tate JFM table (values
+% read from the table itself; survives data replacement).
+\documentclass[pdflatex,tate,paper=a5]{jlreq}
+\pagestyle{empty}
+\makeatletter
+\def\jlreqdbgnat{}
+\let\jlreqdbg@fixed@orig\jlreqpdf@fixedpair
+\def\jlreqdbg@installshim{\def\jlreqpdf@fixedpair##1##2##3{\gdef\jlreqdbgnat{##1}}}
+\def\jlreqdbg@restoreshim{\let\jlreqpdf@fixedpair\jlreqdbg@fixed@orig}
+\jlreqdbg@installshim
+\def\measurepair#1#2{% from,to
+  \expandafter\ifx\csname jlreqpdf@jfm@pair@#1@#2\endcsname\relax
+    \typeout{TATE-PAIR-SKIP: #1->#2 (undefined in table)}%
+  \else
+    {\csname jlreqpdf@jfm@pair@#1@#2\endcsname}% capture nat in zw
+    \jlreqdbg@restoreshim
+    \global\jlreqpdf@lastclass=#1\relax
+    \global\jlreqpdf@curclass=#2\relax
+    \global\jlreqpdf@inhibit=0\relax
+    \global\jlreqpdf@kernmode=0\relax
+    \setbox\@tempboxa=\hbox{\jlreqpdf@emitpair}%
+    \@tempdima=\wd\@tempboxa
+    \@tempdimb=\dimexpr\jlreqdbgnat\jlreq@zw\relax
+    \@tempdimc=\dimexpr\@tempdima-\@tempdimb\relax
+    \ifdim\@tempdimc<\z@ \@tempdimc=-\@tempdimc\fi
+    \ifdim\@tempdimc<0.5pt\relax
+      \typeout{TATE-PASS: PAIR #1->#2 (\the\@tempdima~ ==~ \the\@tempdimb)}%
+    \else
+      \typeout{TATE-FAIL: PAIR #1->#2 (\the\@tempdima~ !=~ \the\@tempdimb)}%
+    \fi
+    \jlreqdbg@installshim
+  \fi}
+\begin{document}
+\measurepair{15}{6}
+\measurepair{15}{7}
+\measurepair{1}{15}
+\measurepair{7}{15}
+\measurepair{6}{15}
+\measurepair{15}{15}
+\end{document}

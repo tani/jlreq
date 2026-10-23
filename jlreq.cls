@@ -518,14 +518,28 @@
       \@ehc}
   }
 \fi
-% 縦組みはpdfTeXでは未対応（M7ゲート）
+% 縦組み（pdfTeX: T1 回転出荷アーキテクチャ、実験的）
+% 実現原理: 内側水平枠組みで組み、出荷時にページ全体を時計回り90°回転する
+% (shipout rotation; poc/v4-tate.tex の検証結果)。範囲外の仕組みは警告として
+% 明示する（黙って壊れた出力は出さない）。
 \ifx d\jlreq@engine
   \if@tate
-    \ClassError{jlreq}{vertical~typesetting~(tate)~is~not~supported~under~pdfTeX.}{%
-      The~pdfTeX~backend~is~horizontal-only~for~now;~vertical~typesetting~is~pending~milestone~M7.\MessageBreak
-      Please~use~platex,~uplatex~or~lualatex~for~vertical~documents.\MessageBreak
-      \@ehc}
+    \ClassWarning{jlreq}{pdfTeX~tate~support~is~EXPERIMENTAL~(rotation-based).\MessageBreak
+      Out-of-scope~for~this~slice~and~expected~to~render~wrongly~or~trigger~errors:\MessageBreak
+      page~furniture~(running~heads)~placement,~footnote/sidenote~layout,~floats,\MessageBreak
+      jlreq-trimmarks~banner~in~tate,~\string\tatechuyoko~(horizontal-in-vertical),\MessageBreak
+      math~adjacent~to~vertical~runs,~ruby,~tatechuyoko*-based~counters~(they~pass~through),\MessageBreak
+      tate-geometry-dependent~jlreqsetup~keys.%
+      See~docs/pdftex-tate-eval.md~and~the~pdflatex-tate~fixtures.}
   \fi
+\fi
+% T1: 柱（ページスタイル）構築用の方向切替マーカー．pTeX系では
+% \tate\adjustbaseline そのもの、pdfTeXでは無操作（回転出荷では別途
+% 船出の向きをつけるため柱構築内の方向切替は不要・不可）。
+\ifx d\jlreq@engine
+  \let\jlreqpdftate@dirprim\@empty
+\else
+  \def\jlreqpdftate@dirprim{\tate\adjustbaseline}%
 \fi
 
 \sys_if_engine_pdftex:TF {
@@ -578,7 +592,13 @@
 \let\jlreq@zw=\zw
 \let\jlreq@zh=\zh
 \if@tate
-  \AtBeginDocument{\tate\message{《縦組モード》}\adjustbaseline}
+  \ifx d\jlreq@engine
+    % pdfTeX: \tate/\adjustbaseline プリミティブは存在しない．縦組みは
+    % 出荷時回転（jlreq-pdftex.sty の \@outputpage 差し替え）で実現する．
+    \AtBeginDocument{\message{[tate(pdfTeX rotation) mode]}}%
+  \else
+    \AtBeginDocument{\tate\message{《縦組モード》}\adjustbaseline}
+  \fi
 \fi
 
 % \jlreq@gol(Gyo Okuri Length), \jlreq@mol (Moji Okuri Length)を定義
@@ -1550,7 +1570,7 @@
 %  \belowdisplayshortskip \belowdisplayskip
 %  \let\@listi\@listI}
 %
-\if@tate\tate\fi % ここで発行しておく
+\if@tate\ifx d\jlreq@engine\else\tate\fi\fi % ここで発行しておく(pdfTeXではスキップ)
 \mcfamily\selectfont\normalsize
 \setbox\jlreq@tempboxa\hbox{阿}
 \setlength\Cht{\ht\jlreq@tempboxa}
@@ -5366,7 +5386,7 @@
           \exp_not:n {\setbox\@tempboxa=\hbox to \dimexpr\headsep + \headheight + \textheight}
             \legacy_if:nF { @tate } { \exp_not:n { + \Cdp } }
             \exp_not:N \relax
-            { \exp_not:n { \tate\adjustbaseline \hskip \dimexpr \headsep + \headheight }
+            { \exp_not:n { \jlreqpdftate@dirprim \hskip \dimexpr \headsep + \headheight }
               \legacy_if:nF { @tate } { \exp_not:n { + \topskip - \Cht } }
               \exp_not:N \relax
               \hbox to \legacy_if:nF { @tate } { \exp_not:N \dimexpr }

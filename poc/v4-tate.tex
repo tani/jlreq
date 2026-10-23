@@ -1,0 +1,79 @@
+% v4-tate.tex -- V4 PoC: shipout-rotation architecture for true-looking
+% tate under plain pdflatex (article + bxcjkjatype ONLY; no jlreq, no
+% bxcjkvert/CJKvert).  Structure:
+%   1. inner frame: horizontal galley \vbox, \hsize = column extent,
+%      baselineskip = 1zw (final column pitch)
+%   2. per-glyph pre-rotation: own \CJKsymbol wrapper, \rotatebox{90},
+%      dims normalized to (wd=1zw, ht=ght, dp=gdp); kinsoku penalty
+%      before 、。-class; per-class raise/shift table
+%   3. shipout: whole galley \rotatebox{-90} onto upright A4; final
+%      reading order = top->down glyphs, right->left columns
+%   4. savepos marks for final-frame measurement vs uplatex truth
+\documentclass{article}
+\usepackage{graphicx}
+\usepackage[utf8]{inputenc}
+\usepackage[ipaex-type1]{bxcjkjatype}
+\makeatletter
+% ------------------------------------------------------- parameters
+\newdimen\vtt@zw   \vtt@zw=10pt  % zw base (10pt mincho)
+\newdimen\vtt@ght  \vtt@ght=8.8pt   % rotated-glyph box height (tuner)
+\newdimen\vtt@gdp  \vtt@gdp=0pt     % rotated-glyph box depth (tuner)
+\newbox\vtt@gb
+\newbox\vtt@galley
+\newbox\vtt@page
+\def\vtt@isplane#1{\def\vtt@tmp{#1}\ifx\CJK@plane\vtt@tmp\expandafter\@firstoftwo\else\expandafter\@secondoftwo\fi}
+% ------------------------------------------------------- glyph wrapper
+% U+3001(1),U+3002(2): kutoten -> kinsoku + corner offsets
+% U+300C(12),U+300D(13): kakko  -> rotation-correct by construction
+\expandafter\let\expandafter\vtt@origCJKsymbol\csname CJKsymbol \endcsname
+% kill CJK layer inter-char glue so line breaks can occur ONLY at our
+% per-glyph penalties (\penalty0 between ordinary pairs, \@M before
+% kutoten = pre-break penalty).
+\def\CJKglue{}%
+\def\vtt@glyph#1{%
+  \vtt@isplane{30}{\ifnum#1<3 \penalty\@M\else\penalty\z@\fi}{\penalty\z@}%
+  \vtt@isplane{30}{%
+    \ifnum#1<3  \@tempdima=5.0pt \@tempdimb=-5.0pt \fi
+    \ifnum#1=12 \@tempdima=0pt   \@tempdimb=0pt   \fi
+    \ifnum#1=13 \@tempdima=0pt   \@tempdimb=0pt   \fi
+  }{\@tempdima=0pt \@tempdimb=0pt}%
+  \setbox\vtt@gb=\hbox{\kern\@tempdimb
+    \raise\@tempdima\hbox{\rotatebox{90}{\vtt@origCJKsymbol{#1}}}%
+    \kern-\@tempdimb}%
+  \wd\vtt@gb=\vtt@zw \ht\vtt@gb=\vtt@ght \dp\vtt@gb=\vtt@gdp
+  \box\vtt@gb}
+\expandafter\def\csname CJKsymbol \endcsname#1{\vtt@glyph{#1}}
+\def\markpos#1{\pdfsavepos\write\@auxout{\string\gdef\string#1{\the\pdflastxpos,\the\pdflastypos}}}
+\begin{document}
+\output={\setbox\@cclv=\box\@cclv}% swallow stray pages
+% ------------------------------------------------------- inner galley
+\setbox\vtt@galley=\vbox{%
+  \hsize=240mm\relax
+  \typeout{V4-HSIZE: \the\hsize}
+  \baselineskip=\vtt@zw \lineskiplimit=-\maxdimen \lineskip=0pt
+  \parindent=\vtt@zw \parskip=0pt
+  \leftskip=0pt \rightskip=0pt plus 1fil \parfillskip=0pt plus 1fil
+  \begin{CJK}{UTF8}{min}%
+  \noindent 私はその人を常に先生と呼んでいた。だからここでもただ先生と書く
+  だけで本名は打ち明けないでしまう。これは世間を憚る遠慮というより、
+  その方が私にとって自然だからである。私はその人の記悪を呼び起すごとに、
+  すぐ「先生」と言いたくなる。筆を執っても心持は同じことである。
+  よそよそしい頭文字などはとても使う気にならない。\par
+  私が先生と知り合いになったのは鎌倉である。その時私はまだ若々しい
+  書生であった。暑中休暇を利用して海水浴に行った友達から端書を受け
+  取ったので、私は金を都合して出掛けることにした。多くの初夏は
+  ここで過ごした。海岸には毎日のように先生に会った。\par
+  \noindent \markpos\cellA あ\markpos\cellB 、\markpos\cellC 。
+  \markpos\cellD 「\markpos\cellE 」\markpos\cellF い\markpos\cellG 、
+  \markpos\cellH\par
+  \end{CJK}%
+}
+% ------------------------------------------------------- shipout
+\pdfpagewidth=210mm \pdfpageheight=297mm
+\pdfhorigin=0pt \pdfvorigin=0pt
+\shipout\vbox to 297mm{%
+  \vfill
+  \hbox to 210mm{\hfil\rotatebox{-90}{\box\vtt@galley}\hfil}%
+  \vfill}
+\typeout{V4-SHIPPED: galley ht+dp=\the\dimexpr\ht\vtt@galley+\dp\vtt@galley\relax, wd=\the\wd\vtt@galley}
+\end{document}

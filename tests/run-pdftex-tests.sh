@@ -119,15 +119,46 @@ for e in platex uplatex lualatex; do
     -output-directory="$OUT" tests/fixtures/pdflatex-rules/jidori-akigumi.tex
 done
 
-echo "== T2: pdfTeX経路の明示エラー =="
-printf '\\documentclass[pdflatex,tate]{jlreq}\n\\begin{document}あ\\end{document}' > "$OUT/tate-error.tex"
-if pdflatex -interaction=nonstopmode -halt-on-error -output-directory="$OUT" \
-     "$OUT/tate-error.tex" > "$OUT/tate-error.out" 2>&1; then
-  echo "FAIL: tate-option-must-error"; FAILED=$((FAILED+1))
-elif grep -q 'vertical typesetting' "$OUT/tate-error.log"; then
-  echo "PASS: tate-option-must-error"
+echo "== T8: pdfTeX 縦組み（shipout rotation, T1） =="
+
+# 縦組みフィクスチャ（JFM 縦データ jlreq-pdftex-jfm-tate.def があれば実行）
+if kpsewhich jlreq-pdftex-jfm-tate.def > /dev/null 2>&1; then
+  # pdflatex+tate はエラーにならない（実験的回転経路 + ロード時警告）
+  printf '\\documentclass[pdflatex,tate]{jlreq}\n\\begin{document}あ\\end{document}' > "$OUT/tate-ok.tex"
+  if pdflatex -interaction=nonstopmode -halt-on-error -output-directory="$OUT" \
+       "$OUT/tate-ok.tex" > "$OUT/tate-ok.out" 2>&1; then
+    if grep -q 'pdfTeX tate support is EXPERIMENTAL' "$OUT/tate-ok.log"; then
+      echo "PASS: tate-option-compiles-with-warning"
+    else
+      echo "FAIL: tate-option-compiles-with-warning (gate warning missing)"; FAILED=$((FAILED+1))
+    fi
+  else
+    echo "FAIL: tate-option-compiles-with-warning (compile)"; FAILED=$((FAILED+1))
+  fi
+  for f in tests/fixtures/pdflatex-tate-basic.tex tests/fixtures/pdflatex-tate-pairs.tex; do
+    name=$(basename "$f" .tex)
+    run "tate-$name" pdflatex -interaction=nonstopmode -halt-on-error -output-directory="$OUT" "$f"
+  done
+  for n in pdflatex-tate-basic pdflatex-tate-pairs; do
+    if grep -q 'TATE-FAIL' "$OUT/$n.log" || ! grep -q 'TATE-PASS' "$OUT/$n.log"; then
+      echo "FAIL: $n-log-assertions"; FAILED=$((FAILED+1))
+    else
+      echo "PASS: $n-log-assertions ($(grep -c 'TATE-PASS' "$OUT/$n.log") assertions)"
+    fi
+  done
+  # boxdump（\showbox の ! OK のため -halt-on-error 不使用; END マーカで成立確認）
+  pdflatex -interaction=nonstopmode -output-directory="$OUT" \
+    tests/fixtures/pdflatex-tate-boxdump.tex > /dev/null 2>&1 || true  # \showbox emits `! OK' -> rc=1 by design; set -e must not abort here
+  if ! grep -q 'TATE-GALLEY-END' "$OUT/pdflatex-tate-boxdump.log"; then
+    echo "FAIL: tate-boxdump-compile"; FAILED=$((FAILED+1))
+  elif python3 tests/check-tate-boxdump.py "$OUT/pdflatex-tate-boxdump.log" \
+       > "$OUT/tate-boxdump.out" 2>&1; then
+    echo "PASS: tate-boxdump-kinsoku"
+  else
+    echo "FAIL: tate-boxdump-kinsoku (see $OUT/tate-boxdump.out)"; FAILED=$((FAILED+1))
+  fi
 else
-  echo "FAIL: tate-option-must-error (wrong error)"; FAILED=$((FAILED+1))
+  echo "SKIP: tate fixtures (jlreq-pdftex-jfm-tate.def not found; pending)"
 fi
 
 echo ""

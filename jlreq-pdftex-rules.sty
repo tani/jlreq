@@ -86,12 +86,36 @@
 \ifx\jlreq@open@bracket@pos\jlreqpdf@tempa
   \edef\jlreqpdf@variant@suffix{\jlreqpdf@variant@suffix z}%
 \fi
-\ifx\jlreqpdf@variant@suffix\@empty
-  \input{jlreq-pdftex-jfm.def}%
+%. --------------------------------------------------- tate mode (T1)
+% tate クラスオプション時（\if@tate、jlreq.cls のオプション処理は
+% バックエンドより前に確定）は縦組み JFM データに切り替える。
+% データ契約（frozen）：jlreq-pdftex-jfm-tate.def
+%   cls@<hex> / class@<n>{w}{h}{d}{align} / pair@<from>@<to> /
+%   kin@pre@<n> / kin@post@<n> / endadj@<n>{..} は yoko 系と同形式。
+%   追加: off@<n>{raise}{shift}（pt, 内側枠組み座標での移動量、raise は
+%   内側枠の上向き＝最終枠の右向き、shift は内側枠の右向き＝最終枠の
+%   下向き。データ作成者が値を供給する）。
+% 不在は明示エラー（静かなフォールバックはしない）。
+\if@tate
+  \RequirePackage{graphicx}%
+  \IfFileExists{jlreq-pdftex-jfm-tate.def}{%
+    \typeout{jlreq-pdftex-rules:~JFM~variant~tate}%
+    \input{jlreq-pdftex-jfm-tate.def}%
+  }{%
+    \PackageError{jlreq-pdftex-rules}{%
+      tate JFM data file jlreq-pdftex-jfm-tate.def is missing}{%
+      The pdfTeX tate path needs the vertical JFM data (off@<n> per-class
+      inner-frame corrections). Obtain jlreq-pdftex-jfm-tate.def.\MessageBreak
+      \@ehc}%
+  }
 \else
-  \edef\jlreqpdf@variant@file{jlreq-pdftex-jfm-\jlreqpdf@variant@suffix.def}%
-  \typeout{jlreq-pdftex-rules:~JFM~variant~\jlreqpdf@variant@suffix}%
-  \input\jlreqpdf@variant@file
+  \ifx\jlreqpdf@variant@suffix\@empty
+    \input{jlreq-pdftex-jfm.def}%
+  \else
+    \edef\jlreqpdf@variant@file{jlreq-pdftex-jfm-\jlreqpdf@variant@suffix.def}%
+    \typeout{jlreq-pdftex-rules:~JFM~variant~\jlreqpdf@variant@suffix}%
+    \input\jlreqpdf@variant@file
+  \fi
 \fi
 
 %. ------------------------------------------------------- state machine
@@ -655,15 +679,40 @@
     % 常に自然幅．状態には触れない．
     \hbox{\jlreqpdf@orig@CJKsymbol{#1}}%
   \else
-    \expandafter\ifx\csname jlreqpdf@jfm@class@\number\jlreqpdf@curclass\endcsname\relax
-      \jlreqpdf@orig@CJKsymbol{#1}%
+    \if@tate
+      \jlreqpdf@glyph@tate{#1}%
     \else
-      \expandafter\jlreqpdf@placeglyph
-        \csname jlreqpdf@jfm@class@\number\jlreqpdf@curclass\endcsname
-        {#1}%
+      \expandafter\ifx\csname jlreqpdf@jfm@class@\number\jlreqpdf@curclass\endcsname\relax
+        \jlreqpdf@orig@CJKsymbol{#1}%
+      \else
+        \expandafter\jlreqpdf@placeglyph
+          \csname jlreqpdf@jfm@class@\number\jlreqpdf@curclass\endcsname
+          {#1}%
+      \fi
     \fi
   \fi
 }
+%. --------------------------------------------------------- tate glyph
+% T1: 縦組みグリフ(box 内枠組み). 1 グリフ = 内側（水平段落）枠組みの
+% 1zw 進行ボックスで、グリフ字形を \rotatebox{90}（CCW）で包み込む。
+% 出荷（shipout）で全体を -90（CW）回すと正立して読める（V4 で検証済）。
+% off@<class> = {raise}{shift}（pt）: 約物のコーナー位置を内側座標で
+% 調整するためのクラス別補正（jlreq-pdftex-jfm-tate.def が供給）。
+% raise = 内側枠の上向き（最終枠の右向き）, shift = 内側枠の右向き
+% （最終枠の下向き）。kern は +/- 対で打ち込み、進行幅 1zw は不変。
+\def\jlreqpdf@offparse#1{\expandafter\jlreqpdf@offparse@#1}
+\def\jlreqpdf@offparse@#1#2{\@tempdima=#1pt\relax \@tempdimb=#2pt\relax}
+\def\jlreqpdf@glyph@tate#1{%
+  \@tempdima=\z@ \@tempdimb=\z@
+  \expandafter\ifx\csname jlreqpdf@jfm@off@\number\jlreqpdf@curclass\endcsname\relax\else
+    \expandafter\jlreqpdf@offparse\csname jlreqpdf@jfm@off@\number\jlreqpdf@curclass\endcsname
+  \fi
+  \setbox\jlreqpdf@charbox=\hbox{%
+    \kern\@tempdimb
+    \raise\@tempdima\hbox{\rotatebox{90}{\jlreqpdf@orig@CJKsymbol{#1}}}%
+    \kern-\@tempdimb}%
+  \wd\jlreqpdf@charbox=\jlreq@zw
+  \box\jlreqpdf@charbox}
 % #1 = {{w}{h}{d}{align}{left}}, #2 = codepoint
 \def\jlreqpdf@placeglyph#1#2{%
   \expandafter\jlreqpdf@splitcls#1%

@@ -208,5 +208,18 @@
   \fi}
 \def\jlreq@pdf@kansuji@stop{\jlreq@pdf@kansuji@stop}
 
+%. ----------------------------------------------------------- tate (T1)
+% 出荷時回転（shipout rotation）: 本文ボックス(\@outputbox)のみ時計回り90°
+% 回転し、柱・フッタはカーネル既定の横組み機構のまま出す。ページ家具の
+% 縦組み対応は後続スライス（本スライスの範囲外、クラスがロード時に警告）。
+\if@tate
+  \AtBeginDocument{%
+    \expandafter\let\expandafter\jlreqpdf@saved@outputpage\csname @outputpage\endcsname
+    \expandafter\def\csname @outputpage\endcsname{%
+      \setbox\@outputbox=\hbox{\rotatebox{-90}{\box\@outputbox}}%
+      \jlreqpdf@saved@outputpage}%
+  }%
+\fi
+
 % NB: jlreq.cls reads us mid-class where @ is a letter; keep it that way.
 \makeatletter
