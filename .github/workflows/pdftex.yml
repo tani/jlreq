@@ -1,0 +1,124 @@
+# .github/workflows/pdftex.yml -- pdfTeX backend CI (PLAN §12; P12).
+#
+# 単一jobでPLAN §12「最終実行入口」のコマンド群と staged install smoke
+# を実行する。参照環境は TeX Live 2025 最終配布（公式 install-tl。
+# apt 版 TeX Live は 2025 ではなくバージョン不一致になるため使わない）。
+# 失敗時は log/PDF/差分を artifact として保存する。
+# 必須資源不足によるSKIP成功は許可しない: 依存の欠損はそのまま job を
+# 落とす（ SKIP パスを本workflowに追加しない）。
+#
+# TeX Live の導入は公式 install-tl を使う（TeX Live 2025 final）:
+#   ctan mirror scheme-full 相当を 2025 リポジトリから install-tl で
+#   入れる。bxcjkjatype / CJK / ruby / zhmetrics / ipaex-type1 は
+#   scheme-full に含まれる。
+# 代替: ビルド環境が nix の場合は nixpkgs#texlive (2025 final) を使う
+# ことができる（本リポジトリの開発検証実績と同じ版）。
+name: pdftex
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  suite:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      # ドキュメントPDFのフォントプリセット（HiraginoはCIに無いため
+      # TL収録の ipaex プリセットで組む。上流の hiragino-pron と同じ
+      # テンプレート経路・同じ版数であることを保証する）。
+      README_LTPRESET: ipaex
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: TeX Live 2025 (official install-tl; reference environment)
+        run: |
+          set -e
+          cd /tmp
+          wget -q https://mirror.ctan.org/systems/texlive/tlnet/install-tl-unix.tar.gz
+          tar xf install-tl-unix.tar.gz
+          cd install-tl-*/
+          cat > tl.profile <<'EOF'
+          selected_scheme scheme-full
+          TEXDIR /usr/local/texlive/2025
+          TEXMFCONFIG ~/.texlive2025/texmf-config
+          TEXMFHOME ~/texmf
+          TEXMFLOCAL /usr/local/texlive/texmf-local
+          TEXMFSYSCONFIG /usr/local/texlive/2025/texmf-config
+          TEXMFSYSVAR /usr/local/texlive/2025/texmf-var
+          TEXMFVAR ~/.texlive2025/texmf-var
+          option_doc 0
+          option_src 0
+          EOF
+          # pin to the TeX Live 2025 final repository
+          ./install-tl --profile=tl.profile \
+            --repository https://ftp.math.utah.edu/pub/tex/historic/systems/texlive/2025/tlnet-final
+          echo "/usr/local/texlive/2025/bin/x86_64-linux" >> "$GITHUB_PATH"
+          echo "/usr/local/texlive/2025/bin/aarch64-linux" >> "$GITHUB_PATH" || true
+
+      - name: Python test dependencies (FontTools + PyMuPDF + poppler tools)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-pip python3-pipx poppler-utils
+          pip install --break-system-packages fonttools pymupdf
+
+      - name: Required resource probe (missing = FAIL, never SKIP)
+        run: |
+          set -e
+          kpsewhich bxcjkjatype.sty
+          kpsewhich CJKutf8.sty
+          kpsewhich ruby.sty
+          kpsewhich ipaexm.ttf
+          kpsewhich ipxm-r-u30.pfb
+          kpsewhich ipxg-r-u30.pfb
+          kpsewhich Unicode.sfd
+          kpsewhich unisong30.tfm
+          kpsewhich cmtt9.tfm
+          kpsewhich makejvf-upjpn.cnf || find /usr/local/texlive -name 'makejvf-upjpn.cnf' -print -quit
+          ttf2tfm --version
+          texlua --version | head -1
+          python3 -c 'import fontTools, pymupdf; print("fonttools+pymupdf OK")'
+          command -v pdftotext pdffonts makejvf uppltotf ppltotf
+
+      - name: make -j4 pdftex-fonts pdftex-jfm (parallel generators, no races)
+        run: make -j4 pdftex-fonts pdftex-jfm
+
+      - name: make check-pdftex-jfm
+        run: make check-pdftex-jfm
+
+      - name: make check-pdftex-fonts
+        run: make check-pdftex-fonts
+
+      - name: texlua check_jfm_pdftex.lua
+        run: texlua check_jfm_pdftex.lua
+
+      - name: sh tests/run-pdftex-tests.sh (4-engine suite + staged install smoke)
+        run: sh tests/run-pdftex-tests.sh
+
+      - name: make tds (full TDS bundle)
+        run: make tds
+
+      - name: TDS bundle listing
+        run: find tds -type f | sort
+
+      - name: Collect failure artifacts (logs/PDFs/diffs)
+        if: failure()
+        run: |
+          # collect all suite workdirs (mktemp-based), staged trees and tds
+          mkdir -p artifacts
+          cp -r /tmp/jlreq-tests.* artifacts/ 2>/dev/null || true
+          cp -r /tmp/jlreq-staged.* artifacts/ 2>/dev/null || true
+          cp -r /tmp/jlreq-smoke.* artifacts/ 2>/dev/null || true
+          cp -r tds artifacts/ 2>/dev/null || true
+          # keep the regenerated outputs for byte-diff triage
+          cp pdftex-jfm-manifest.lua artifacts/ 2>/dev/null || true
+          cp fonts/pdftex/*.def artifacts/ 2>/dev/null || true
+
+      - name: Upload failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pdftex-failure-logs-${{ github.run_id }}
+          path: artifacts/
+          if-no-files-found: ignore
+          retention-days: 14

@@ -27,6 +27,7 @@ Horizontal documents also compile with pdfLaTeX (experimental support). Pass the
 * Vertical writing (`tate`) has an experimental core implementation (shipout-rotation architecture): reading/column directions, kinsoku and punctuation placement are verified; page furniture, notes, floats, tate-chu-yoko, math etc. are out of scope and listed in a load-time warning (see `docs/pdftex-tate-eval.md`).
 * Hanging punctuation (`-b` variants) and Japanese in math mode (`\mathmc`/`\mathgt`, direct Japanese input) are supported.
 * Punctuation is typeset at its JFM class width (e.g. half-width), with the glyph placed per the JFM alignment (ink geometry matches the platex reference).
+* **Strict priority paragraph**: the `jlreqparagraph` environment (`\begin{jlreqparagraph}...\end{jlreqparagraph}`, no argument, one environment = one paragraph; loaded automatically with the pdfLaTeX backend) snapshots every paragraph parameter and re-typesets the paragraph through the native line breaker with per-line recovery, for strict priority-aware stretch/shrink of the JFM pair glues. The input model is explicit (CJK runs, Latin words, spaces, `\inhibitglue`, `\hspace`/`\kern`/`\penalty`/`\allowbreak`, inline math, `\mbox`/`\makebox`, `\label`/hyperlinks); display math, footnotes and marginpars inside the environment raise specific errors. See `docs/pdftex-internals.md` (P11 section).
 
 See `docs/pdftex-compatibility.md` for details.
 

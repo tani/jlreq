@@ -10,9 +10,11 @@ jlreq.cls（公開API・版面設計: 共通）
 ├── l: LuaTeX-ja既存経路
 ├── p/u: (u)pLaTeX既存経路
 └── d（pdfTeX）:
-    ├── jlreq-pdftex.sty        … 土台（フォント・単位・CJK状態）
-    ├── jlreq-pdftex-rules.sty  … 組版規則（JFMグルー・禁則・和欧文間隔）
-    └── jlreq-pdftex-jfm*.def   … 生成済みJFMデータ（4変種）
+    ├── jlreq-pdftex.sty           … 土台（フォント・単位・CJK状態）
+    ├── jlreq-pdftex-rules.sty     … 組版規則（JFMグルー・禁則・和欧文間隔）
+    ├── jlreq-pdftex-ruby.sty       … ruby.sty provider 適合（P10）
+    ├── jlreq-pdftex-paragraph.sty  … 厳密段落 jlreqparagraph（P11）
+    └── jlreq-pdftex-jfm*.def      … 生成済みJFMデータ（12変種 + manifest）
 ```
 
 ## jlreq-pdftex.sty（土台）
@@ -320,11 +322,17 @@ active-$ 機構は撤去した。`$` は catcode 3 のままで、カーネル�
 
 ## jlreq-pdftex-jfm*.def（生成データ）
 
-`make_pdftex_jfm.lua`（ビルド時のみ実行，`make pdftex-jfm`）が `jfm-jlreq.lua`
-単一ソースから生成。4変種: 無印（既定）, `-b`（ぶら下げデータ入り）, `-z`
-（zenkakunibu_nibu）, `-bz`。`make check-pdftex-jfm` で再生成差分ゼロを検査
-（CIゲート）。検証スクリプト `check_jfm_pdftex.lua` が全402ペア・25クラス・
-403文字を検査。**実行時にLuaは不要**（生成済み.defを `\input` するだけ）。
+`make_pdftex_jfm.lua`（ビルド時のみ実行，`make pdftex-jfm`）が横組み
+`jfm-jlreq.lua`・縦組み `jfm-jlreqv.lua` から生成。**12変種**
+（方向2 × `open_bracket_pos` 3 × ぶら下げ2）: 横組みは無印（既定）,
+`-b`, `-z`, `-bz`, `-n`, `-bn`、縦組みは `-tate` に同じ接尾辞
+（`-tate`, `-tate-b`, `-tate-z`, `-tate-bz`, `-tate-n`, `-tate-bn`）。
+一覧の唯一のソースは manifest `pdftex-jfm-manifest.lua`
+（docs/pdftex-jfm-generation.md 参照）。`make check-pdftex-jfm` で
+再生成差分ゼロを検査（CIゲート）。
+検証スクリプト `check_jfm_pdftex.lua` が全ペア・全クラス・全文字
+（12変種それぞれ）を検査。**実行時にLuaは不要**（生成済み.defを
+`\input` するだけ）。
 
 データ形式の要点:
 - 文字→クラス: `cls@<hex>`（ロード時に `dcls@<10進>` へ再キー）
@@ -452,3 +460,130 @@ protected ASCII 命令へ置き換える。`\西暦true/false` は共通接頭�
 peek は handler 引数の `{` を見るため handler は引数なしにする）。
 候補列は登録ごとに `\unexpanded\expandafter{\the\toks0}` で実体化する
 （共有 toks 参照だと最終登録が全 control symbol を上書きする）。
+
+## 厳密段落環境 jlreqparagraph（P11, 2026-10-25 追記）
+
+`jlreq-pdftex-paragraph.sty`（`jlreq-pdftex.sty` が `jlreq-pdftex-ruby`
+の直後に読み込む）が `\begin{jlreqparagraph}...\end{jlreqparagraph}`
+（引数なし・一環境一段落）を提供する。通常段落は native 経路のまま。
+
+- **パラメータ一括保存**: 環境入口で linewidth/indent/skip群/font/方向/
+  JFM/禁則に加え pretolerance/tolerance/emergencystretch, line/hyphen/
+  exhyphen penalties, adj/doublehyphen/finalhyphen demerits, looseness,
+  hangindent/hangafter, parshape, spaceskip/xspaceskip,
+  baselineskip/lineskip/lineskiplimit, club/widow/interline/broken
+  penalties と e-TeX penalty 配列（`\numexpr\<array> <idx>\relax` で
+  読む——`\the\<array>` は不可, probed）、prevgraf/prevdepth を保存する。
+  **実測の落とし穴**: `\numexpr\parshape 0\relax`（行数読み）は形状が
+  非アクティブなとき「0」をカレントリストに typeset するため破棄箱の
+  中で読む; `\parshapelength` は dimen で行数ではない;
+  `\prevgraf` は `\setbox=\vbox{...\par}` 直後には読めず行数は
+  walk から回収する。
+- **構成要素は実行時に「またぎ」環境で捕捉**: トークン grab
+  （`\def#1\end{env}`）は不可能——`\def` の引数テキストに `{` が書けない
+  （probed: TeX は `#1\end ->testenv.` のような壊定義を黙って作る）。
+  begin 側で `\setbox<measbox>=\vbox\bgroup` を開き本体をそのまま
+  1 回 typeset し、end 側で `\par\egroup` で閉じる。
+- **保存レジスタのスコープ**: 環境は LaTeX の env group の内側で走るの
+  で、保存レジスタへの代入は `\global` にする（probed: group 抜けで
+  0pt に戻り snapshot 検証が落ちる）。プール box レジスタ
+  （`\jlreqpar@PB@<n>`、64 個）は **load 時に一括確保**する——walk は
+  box group の内側で `\newbox` した `\chardef` が group close で
+  消える（probed: プール copy が void で読み返る）。
+- **native repack と逆走**: 影 paragraph を `\vbox{\hsize=保存値 本体\par}`
+  で一度だけ改行し、廃棄 vbox を lastbox/unskip/unpenalty/unkern で
+  逆走する。**実測の落とし穴**:
+  - `\lastnodetype` の番号は 0=char, 1=h/vlist, 3=rule, 11=glue,
+    12=kern, 13=penalty（probed; 想定しやすい 10/11/13 と異なる）。
+  - `\immediate\write`/`\typeout` は last-node tracker を -1 に戻す
+    （`\message` は無害）。走査中は pop と代入だけにする。
+  - マーカー `\vadjust{\kern<id>sp\kern-<id>sp}` は vlist 内で
+    負→正の順に並ぶ。単独の layout kern（規則 backend の para/end
+    tail kern 等）と区別するため「次の node が kern かつ厳密な負数
+    かつ両者非ゼロ」の pair 判定を先に行う。
+  - walk の handler は末尾で次 step を**直接呼ぶ**（`\let\next=...` だけ
+    だと 1 node で止まる; probed）。再帰の途中で `\fi` を
+    `\expandafter` で先読みすると復帰時に後続トークンが多重実行され
+    る（probed: assemble が行数+1回走る）——末尾呼び出しは
+    `\expandafter\loop\fi` 形にして driver から一度だけ呼ぶ。
+  - **行数回収は walkbox の外で**: walk を `\setbox<walkbox>=\vbox{...}`
+  の中で走らせると TeX は internal vertical mode なので、その中で
+  行 box を `\box` 出力しても（破棄される）walkbox に落ちる
+  （probed: 厳密行が無言で消える）。recount/assemble は walkbox
+  close の後で実行する。
+  - penalty 一覧は**カンマ区切り**で保存し kernel の `\pl@for` で
+    再生する（空白区切り + 独自 split は空要素/終端で無限ループに
+    なる; probed）。interline glue は `\the<skip>` の全文
+    （fil order 込み）で保存し `\vskip` で再生する。
+- **行末回復（end_adjust e）**: 各行 box を `\hbox{\unhcopy<行>}` の
+  **構築中**に copy し、その内側で penalty/kern/glue を型駆動で pop
+  して tail 級数の和を回復する。loop は引数なし形にする（引数つき
+  continuation は終端の `\relax{1}` が**行番号を紙面に typeset する**;
+  probed）。pop は必ず copy の内側で（外側だと page の vlist から
+  node を削る; probed: レイアウト破壊）。
+- **行の出力**: 測定行 box（native breaker が選んだ改行・候補 e・
+  glue 伸縮込み）を pool からそのまま `\box` で outer vlist へ移し、
+  walk が回収した interline penalty/glue を行間に再生する。測定中の
+  parskip は 0、出力で ambient parskip を一度だけ挿入。最終行 depth を
+  outer `\prevdepth` に、行数を `\prevgraf` に反映する。
+  pool レジスタ名は text（`jlreqpar@PB@k`）で保存されるため、
+  使用側は **二重 `\csname`** でレジスタに戻す（`<primitive>` 1 回につき
+  `\expandafter` 1 個で十分; 三重にすると残り `\csname` が素通りして
+  化ける; probed）。
+- **入力モデルの禁止構成**: `\footnote`/`\footnotemark`/`\marginpar`/
+  `\[` は測定中に差し替えて具体的エラー
+  （`<construct>~is~not~allowed~inside~jlreqparagraph`）を出す。
+  未知マクロは TeX 自身の Undefined control sequence で止まる。
+  `\hspace` は glue item（tier 50）として捕捉するが、
+  **`\skip={...}`（波括弧 glue）は本 backend では誤走査する**
+  （probed: "Missing number {" + 0pt になる）ため scratch macro 経由の
+  非括弧代入にする。`\allowbreak`/`\nobreak`/`\linebreak` は hook
+  しない——規則 backend が内部で使う経路を壊す（probed: 括弧を含む
+  本文で測定が無限ループ）。`\mbox`/`\makebox` は opaque item として
+  一回だけ box 化する（kernel の `\mb@xt@` は本 format build に
+  ないため位置指定は `\hb@xt@`+`\hss` で自前実装; `[2zw]` の `zw`
+  キーワードは pdfTeX には unit として存在しない——クラス既定の
+  制限で、pt 等で指定する）。
+- **配分エンジン（実装済み・段階ゲート付き）**: 測定中は規則 backend の
+  グルー発行器（`\jlreqpdf@emitglue@do`/`\jlreqpdf@emitkcomp`）をラップし、
+  全ペアグルー/companion を作成順に境界表 `\jlreqpar@BD@<seq>`
+  （{nat}{str}{shr}{sord}{shord}{stier}{shtier}{role}）へ記録する。
+  role は 1=JFM pair / 2=kanjiskip companion / 3=xkanjiskip class
+  （境界のどちらかが class 27、fallback も 2/3 に分類）/
+  4=explicit・語間・skip zone。tier 値は ltj-adjust.lua:79-101 +
+  jlreq.cls:583-585 の縮尺どおり **JFM spri/shpri×10、kanjiskip 0、
+  xkanjiskip +10/−30、explicit 50**。行ごとに: (a) 行内部を逆走
+  （`\unhcopy` を構築中 hbox の中で pop）して node 表
+  `NW@<n>@<j>`/`NS@<n>@<j>` を記録、(b) グルーを境界表と
+  (nat,str,shr) 完全一致で照合して tier/role を決め前方索引の
+  `GI@<n>@<k>` へ、(c) 残余 R=行幅−自然和を sp で計算し、tier 値
+  の降順（50,20,10,0,−10,−20,−30）に飽和まで充填、部分充填 tier
+  は容量比例、shrink は符号を分けて処理し有限容量超過は
+  PackageWarning（組版不良報告）、(d) 行を再構成（pop+再挿入で
+  位置を保ち、グルーを最終サイズの kern へ置換）——の 4 段階。
+  実装上の注意（実測）: tex 発現は末尾再帰の引数を必ず明示的に
+  渡すこと（`\expandafter\loop\fi` 形で引数を省くと次トークンを
+  誤って食う）; `\skip={...}` の波括弧 glue 代入は本 backend では
+  誤走査する; 名前渡しの split helper は二段展開にする
+  （csname 展開 + マクロ本体展開）。
+- **配分の適用範囲（現時点のゲート）**: 行内部に再挿入不能な node
+  （bare char=欧文語、whatsit=hyperref anchor、ins=label 書込、
+  mark、disc=明示ハイフン）がある行は **distskip**（配分をスキップ
+  し native 行 box のまま出力）。1zw 和文グリフの box 化
+  （`\jlreqpdf@boxglyphs`、rules.sty 側に実装済みフラグ）は改行
+  結果を変えてしまうため既定では使わない（probed:
+  strict-basic で 124pt overfull 回帰）——約物（JFM 幅 box が
+  既定の F2）と latin 語の item box 化が次段階で適用範囲を広げる。
+  行 box の再構成（段階 4）は残作業: 現在 `\jlreqpar@distphase=3`
+  （記録・分類・充填計算まで検証済み、行 box への再適用は
+  native 行のまま）。
+
+## 厳密段落の実測メモ（P11 probe 記録）
+
+- `\prevdepth` は `\unvbox` で 0 に戻る; 行 box の `\box` 追加後は
+  その box の depth が `\prevdepth` に入る。
+- `\setbox\@cclv` は page builder の所有物——測定に使うと
+  「`\box255 is not void」/「No pages of output」を起こす。専用 scratch
+  box を使う。
+- `\vbox\bgroup`...`\par\egroup` のまたぎ環境は tate でも動作する
+  （P5 方向エンジンと干渉しない）。

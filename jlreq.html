@@ -1,0 +1,1390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="generator" content="pandoc">
+  <title>jlreq</title>
+  <style>
+    .markdown-body {
+      padding-top: 10px;
+      padding-bottom: 10px;
+      background-color: white;
+      padding: 30px;
+      line-height: 170%;
+    }
+    h1{
+      font-size: 200%;
+    }
+    h2{
+      border-style: solid;
+      border-width: 0 0 0.1em 0em;
+      padding: 0 0 0.2em 0em;
+      border-color: #EEEEEE;
+      margin-top: 2em;
+    }
+    h3{
+      border-style: solid;
+      border-width: 0 0 0 0.5em;
+      padding: 0 0 0 0.5em;
+      border-color: #EEEEEE;
+      margin-top: 2em;
+    }
+    code{
+      white-space: pre;
+      font-weight: normal;
+      background-color: #F4F4F4;
+      border-color: #F4F4F4;
+      border-style: solid;
+      border-width: .2em .5em;
+      border-radius: .2em;
+    }
+    pre{
+      background-color: #F8F8F8;
+      border-color: #F8F8F8;
+      border-width: 1em;
+      border-style: solid;
+      border-radius: .5em;
+      padding: 0;
+      margin: 0;
+      line-height: 130%;
+    }
+    pre code{
+      background-color: #F8F8F8;
+      border-style: none;
+    }
+    div.sourceCode { overflow-x: auto; text-indent: 0em;}
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.fl { color: #40a070; } /* Float */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.st { color: #4070a0; } /* String */
+    code span.co { color: #008000; } /* Comment */
+    code span.ot { color: #007020; } /* Other */
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.fu { color: #0040FF; } /* Function */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+    code span.cn { color: #880000; } /* Constant */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.im { } /* Import */
+    code span.va { color: #19177c; } /* Variable */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.op { color: #666666; } /* Operator */
+    code span.bu { color: #0040FF; } /* BuiltIn */
+    code span.ex { } /* Extension */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+  </style>
+</head>
+<body>
+<article class="markdown-body">
+<h1 id="jlreq">jlreq</h1>
+<h2 id="what-is-this">What is this?</h2>
+<p>This package provides the class file and JFM (Japanese font metric)
+files for LuaTeX-ja / pLaTeX / upLaTeX, with experimental pdfLaTeX
+support. This aims to implement <a
+href="https://www.w3.org/TR/jlreq/?lang=en">Requirements for Japanese
+Text Layout</a>. For development, <code>tests/</code> (regression and
+rule fixtures plus a one-shot test runner) and
+<code>tests/reference/</code> (quantitative reference-engine results)
+are also included; see <code>docs/pdftex-tests.md</code>.</p>
+<h2 id="installation">Installation</h2>
+<p>Run <code>make</code> to generate JFM files. Move the files as
+follows:</p>
+<ul>
+<li>*.tfm -&gt; $TEXMF/fonts/tfm/public/jlreq</li>
+<li>*.vf -&gt; $TEXMF/fonts/vf/public/jlreq</li>
+<li>jfm-jlreq.lua, jfm-jlreqv.lua, jfm-jlreq-jidori.lua
+jfm-jlreqv-jidori.lua -&gt; $TEXMF/tex/luatex/jlreq</li>
+<li>jlreq.cls, jlreq-helpers.sty -&gt; $TEXMF/tex/latex/jlreq</li>
+</ul>
+<p>The other way to install is just to run <code>make install</code>. It
+will install all files in <code>$TEXMFHOME</code>.</p>
+<h2 id="usage">Usage</h2>
+<p>To use, simply write</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode latex"><code class="sourceCode latex"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="bu">\documentclass</span>{<span class="ex">jlreq</span>}</span></code></pre></div>
+<p>This will set up a document class equivalent to an article in
+horizontal writing. The engine is automatically determined, but if you
+want to specify it, pass one of
+<code>platex/uplatex/lualatex/pdflatex</code> as a class option. To
+switch to vertical writing, pass the <code>tate</code> option.
+Additionally, to make the document class equivalent to report or book,
+pass the <code>report</code> or <code>book</code> option respectively.
+For example, to create a vertical book, write
+<code>\documentclass[tate,book]{jlreq}</code>.</p>
+<h3 id="pdflatex-experimental">pdfLaTeX (experimental)</h3>
+<p>Horizontal documents also compile with pdfLaTeX (experimental
+support). Pass the <code>pdflatex</code> class option, or let the engine
+be auto-detected. Internally it loads bxcjkjatype (CJKutf8 with IPAex
+Mincho/Gothic Type 1 fonts) and an experimental backend
+(<code>jlreq-pdftex.sty</code>), applying JFM-based inter-character
+glue, kinsoku (line-breaking rules) and Japanese/Latin spacing. Known
+limitations:</p>
+<ul>
+<li>Vertical writing (<code>tate</code>) has an experimental core
+implementation (shipout-rotation architecture): reading/column
+directions, kinsoku and punctuation placement are verified; page
+furniture, notes, floats, tate-chu-yoko, math etc. are out of scope and
+listed in a load-time warning (see
+<code>docs/pdftex-tate-eval.md</code>).</li>
+<li>Hanging punctuation (<code>-b</code> variants) and Japanese in math
+mode (<code>\mathmc</code>/<code>\mathgt</code>, direct Japanese input)
+are supported.</li>
+<li>Punctuation is typeset at its JFM class width (e.g. half-width),
+with the glyph placed per the JFM alignment (ink geometry matches the
+platex reference).</li>
+<li><strong>Strict priority paragraph</strong>: the
+<code>jlreqparagraph</code> environment
+(<code>\begin{jlreqparagraph}...\end{jlreqparagraph}</code>, no
+argument, one environment = one paragraph; loaded automatically with the
+pdfLaTeX backend) snapshots every paragraph parameter and re-typesets
+the paragraph through the native line breaker with per-line recovery,
+for strict priority-aware stretch/shrink of the JFM pair glues. The
+input model is explicit (CJK runs, Latin words, spaces,
+<code>\inhibitglue</code>,
+<code>\hspace</code>/<code>\kern</code>/<code>\penalty</code>/<code>\allowbreak</code>,
+inline math, <code>\mbox</code>/<code>\makebox</code>,
+<code>\label</code>/hyperlinks); display math, footnotes and marginpars
+inside the environment raise specific errors. See
+<code>docs/pdftex-internals.md</code> (P11 section).</li>
+</ul>
+<p>See <code>docs/pdftex-compatibility.md</code> for details.</p>
+<p>Other common options accepted are
+<code>oneside/twoside/onecolumn/twocolumn/titlepage/notitlepage/draft/final/landscape/openright/openany/leqno/fleqn</code>.
+Also, passing the <code>disablejfam</code> option will not register
+Japanese fonts for use in mathematics.</p>
+<p>You can write the content as you would in a standard document class,
+but the following commands have been added or extended. Note that this
+document uses terms from <a
+href="https://www.w3.org/TR/jlreq/?lang=en">Requirements for Japanese
+Text Layout</a> without explanation.</p>
+<h3 id="jlreqsetup"><code>\jlreqsetup</code></h3>
+<p>This is a command for settings. It can only be used in the preamble.
+Settings for the document are made either as class options or through
+<code>\jlreqsetup</code>, depending on the setting item.</p>
+<h3 id="section"><code>\section</code></h3>
+<p>The <code>\section</code> command is extended to accept subtitles in
+addition to the usual format, as in
+<code>\section*[running head]{Heading}[Subtitle]</code>. Other commands
+such as <code>\part</code> (only in article), <code>\chapter</code>
+(only in book/report), <code>\subsection</code>, and
+<code>\subsubsection</code> also accept subtitles.</p>
+<h3 id="abstract-environment"><code>abstract</code> environment</h3>
+<p>You can place it in the preamble, and it will be output with
+<code>\maketitle</code>. In the case of two columns, it allows you to
+output the abstract without columnization. However, this method is now
+deprecated. By specifying <code>abstract_with_maketitle=true</code> in
+<code>\jlreqsetup</code> and writing it before <code>\maketitle</code>,
+you can achieve the same effect.</p>
+<h3 id="sidenote"><code>\sidenote</code></h3>
+<p>This command is only defined when the width of the sidenote is
+positive. In the default basic layout, this width is set to 0.
+Therefore, <code>\sidenote</code> is not defined. Please refer to the
+later basic layout settings. <code>\sidenote</code> outputs a sidenote
+(or footnote in vertical writing). Internally, it uses
+<code>\marginpar</code>. By default, it has the same format as
+<code>\footnote</code>, but if <code>sidenote_type=symbol</code> is
+specified in <code>\jlreqsetup</code>, the format becomes
+<code>\sidenote{relevant item}{note}</code>. For example, you would
+write:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode latex"><code class="sourceCode latex"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>capable of publishing <span class="fu">\sidenote</span>{manuscript}{by methods such as printing…}</span></code></pre></div>
+<p>Please refer to the later explanation as well.</p>
+<h3 id="endnote"><code>\endnote</code></h3>
+<p>Specifies an endnote. It has the same format as
+<code>\footnote</code>. By default, the note itself is output just
+before the heading. This behavior can be controlled by passing
+<code>endnote_position</code> to <code>\jlreqsetup</code>. For more
+details, please see the later explanation of notes. Also, executing
+<code>\theendnotes</code> will output it on the spot.</p>
+<h3 id="warichu"><code>\warichu</code></h3>
+<p>Outputs a warichu (split annotation). The line division positions are
+calculated automatically (multiple compilations are required). With
+<code>\warichu*</code>, you can manually specify these positions. The
+format is
+<code>\warichu*{(before first line) &amp; (after first line)\\ (before second line) &amp; (after second line)...}</code>.
+If <code>&amp;</code> is omitted, it will be adjusted automatically.</p>
+<h3 id="tatechuyoko"><code>\tatechuyoko</code></h3>
+<p>Outputs horizontal-in-vertical text. You use it as
+<code>\tatechuyoko{&lt;content&gt;}</code>. <code>\tatechuyoko</code>
+will result in an error if used in a non-vertical writing place, but
+<code>\tatechuyoko*</code> will be output as is in a non-vertical
+writing place.</p>
+<h3 id="jidori"><code>\jidori</code></h3>
+<p>By using <code>\jidori{&lt;dimension&gt;}{&lt;content&gt;}</code>,
+you can output the content justified to the length of the dimension.</p>
+<h3 id="akigumi"><code>\akigumi</code></h3>
+<p>By using <code>\akigumi{&lt;dimension&gt;}{&lt;content&gt;}</code>,
+you can output the result of spacing the characters of the content by
+the length of the dimension. However, the correct output result is not
+obtained except when using LuaLaTeX.</p>
+<h3 id="jafontsize"><code>\jafontsize</code></h3>
+<p>Specifies the Japanese font size, similar to <code>\fontsize</code>.
+If <code>jafontscale=0.9</code> is specified as a class option,
+specifying <code>\fontsize{9pt}{15pt}</code> will result in a Japanese
+font size of 8.1pt, but <code>\jafontsize{9pt}{15pt}</code> will result
+in 9pt (with the European font size being 10pt). The second argument is
+exactly the same as the second argument of <code>\fontsize</code>.</p>
+<h3 id="-"><code>\　</code></h3>
+<p>A macro consisting of a single full-width space (U+3000). It inserts
+a Japanese character space. In LuaLaTeX, you can also input a Japanese
+character space with <code>　</code> alone.</p>
+<h3 id="others">Others</h3>
+<ul>
+<li><p>Ruby and encircled points are not provided by the class itself.
+It is recommended to use <a
+href="https://github.com/zr-tex8r/PXrubrica">PXrubrica</a> or
+<code>luatexja-ruby</code> (for LuaLaTeX, included in the LuaTeX-ja
+package). Under pdfLaTeX, use the CJK package's <code>ruby</code>
+(<code>\usepackage{ruby}</code>, options
+<code>overlap</code>/<code>nooverlap</code>/<code>CJK</code>/<code>latin</code>,
+parameters <code>\rubysize</code>/<code>\rubysep</code>): the
+experimental pdfTeX backend ships a provider adapter
+(<code>jlreq-pdftex-ruby.sty</code>, loaded automatically) that connects
+the provider's <code>\ruby{base}{ruby}</code> to the backend's
+boundary/state machinery — annotation above the base in horizontal
+typesetting and on the reading-frame right in vertical typesetting,
+boundary glue equal to the plain-text class table, provider overlap
+logic preserved (see
+<code>docs/pdftex-compatibility.md</code>).</p></li>
+<li><p>When using pLaTeX / upLaTeX, macros <code>\zw</code> and
+<code>\zh</code> that expand to <code>zw</code> and <code>zh</code>,
+respectively, are defined. In LuaLaTeX, macros of the same name are
+defined within LuaTeX-ja.</p></li>
+<li><p>Requirements for Japanese Text Layout 2.3.2.d state that it is
+desirable to align the number of lines in each column on the last page
+of horizontal two-column typesetting, but this process is not performed.
+You can perform this process by using the <code>nidanfloat</code>
+package and specifying</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode latex"><code class="sourceCode latex"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="bu">\usepackage</span>[balance]{<span class="ex">nidanfloat</span>}</span></code></pre></div>
+<p>However, <code>\newpage</code> and <code>\clearpage</code> on the
+last page will not work correctly. For more details, please see the
+manual of the <code>nidanfloat</code> package.</p></li>
+<li><p>The functionality to set fonts is not provided. Japanese fonts
+can be set using <code>luatexja-fontspec</code> or
+<code>luatexja-preset</code> (both included in the LuaTeX-ja package)
+when using LuaLaTeX. If using dvipdfmx, you can set it with <a
+href="https://github.com/zr-tex8r/PXchfon">PXchfon</a>.</p></li>
+<li><p>The space between Japanese characters (stored in
+<code>\kanjiskip</code> in (u)pTeX and in the <code>kanjiskip</code>
+parameter in LuateX-ja) by default allows for up to a quarter-character
+width of space, in accordance with the Requirements for Japanese Text
+Layout. However, due to limitations of TeX’s functionality, this may not
+always produce appropriate results. If you want to change this value,
+please redefine <code>\jlreqkanjiskip</code>. For example:</p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode latex"><code class="sourceCode latex"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="bu">\documentclass</span>{<span class="ex">jlreq</span>}</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="fu">\renewcommand</span>{<span class="ex">\jlreqkanjiskip</span>}{0pt plus .1<span class="fu">\zw</span> minus .01<span class="fu">\zw</span>}</span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="kw">\begin</span>{<span class="ex">document</span>}</span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>(Main text)</span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a><span class="kw">\end</span>{<span class="ex">document</span>}</span></code></pre></div>
+<p>The space between Japanese and European characters (stored in
+<code>\xkanjiskip</code> in (u)pTeX and in the <code>xkanjiskip</code>
+parameter in LuateX-ja) can also be changed by redefining
+<code>\jlreqxkanjiskip</code>.</p></li>
+<li><p>When specifying <code>book</code>, even if you specify
+<code>openany</code> as a class option, a blank page may be inserted
+after <code>\mainmatter</code>. This is to match the behavior of the
+standard class file. By specifying
+<code>\jlreqsetup{mainmatter_pagebreak=clearpage}</code>, you can
+prevent the insertion of a blank page, but by default,
+<code>\mainmatter</code> resets the page number, so there may be
+inconsistencies in the parity of page numbers. Please consider changing
+to a continuous pagination by specifying something like
+<code>\jlreqsetup{frontmatter_pagination={arabic,continuous}}</code>.
+For more details, please refer to the following “Front Matter, etc.”
+section.</p></li>
+</ul>
+<h2 id="design-options">Design options</h2>
+<p>The design is specified in keyval format via class options or
+<code>\jlreqsetup</code>. However, due to LaTeX’s implementation, cases
+where input that should be possible is not accepted may occur with class
+options. In many cases, this can be resolved by removing spaces.</p>
+<p>In the following, the following usage will be used:</p>
+<ul>
+<li><code>[A/B]</code>: Either A or B. <code>[A/B/C]</code>, etc., are
+the same.</li>
+<li><code>&lt;dimension&gt;</code>: A dimension recognized by TeX. You
+can also use simple expressions (like <code>10pt+10pt</code>). In class
+options, you may be able to use special values as follows (these are
+available in pLaTeX / upLaTeX by default, but are processed to be
+available in LuaLaTeX as well): In places like <code>\jlreqsetup</code>,
+you can always describe the full-width width with <code>\zw</code> or
+<code>\zh</code>. Below, for example, if <code>Q</code> and
+<code>H</code> are available, it will be described as
+<code>&lt;dimension;Q,H&gt;</code>.
+<ul>
+<li><code>Q</code>, <code>H</code>: Interpreted as 0.25mm.</li>
+<li><code>zw</code>, <code>zh</code>: Interpreted as full-width
+width.</li>
+</ul></li>
+<li><code>&lt;code&gt;</code>: LaTeX code.</li>
+<li><code>&lt;font setting code&gt;</code>: Commands for font settings,
+such as <code>\Large</code> or <code>\bfseries</code>. Multiple
+specifications like <code>\Large\bfseries</code> are also possible.</li>
+<li><code>&lt;counter_name&gt;</code>: The name of the counter in
+LaTeX.</li>
+</ul>
+<h3 id="kihon-hanmen">Kihon-hanmen</h3>
+<p>Class option.</p>
+<ul>
+<li><code>paper=[&lt;paper size name&gt;/{&lt;dimension&gt;,&lt;dimension&gt;}]</code>:
+Specifies the paper size. You can specify from <code>a0paper</code> to
+<code>a10paper</code>, <code>b0paper</code> to <code>b10paper</code>
+(ISO B series), or <code>b0j</code> to <code>b10j</code> for JIS B
+series. Also available are <code>letterpaper</code>,
+<code>legalpaper</code>, and <code>executivepaper</code>. Alternatively,
+you can directly specify dimensions with
+<code>{&lt;width&gt;,&lt;height&gt;}</code>.</li>
+<li><code>fontsize=&lt;dimension;Q,H&gt;</code>: Specifies the font size
+for Latin script. The default is 10pt.</li>
+<li><code>jafontsize=&lt;dimension;Q,H&gt;</code>: Specifies the font
+size for Japanese script.</li>
+<li><code>jafontscale=&lt;real number&gt;</code>: The ratio of Japanese
+font size to Latin font size (Japanese / Latin). Ignored if both
+<code>fontsize</code> and <code>jafontsize</code> are specified. The
+default is 1.</li>
+<li><code>line_length=&lt;dimension;zw,zh&gt;</code>: The length of a
+line. By default, it's 0.75 times the paper width in the direction of
+character progression. The actual value is adjusted to be a multiple of
+the length of one character.</li>
+<li><code>number_of_lines=&lt;natural number&gt;</code>: The number of
+lines per page. By default, it's a value that makes it 0.75 times the
+paper height in the direction of line progression.</li>
+<li><code>gutter=&lt;dimension;zw,zh&gt;</code>: The size of the gutter
+margin.
+<ul>
+<li>Without <code>tate</code>option: It's the margin on the left for odd
+pages and on the right for even pages.</li>
+</ul>
+<ul>
+<li>With <code>tate</code> option: It's the opposite.</li>
+<li>If <code>twoside</code> is not specified in the class options, the
+margin is always set as for odd pages.</li>
+</ul></li>
+<li><code>fore-edge=&lt;dimension;zw,zh&gt;</code>: The size of the
+fore-edge margin (the side opposite the gutter). It's implemented for
+convenience, although it's not used when margins are specified according
+to "Requirements for Japanese Text Layout".</li>
+<li><code>head_space=&lt;dimension;zw,zh&gt;</code>: The amount of space
+at the top (head). The default value centers the text block
+vertically.</li>
+<li><code>foot_space=&lt;dimension;zw,zh&gt;</code>: The amount of space
+at the bottom (foot). The default value centers the text block
+vertically.</li>
+<li><code>baselineskip=&lt;dimension;Q,H,zw,zh&gt;</code>: The line
+feed. By default, it's 1.7 times the <code>jafontsize</code>.</li>
+<li><code>linegap=&lt;dimension;Q,H,zw,zh&gt;</code>: The line gap.</li>
+<li><code>headfoot_sidemargin=&lt;dimension;zw,zh&gt;</code>: The left
+and right margin for headers and footers.</li>
+<li><code>column_gap=&lt;dimension;zw,zh&gt;</code>: The gap between
+columns (only for <code>twocolumn</code>).</li>
+<li><code>sidenote_length=&lt;dimension;zw,zh&gt;</code>: Specifies the
+width of the sidenote.</li>
+</ul>
+<h3></h3>
+<p>class option</p>
+<ul>
+<li><code>open_bracket_pos=[zenkaku_tentsuki/zenkakunibu_nibu/nibu_tentsuki]</code>:
+Specifies the positioning of opening brackets at the start of a line.
+Options are:
+<ul>
+<li><code>zenkaku_tentsuki</code>: Full-width characters are indented at
+the start of a paragraph.</li>
+<li><code>zenkakunibu_nibu</code>: Full-width at the start of a
+paragraph, half-width at a line break.</li>
+<li><code>nibu_tentsuki</code>: Half-width indentation at the start of a
+line.</li>
+</ul></li>
+<li><code>hanging_punctuation</code>: Enables hanging punctuation.</li>
+</ul>
+<h3 id="reverse-pagination">Reverse pagination</h3>
+<p>class option.</p>
+<ul>
+<li><code>use_reverse_pagination</code>: Enables reverse pagination
+functionality. Defines a ‘read-only counter’ named
+<code>jlreqreversepage</code>. Commands like <code>\arabic</code> and
+<code>\value</code> can be applied to it, and
+<code>\thejlreqreversepage</code> is defined as
+<code>\arabic{jlreqreversepage}</code>.</li>
+</ul>
+<h3 id="note-related">Note related</h3>
+<p>Specified by <code>\jlreqsetup</code>.</p>
+<ul>
+<li><code>reference_mark=[inline/interlinear]</code>: Specifies the
+placement of reference marks. Options are <code>inline</code> (in the
+line after the relevant item) or <code>interlinear</code> (above the
+line for horizontal writing, or to the right for vertical writing).</li>
+<li><code>footnote_second_indent=&lt;dimension&gt;</code>: Sets the
+indent for the second and subsequent lines of footnotes (horizontal
+writing) or sidenotes (vertical writing).</li>
+<li><code>sidenote_type=[number/symbol]</code>: Determines the
+correspondence between the sidenote and the text. Options are
+<code>number</code> (default, with a serial number indicating the note)
+or <code>symbol</code> (with a specific symbol and the word with the
+note emphasized).</li>
+<li><code>sidenote_symbol=&lt;code&gt;</code>: When
+<code>sidenote_type=symbol</code> is specified, this sets the symbol to
+be used at the note's location. THe default is *</li>
+<li><code>sidenote_keyword_font=&lt;font setting code&gt;</code>:
+Specifies the font for the word with the sidenote when
+<code>sidenote_type=symbol</code> is used.</li>
+<li><code>endnote_counter=&lt;counter_name&gt;</code>: The counter name
+used for endnotes. The default is endnote_counter=footnote.</li>
+<li><code>endnote_second_indent=&lt;dimension&gt;</code>: Sets the
+indent for the second and subsequent lines of endnotes.
+<code> endnote_position=[headings/paragraph/{_&lt;heading name 1&gt;,_&lt;heading name 2&gt;,...}]</code>:
+The output location of the endnote can be specified.
+<code>headings</code> will output the note before each heading
+(default), <code>paragraph</code> will output it when a new paragraph
+starts, and specifying <code>endnote_position={_chapter,_section}</code>
+will output it before <code>\chapter</code> and <code>\section</code>.
+To specify <code>&lt;_heading name&gt;</code>, the target heading must
+be created using the functionality of this class file.</li>
+<li><code>warichu_opening=&lt;code&gt;</code>,
+<code>warichu_closing=&lt;code&gt;</code>: These are inserted before and
+after the warichu (split annotation). The default is parentheses
+().</li>
+</ul>
+<h3 id="caption">Caption</h3>
+<p>You can change the captions for figures and tables using
+<code>\jlreqsetup</code>. All settings allow for environment-specific
+customization. For example,
+<code>caption_font=\normalsize,table=\Large</code> means that within the
+table environment, <code>\Large</code> will be applied, while
+<code>\normalsize</code> will be applied in other environments. Other
+settings follow the same pattern.</p>
+<ul>
+<li><code>caption_font=&lt;font setting code&gt;</code>: Specifies the
+font for the caption itself.</li>
+<li><code>caption_label_font=&lt;font setting code&gt;</code>: Specifies
+the font for the caption label.</li>
+<li><code>caption_after_label_space=&lt;dimension&gt;</code>: Specifies
+the space between the label and the caption text.</li>
+<li><code>caption_label_format=&lt;code&gt;</code>: Specifies the format
+of the label. For example, <code>caption_label_format={#1:}</code> where
+<code>#1</code> is replaced with something like “Figure 1”.</li>
+<li><code>caption_align=[left/right/center/bottom/top]</code>: Specifies
+the position of the caption. For instance, <code>{center,*left}</code>
+means it’s usually centered, but aligned left when the caption is
+large.</li>
+</ul>
+<h3 id="quotation">Quotation</h3>
+<ul>
+<li><code>quote_indent=&lt;dimension&gt;</code>: Specifies the
+indentation for quotes. The default is <code>2\zw</code>. The length of
+a line is adjusted to be an integer multiple of the character size.</li>
+<li><code>quote_end_indent=&lt;dimension&gt;</code>: Specifies the
+indentation for the end of quotes. The default is
+<code>0\zw</code>.</li>
+<li><code>quote_beforeafter_space=&lt;dimension&gt;</code>: Specifies
+the space before and after quotes. Setting
+<code>quote_beforeafter_space=1\baselineskip</code> will result in a
+one-line space.</li>
+<li><code>quote_fontsize=[normalsize/small/footnotesize/scriptsize/tiny]</code>:
+Specifies the font size for quotes.</li>
+</ul>
+<h3 id="itemization">Itemization</h3>
+<ul>
+<li><code>itemization_beforeafter_space=&lt;dimension&gt;</code>:
+Specifies the space before and after the itemization. For example,
+<code>itemization_beforeafter_space={i=&lt;dimension&gt;}</code> sets
+the space for the top level only.
+<code>itemization_beforeafter_space={0pt,i=10pt,ii=5pt}</code> sets 10pt
+for level 1 itemization, 5pt for level 2, and 0pt for others. Levels are
+indicated by lowercase Roman numerals.</li>
+<li><code>itemization_itemsep=&lt;dimension&gt;</code>: Specifies the
+space between items.</li>
+</ul>
+<h3 id="front-matter-etc">Front matter etc.</h3>
+<p>You can specify the behavior of <code>\frontmatter</code> /
+<code>\mainmatter</code> / <code>\backmatter</code> /
+<code>\appendix</code> with <code>\jlreqsetup</code>.</p>
+<ul>
+<li><code>frontmatter_pagebreak=[cleardoublepage/clearpage]</code>:
+Specifies the command name to execute the page break at
+<code>\frontmatter</code>. If it is empty, nothing is done.</li>
+<li><code>frontmatter_counter={&lt;counter name&gt;={value=&lt;value&gt;, the=&lt;code&gt;, restore=[true/false]},…}</code>:
+Specifies the operation of the counter at <code>\frontmatter</code>. For
+example, <code>chapter={value=0,the={[\arabic{chapter]}}</code> sets the
+value of the chapter counter to 0 and <code>\thechapter</code> to
+<code>[\arabic{chapter}]</code>. By default, the value and
+<code>\the&lt;counter name&gt;</code> definition are restored at
+<code>\mainmatter</code>, but this behavior is suppressed by specifying
+Prestore=false`.</li>
+<li><code>frontmatter_heading={&lt;heading command name&gt;={&lt;setting&gt;},…}</code>:
+Changes the behavior of the heading command. In addition to the items
+that can be specified by <code>\Delare***Heading</code>, the following
+are accepted.
+<ul>
+<li><code>heading_type=[Tobira/Block/Runin/Cutin/Modify]</code>: The
+type of heading1. If Modify is specified, it will be changed by
+<code>\ModifyHeading</code>.</li>
+<li><code>heading_level=&lt;number&gt;</code>: Specifies the level of
+the heading command. If not specified, the value at
+<code>\frontmatter</code> is used. This is ignored when
+<code>heading_type=Modify</code>.</li>
+<li><code>restore=[true/false]</code>: If true is specified, the
+original definition is restored at <code>\mainmatter</code>. The default
+is true.</li>
+</ul></li>
+<li><code>frontmatter_pagestyle={&lt;page style name&gt;[,restore=[true/false]]}</code>:
+Switches to the specified page style at <code>\frontmatter</code>. By
+default, it returns to the original page style at
+<code>\mainmatter</code>, but this can be prevented by specifying
+<code>restore=false</code>.</li>
+<li><code>frontmatter_pagination={&lt;page number specification&gt;[,continuous,independent]}</code>:
+Specifies the output format of the page number, such as
+<code>frontmatter_pagination=roman</code>, with the LaTeX command name.
+In addition, continuous makes it a continuous number, and independent
+makes it a separate number.</li>
+<li><code>frontmatter_precode=&lt;code&gt;</code>: The code that is
+executed first at <code>\frontmatter</code>.</li>
+<li><code>frontmatter_postcode=&lt;code&gt;</code>: The code that is
+executed last at <code>\frontmatter</code>.</li>
+</ul>
+<p>There are also settings that change <code>frontmatter</code> to
+<code>mainmatter</code>, <code>backmatter</code>, or
+<code>appendix</code>. However, there are some differences as
+follows.</p>
+<ul>
+<li><code>restore=[true/false]</code> is an invalid setting.</li>
+<li>Pmainmatter_pagination` cannot specify continuous or
+independent.</li>
+<li><code>appendix_pagebreak</code>, <code>appendix_pagestyle</code>,
+<code>appendix_pagination</code> do not exist.</li>
+</ul>
+<p>When using the <code>book</code> class option, by default,
+<code>frontmatter_heading</code> is set to
+<code>chapter={number=false, restore=true}</code> and
+<code>backmatter_heading</code> is set to
+<code>chapter={number=false}</code>. Therefore, if you change
+<code>\chapter</code> to a cutin heading, an error will occur, so please
+adjust the settings as needed.</p>
+<h4 id="abstract">Abstract</h4>
+<ul>
+<li><code>abstract_with_maketitle=[true/false]</code>: If the abstract
+environment is written before <code>\maketitle</code>, it delays its
+content and outputs it with <code>\maketitle</code>. Even in the case of
+two columns, it is output in one column. The default is false. This
+option is available only when <code>article</code> and
+<code>report</code> are specified.</li>
+</ul>
+<h2 id="headings">Headings</h2>
+<p>You can create new headings with commands like
+<code>\New***Heading</code> ( is a string that corresponds to the type
+of heading). The format is always
+<code>\New***Heading{&lt;command name&gt;}{&lt;level&gt;}{&lt;settings&gt;}</code>.
+Also, <code>\Renew***Heading</code>, <code>\Provide***Heading</code>,
+and <code>\Declare***Heading</code> are available at the same time. They
+are respectively</p>
+<ul>
+<li><code>\Renew***Heading</code>: If the command with the specified
+name is not defined, it causes an error.</li>
+<li><code>\Provide***Heading</code>: If the command with the specified
+name is not defined, it defines a new heading command.</li>
+<li><code>\Declare***Heading</code>: It defines a new heading command
+regardless of whether the command with the specified name is defined or
+not.</li>
+</ul>
+<h3 id="tobira-headings">Tobira headings</h3>
+<p>You can create it with \NewTobiraHeading. It creates a command with
+the same format as the usual class file’s \section and so on. The
+settings are as follows. .</p>
+<ul>
+<li><code>type=[han/naka]</code>: It creates a half-title heading if
+<code>han</code> is specified, and a middle-title heading if
+<code>naka</code> is specified.</li>
+<li><code>pagestyle=&lt;page style name&gt;</code>: It specifies the
+page style of the heading area.</li>
+<li><code>label_format=&lt;code&gt;</code>: It specifies the command to
+output the label. For example, specify it as
+<code>label_format={Chapter \thechapter}</code>.</li>
+<li><code>format=&lt;code&gt;</code>: It specifies the format to
+actually output. <code>#1</code> is replaced with the label,
+<code>#2</code> with the heading text. In this case, the commands
+<code>\jlreqHeadingLabel</code> and <code>\jlreqHeadingText</code> are
+available internally. They are commands that take one argument each, and
+output the given argument itself if the label and heading text are not
+empty, respectively, and output nothing otherwise. For example, if you
+specify it as <code>format={[\jlreqHeadingLabel{Label=#1}]}</code>, it
+outputs <code>[Label=&lt;label&gt;]</code> if the label is not empty,
+and <code>[]</code> otherwise. Note that <code>#1</code> is replaced not
+with the label itself, but with the code that has the adjustment of the
+space and so on. Therefore, you may get an unexpected result.
+<code>#2</code> is the same.</li>
+<li><code>number=[true/false]</code>: It specifies whether to number or
+not. However, even if <code>number=false</code> is specified, the
+corresponding counter is defined. Also, the definition of
+<code>\the&lt;counter name&gt;</code> is not changed, so you need to
+redefine it if necessary.</li>
+</ul>
+<h3 id="block-headings">Block headings</h3>
+<p>You can create it with <code>\NewBlockHeading</code>. It creates a
+command with the format
+<code>\&lt;command name&gt;*[running head]{heading text}[subtitle]</code>.
+The settings are as follows.</p>
+<h4 id="format-related">Format related</h4>
+<ul>
+<li><code>font=&lt;font setting code&gt;</code>: It specifies the font
+of the heading.</li>
+<li><code>subtitle_font=&lt;font setting code&gt;</code>: It specifies
+the font of the subtitle.</li>
+<li><code>label_format=&lt;code&gt;</code>: It specifies the format of
+the label. Specify it as
+<code>label_format={Chapter \thechapter}</code>, for example.</li>
+<li><code>subtitle_format=&lt;code&gt;</code>: It specifies the format
+of the subtitle. Specify it as <code>subtitle_format={“#1”}</code>, for
+example. <code>#1</code> is replaced with the subtitle itself.</li>
+<li><code>format=&lt;code&gt;</code>: It specifies the format of the
+entire heading. <code>#1</code> is replaced with the label,
+<code>#2</code> with the heading text, <code>#3</code> with the
+subtitle. Internally, the commands <code>\jlreqHeadingLabel</code>,
+<code>\jlreqHeadingText</code>, and <code>\jlreqHeadingSubtitle</code>
+are available. They are commands that take one argument each, and output
+the given argument itself if the label, heading text, and subtitle are
+not empty, respectively, and output nothing otherwise. For example, if
+you specify it as <code>format={[\jlreqHeadingLabel{Label=#1}]}</code>,
+it outputs <code>[Label=&lt;label&gt;]</code> if the label is not empty,
+and <code>[]</code> otherwise. Note that <code>#1</code> is replaced not
+with the label itself, but with the code that has the adjustment of the
+space and so on. Therefore, you may get an unexpected result.
+<code>#2</code> and <code>#3</code> are the same.</li>
+</ul>
+<h4 id="indent-related">Indent related</h4>
+<ul>
+<li><code>align=[left/center/right]</code>: It specifies the horizontal
+alignment of the heading position.</li>
+<li><code>indent=&lt;dimension&gt;</code>: It specifies the amount of
+indentation of the entire heading.</li>
+<li><code>end_indent=&lt;dimension&gt;</code>: It specifies the amount
+of back indentation of the entire heading.</li>
+<li><code>after_label_space=&lt;dimension&gt;</code>: It specifies the
+amount of space between the label and the heading text.</li>
+<li><code>second_heading_text_indent=[&lt;dimension&gt;/{&lt;dimension&gt;,&lt;dimension&gt;}]</code>:
+It specifies the indent of the second and subsequent lines of the
+heading text. It specifies from the beginning of the first line of the
+heading text, but if you put <code>*</code> at the beginning like
+<code>second_heading_text_indent=*1\zw</code>, it specifies from the
+beginning of the label. Also, if you specify it as
+<code>second_heading_text_indent={&lt;when there is a label&gt;,&lt;when there is no label&gt;}</code>,
+you can change the value depending on the presence or absence of the
+label. You can also use * in the specification of
+<code>&lt;when there is a label&gt;</code>.</li>
+<li><code>subtitle_indent=&lt;dimension&gt;</code>: It specifies the
+amount of indentation of the subtitle. It specifies from the beginning
+of the first line of the heading text. However, if you put
+<code>*</code> at the beginning like <code>subtitle_indent=*1\zw</code>,
+it specifies from the beginning of the label. It is valid only when
+<code>subtitle_break=true</code>.</li>
+</ul>
+<h4 id="others-1">Others</h4>
+<ul>
+<li><code>subtitle_break=[true/false]</code>: It specifies whether to
+break the line between the heading text and the subtitle.</li>
+<li><code>allowbreak_if_evenpage=[true/false]</code>: It allows a page
+break immediately after the heading if it is on an even page.</li>
+<li><code>pagebreak=[clearpage/cleardoublepage/clearcolumn/nariyuki/begin_with_odd_page/begin_with_even_page]</code>:
+It specifies the page break before the heading2. They are respectively,
+page break, <code>\cleardoublepage</code> execution, column break, as it
+is, start with odd page, start with even page.</li>
+<li><code>pagestyle=&lt;page style name&gt;</code>: It specifies the
+page style of the heading area.</li>
+<li><code>afterindent=[true/false]</code>: It specifies whether to
+indent the paragraph immediately after the heading.</li>
+<li><code>column_spanning=[true/false]</code>: It makes the heading span
+columns. It is ignored when <code>pagebreak=nariyuki</code> or
+<code>pagebreak=clearcolumn</code>.</li>
+<li><code>number=[true/false]</code>: It specifies whether to number or
+not. The same caution as <code>\NewTobiraHeading</code> is
+required.</li>
+</ul>
+<h4 id="gyo-dori">Gyo-dori</h4>
+<p>You can specify gyo-dori setting in one of the following ways.</p>
+<ul>
+<li>Specify the number of lines and place it in the center. Specify the
+number of lines with <code>lines=&lt;natural number&gt;</code>. You can
+also specify the number of lines to add before and after with
+<code>before_lines=&lt;natural number&gt;</code> and
+<code>after_lines=&lt;natural number&gt;</code>. For example, if you
+specify <code>lines=3,after_lines=1</code>, it will be placed in four
+lines, and the space after will be one line larger than the space
+before. The space specified by <code>before_lines</code> does not enter
+at the top of the page, but if you put <code>*</code> at the beginning
+like <code>before_lines=*1</code>, it always enters.</li>
+<li>Specify the number of lines and either the space before or after.
+Specify the number of lines with
+<code>lines=&lt;natural number&gt;</code>, and the space before or after
+with either <code>before_space=&lt;dimension&gt;</code> or
+<code>after_space=&lt;dimension&gt;</code>.</li>
+<li>Specify the space before and after. Specify it with
+<code>before_space=&lt;dimension&gt;</code> and
+<code>after_space=&lt;dimension&gt;</code>.</li>
+</ul>
+<h3 id="gyo-dori-for-consecutive-headings">Gyo-dori for consecutive
+headings</h3>
+<p>You can set the gyo-dori settings for block headings that are placed
+consecutively with <code>\SetBlockHeadingSpaces</code>.
+<code>\SetBlockHeadingSpaces</code> is used as follows:</p>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode latex"><code class="sourceCode latex"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="fu">\SetBlockHeadingSpaces</span> {</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>    {_part{lines=3,before_lines=1},_section{lines=2},_subsection{lines=2}}</span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>    [lines=5]{_section,23pt,_subsection,16pt}</span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div>
+<p>This means the following.</p>
+<ul>
+<li>If the headings are placed in the order of <code>\part</code>,
+<code>\section</code>, <code>\subsection</code>, and the front and back
+are not headings, then <code>\part</code> is three-line spacing + one
+line space before, and <code>\section</code> and
+<code>\subsection</code> are two-line spacing.</li>
+<li>If the headings are placed in the order of <code>\section</code>,
+<code>\subsection</code>, and the front and back are not headings, then
+the whole is five-line spacing, and there is <code>23pt</code> space
+between <code>\section</code> and <code>\subsection</code>, and
+<code>16pt</code> space after <code>\subsection</code>.</li>
+</ul>
+<p>The individual settings are as follows.</p>
+<ul>
+<li>Each <code>{}</code> contains
+<code>_&lt;heading command name&gt;</code> or
+<code>&lt;dimension&gt;</code> separated by commas.</li>
+<li>You can add settings enclosed in <code>[]</code> at the beginning.
+This is a setting for the entire heading that is placed consecutively.
+<code>lines / before_lines / after_lines / before_space / after_space</code>
+are available. Each meaning is the same as the line spacing
+specification described above.</li>
+<li>The dimension is the amount of space as it is.</li>
+<li>You can add settings enclosed in <code>{}</code> after
+<code>_&lt;heading command name&gt;</code> to set the amount of space
+for that heading. If not set, there is no space before and after.</li>
+<li>In the settings enclosed in <code>{}</code> for the heading,
+<code>lines / before_lines / after_lines / before_space / after_space</code>
+are available. Each meaning is the same as the line spacing
+specification described above.</li>
+<li>If you make the part enclosed in <code>{}</code> only
+<code>*</code>, (for example, <code>_section{*}</code>), it uses the
+same setting as when it is placed alone.</li>
+</ul>
+<p>Note that whether the headings are consecutive or not is determined
+simply by whether the block heading commands are written in succession.
+Therefore, even if there are commands that are not related to the output
+between the heading commands, they are not considered to be consecutive
+headings. However, if only spaces, line breaks, or
+<code>\label[&lt;option&gt;]{&lt;argument&gt;}…{&lt;argument&gt;}</code>
+are inserted between the heading commands, they are considered to be
+consecutive headings.</p>
+<h3 id="run-in-headings">Run-in headings</h3>
+<p>Run-in headings are created with <code>\NewRuninHeading</code>. The
+command creates a heading with the same format as the standard document
+class's <code>\section</code>, i.e.
+<code>\&lt;command name&gt;*[running head]{heading text}</code>. The
+settings are as follows:</p>
+<ul>
+<li><code>font=&lt;font setting command&gt;</code>: Specifies the font
+of the heading.</li>
+<li><code>indent=&lt;dimension&gt;</code>: Specifies the indentation of
+the entire heading text.</li>
+<li><code>after_label_space=&lt;dimension&gt;</code>: Specifies the
+space between the label and the heading text.</li>
+<li><code>label_format=&lt;code&gt;</code>: Specifies the format of the
+label. For example, <code>label_format={\theparagraph}</code>.</li>
+<li><code>after_space=&lt;dimension&gt;</code>: Specifies the space
+between the heading and the main text.</li>
+<li><code>number=[true/false]</code>: Specifies whether to number the
+heading or not. The same caution as <code>\NewTobiraHeading</code>
+applies.</li>
+</ul>
+<h3 id="cut-in-headings">Cut-in headings</h3>
+<p>You can create cut-in headings with <code>\NewCutinHeading</code>.
+The command has the format
+<code>\&lt;command name&gt;{heading text}</code>. The settings are as
+follows:</p>
+<ul>
+<li><code>font=&lt;font setting command&gt;</code>: Specifies the font
+of the heading.</li>
+<li><code>indent=&lt;dimension&gt;</code>: Specifies the indentation of
+the entire heading.</li>
+<li><code>after_space=&lt;dimension&gt;</code>: Specifies the space
+between the heading and the text.</li>
+<li><code>onelinemax=&lt;dimension&gt;</code>,
+<code>twolinemax=&lt;dimension&gt;</code>: If the length of the heading
+text is less than or equal to <code>onelinemax</code>, the window
+heading is output in one line. If it is less than or equal to
+<code>twolinemax</code>, it is output in two lines. Otherwise, it is
+output in three lines. The default values are 6 characters and 20
+characters, respectively.</li>
+</ul>
+<h3 id="modifyheading"><code>\ModifyHeading</code></h3>
+<p><code>\ModifyHeading</code> is a command that changes the settings of
+a heading command that has already been defined (using one of the above
+commands). For example,</p>
+<div class="sourceCode" id="cb6"><pre
+class="sourceCode latex"><code class="sourceCode latex"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="fu">\ModifyHeading</span>{section}{lines=10}</span></code></pre></div>
+<p>changes only the line spacing of <code>\section</code> to 10 lines,
+while keeping the font and other settings the same. You cannot change
+the type of heading with this command.</p>
+<h3 id="saveheading"><code>\SaveHeading</code></h3>
+<p><code>\SaveHeading</code> saves the definition of a heading command.
+For example, you can use it like this:</p>
+<div class="sourceCode" id="cb7"><pre
+class="sourceCode latex"><code class="sourceCode latex"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="fu">\SaveHeading</span>{section}{<span class="fu">\restoresection</span>} <span class="co">% Save the contents of \section to \restoresection.</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="fu">\RenewBlockHeading</span>{section}{1}{font=…} <span class="co">% Redefine \section with a new font.</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>…</span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a><span class="fu">\restoresection</span> <span class="co">% Restore the contents of \section.</span></span></code></pre></div>
+<h2 id="page-style">Page Style</h2>
+<p>You can define a page style using</p>
+<div class="sourceCode" id="cb8"><pre
+class="sourceCode latex"><code class="sourceCode latex"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="fu">\NewPageStyle</span>{&lt;page style name&gt;}{&lt;settings&gt;}</span></code></pre></div>
+<p><code>&lt;settings&gt;</code> is in keyval format. You can apply the
+defined page style with <code>\pagestyle</code>. The settings are as
+follows:</p>
+<ul>
+<li><code>yoko</code>: Prints horizontally at the top and bottom.
+Default.</li>
+<li><code>tate</code>: Prints vertically on the fore-edge side.</li>
+<li><code>running_head_font=&lt;font setting command&gt;</code>:
+Specifies the font for the running head.</li>
+<li><code>nombre_font=&lt;font setting command&gt;</code>: Specifies the
+font for the page number.</li>
+<li><code>running_head_position</code>, <code>nombre_position</code>:
+Specifies the position of the running head and the page number. The
+specification method changes depending on whether <code>yoko</code> or
+<code>tate</code> is specified.
+<ul>
+<li><code>yoko</code> specified: You can specify it like top-left. You
+can use
+<code>top / bottom / center / left / right / gutter / fore-edge</code>.
+<code>left</code> and <code>right</code> are for odd pages. If
+<code>twoside</code> is specified, even pages are the opposite.</li>
+<li><code>tate</code> specified: You can specify
+<code>&lt;dimension&gt;</code>. <code>running_head_position</code>
+specifies the drop amount from the top of the running head, and
+<code>nombre_position</code> specifies the raise amount from the bottom
+of the page number.</li>
+</ul></li>
+<li><code>nombre=&lt;format&gt;</code>: Specifies the page number to
+output. The default is <code>\thepage</code>.</li>
+<li><code>odd_running_head=&lt;format&gt;</code>,
+<code>even_running_head=&lt;format&gt;</code>: Specifies the running
+head for odd and even pages, respectively. If you specify a name
+starting with _ like <code>_section</code>, it outputs the corresponding
+heading. (<code>_section</code> outputs the current
+<code>\section</code>.)</li>
+<li><code>mark_format={[odd=&lt;format&gt;/even=&lt;format&gt;/_&lt;heading command name&gt;=&lt;format&gt;],…}</code>:
+Specifies the format for outputting headings to the running head.
+Specify it like
+<code>mark_format={_section={Section \thesection: #1},_chapter={Chapter \thechapter \quad #1}}</code>.
+You can also specify odd or even instead of the heading command name,
+which will be the format for the running head on odd/even pages. It is
+implemented by defining <code>\sectionmark</code> etc. when executing
+<code>\pagestyle</code>.</li>
+<li><code>nombre_ii=&lt;format&gt;</code>: Specifies the second page
+number. You can also specify the location with
+<code>nombre_ii_position</code> and the font with
+<code>nombre_ii_font</code>. The specification method is the same as
+<code>nombre</code> and <code>nombre_position</code>.</li>
+<li><code>odd_running_head_ii</code>, <code>even_running_head_ii</code>,
+<code>running_head_ii_position</code>, <code>running_head_ii_font</code>
+are also available. If <code>nombre_ii_position</code> or
+<code>running_head_ii_position</code> is not specified, it will be set
+to the same position as <code>nombre_position</code> or
+<code>running_head_position</code> when <code>yoko</code> is specified.
+When <code>tate</code> is specified, it will be displayed in the place
+following the first page number or running head.</li>
+<li><code>odd_head_format=&lt;format&gt;</code>,
+<code>odd_foot_format=&lt;format&gt;</code>,
+<code>even_head_format=&lt;format&gt;</code>,
+<code>even_foot_format=&lt;format&gt;P: Specifies the format for the header and footer. </code>#1<code>will be replaced with the entire header or footer. However,</code>#1<code>may contain code for position adjustment, so it may not work as expected, especially when</code>tate<code>is specified in</code>\NewPageStyle<code>. For example, to draw a rule under the header on odd pages, you can do </code>odd_head_format={\underline{\makebox[\jlreqyokoheadlength]{#1}}}<code>. </code>\jlreqyokoheadlength<code>is a macro defined in this class file and gives the horizontal length of the header. (The footer length is the same.) The vertical length, i.e., the length when</code>tate<code>is specified in</code>\NewPageStyle<code>, can be obtained with </code>\jlreqtateheadlength`.</li>
+</ul>
+<p><code>\RenewPageStyle</code>, <code>\ProvidePageStyle</code>,
+<code>\DeclarePageStyle</code> are also available1.</p>
+<p>You can modify an existing page style with
+<code>\ModifyPageStyle</code>.</p>
+<h2 id="jfm">JFM</h2>
+<p>We use the following custom JFMs. Some packages may reset the
+settings to use their own JFMs or the standard JFMs. In that case, you
+need to set the appropriate package options to use the JFMs of this
+class file.</p>
+<h3 id="for-platexuplatex">For pLaTeX/upLaTeX</h3>
+<p>The names of the JFMs are as follows. The characters enclosed in
+<code>[]</code> may or may not be included depending on the
+settings.</p>
+<pre><code>[u][b][z]jlreq[g][-v]</code></pre>
+<p>Each character is included in the following cases.</p>
+<ul>
+<li><code>u</code>: When using upLaTeX</li>
+<li><code>b</code>: When using hanging punctuation. (When the class
+option hanging_punctuation is specified.)</li>
+<li><code>z</code>: When the space before the opening brackets at the
+beginning of a line is two-bun for the beginning of a paragraph and
+one-bun for the line break. (When the class option
+<code>open_bracket_pos=zenkakunibu_nibu</code> is specified.)</li>
+<li><code>g</code>: For gothic fonts.</li>
+<li><code>-v</code>: For vertical writing.</li>
+</ul>
+<p>For example, if you process a source without using hanging
+punctuation and specifying
+<code>open_bracket_pos=zenkakunibu_nibu</code> as a class option with
+pLaTeX, the JFM named zjlreq will be used for horizontal writing mincho
+font.</p>
+<p>For LuaLaTeX</p>
+<ul>
+<li>The JFM for horizontal writing is jlreq</li>
+<li>The JFM for vertical writing is jlreqv</li>
+</ul>
+<p>The same JFM is used for gothic fonts. This class file changes the
+JFM of LuaTeX-ja standard to these.</p>
+<h2 id="others-2">Others</h2>
+<p>If the class option <code>jlreq_notes</code> is passed, a
+notification will be given when a setting that contradicts the
+description of Japanese typesetting processing is made.</p>
+<h2 id="jlreq-complements">jlreq-complements</h2>
+<p><code>jlreq-complements</code> is a package that customizes the
+environments that are typically provided by LaTeX document classes. You
+can use it as follows. It accepts the following options:</p>
+<ul>
+<li><code>platex</code>, <code>uplatex</code>, <code>lulalatex</code>:
+Specify the engine.</li>
+<li><code>setupname=&lt;name&gt;</code>: Specify the name of the command
+for customization. The default is <code>jlreqcomplementssetup</code>,
+and you can set it by writing
+<code>\jlreqcomplementssetup{&lt;settings&gt;}</code> in the
+preamble.</li>
+</ul>
+<p>In <code>jlreq</code>, it is loaded as
+<code>\usepackage[&lt;engine recognized in jlreq&gt;,setupname=jlreqsetup]{jlreq-complements}</code>,
+so you can customize the environments with the usual
+<code>\jlreqsetup</code>. To make this work well with an existing name,
+the original command and the new one need to be compatible. It is
+usually better to avoid this.</p>
+<h3 id="thebibliography-environment"><code>thebibliography</code>
+environment</h3>
+<ul>
+<li><code>thebibliography_heading=&lt;code&gt;</code>: Specify the
+command to output the heading of the <code>thebibliography</code>
+environment. Use it like
+<code>thebibliography_heading={\section*{\refname}}</code>.</li>
+<li><code>thebibliography_after_label_space=&lt;dimension&gt;</code>:
+Specify the space after the label of each item in the
+<code>thebibliography</code> environment.</li>
+<li><code>thebibliography_indent=&lt;dimension&gt;</code>: Specify the
+indentation of the entire <code>thebibliography</code> environment.</li>
+<li><code>thebibliography_mark=&lt;code&gt;</code>: Specify the code to
+register the heading of the <code>thebibliography</code> environment in
+the column.</li>
+<li><code>thebibliography_precode=&lt;code&gt;</code>,
+<code>thebibliography_postcode=&lt;code&gt;</code>: Specify the code
+that is executed before and after the <code>thebibliography</code>
+environment, respectively.</li>
+</ul>
+<h3 id="theindex-environment"><code>theindex</code> environment</h3>
+<ul>
+<li><code>theindex_heading=&lt;code&gt;</code>: Specify the command to
+output the heading of the <code>theindex</code> environment.</li>
+<li><code>theindex_mark=&lt;code&gt;</code>: Specify the code to
+register the heading of the <code>theindex</code> environment in the
+column.</li>
+<li><code>theindex_twocolumn=[true/false]</code>: Specify whether to
+output the <code>theindex</code> environment in two columns.</li>
+<li><code>theindex_column_gap=&lt;dimension&gt;</code>: Specify the
+column gap in the <code>theindex</code> environment when
+<code>theindex_twocolumn=true</code>.</li>
+<li><code>theindex_column_rule_width=&lt;dimension&gt;</code>: Specify
+the value of <code>\columnseprule</code> in the <code>theindex</code>
+environment when <code>theindex_twocolumn=true</code>.</li>
+<li><code>theindex_pagestyle=&lt;page style name&gt;</code>: Specify the
+page style for the <code>theindex</code> environment.</li>
+<li><code>theindex_postcode=&lt;code&gt;</code>,
+<code>theindex_precode=&lt;code&gt;</code>: Specify the code that is
+executed before and after the <code>theindex</code> environment,
+respectively.</li>
+</ul>
+<h3 id="theorem-environment">Theorem environment</h3>
+<ul>
+<li><code> theorem_beforeafter_space=&lt;dimension&gt;</code>: Specify
+the space before and after the theorem environment.</li>
+<li><code>theorem_label_font=&lt;font setting code&gt;</code>: Specify
+the font for the label part of the theorem environment.</li>
+<li><code>theorem_font=&lt;font setting code&gt;</code>: Specify the
+font for the body of the theorem environment.</li>
+<li><code>theorem_indent=&lt;dimension&gt;</code>: Specify the
+indentation of the body of the theorem environment.</li>
+<li><code>proof_label_font=&lt;font setting code&gt;</code>: This
+setting is only valid when the <code>amsthm</code> package is loaded.
+Specify the font for the label of the <code>proof</code>
+environment.</li>
+</ul>
+<p>When the <code>amsthm</code> package is loaded, a new theorem style
+<code>jlreq</code> is defined and the current style is changed to
+<code>jlreq</code>. In this case, the above settings function as
+settings for this <code>jlreq</code> style.</p>
+<h2 id="license">LICENSE</h2>
+<p>This package is distributed under the BSD 2-Clause License. See <a
+href="LICENSE">LICENSE</a>.</p>
+<h2 id="changelog">CHANGELOG</h2>
+<ul>
+<li>2017-02-08
+<ul>
+<li>First release.</li>
+</ul></li>
+<li>2017-02-17
+<ul>
+<li>Fixed bugs.</li>
+<li>Implement <code>abstract</code> environment.</li>
+<li>Changed/Added some keys to class
+option/<code>\jlreqsetup</code></li>
+<li>Stopped to load <code>pxrubirica</code>, <code>luatexja-ruby</code>
+and <code>nidanfloat</code>.</li>
+</ul></li>
+<li>2017-03-14
+<ul>
+<li>Fixed bugs.</li>
+<li><code>\sffamily</code> etc. also change the Japanese font
+family.</li>
+<li>Added many options to <code>\DeclareBlockHeading</code>.</li>
+<li>Some options related to <code>quote</code> environment etc.</li>
+</ul></li>
+<li>2017-03-20
+<ul>
+<li>Fixed bugs.</li>
+<li>Insert some spaces around
+<code>\footnote / \sidenote / \endnote</code>.</li>
+</ul></li>
+<li>2017-04-04
+<ul>
+<li>Fixed a bug.</li>
+<li>Added options <code>tate</code> and <code>font</code> to
+<code>\DeclarePageStyle</code>.</li>
+</ul></li>
+<li>2017-04-29
+<ul>
+<li>Fixed bugs.</li>
+<li>Added <code>jafontsize</code> and <code>jafontscale</code> options
+and <code>\jafontsize</code>.</li>
+<li>Added <code>\tatechuyoko</code>.</li>
+<li><code>jlreq_warnings</code> -&gt; <code>jlreq_notes</code> (class
+option).</li>
+<li>Moved some class options to <code>\jlreqsetup</code>.</li>
+<li>Added some options to <code>\jlreqsetup</code>.</li>
+<li><code>paper={&lt;height&gt;,&lt;width&gt;}</code> -&gt;
+<code>paper={&lt;width&gt;,&lt;height&gt;}</code>.</li>
+</ul></li>
+<li>2017-06-11
+<ul>
+<li>Stopped to load <code>plext</code> and <code>lltjext</code>.</li>
+<li>Added <code>align</code> to <code>\DeclareBlockHeading</code> and
+delete <code>indent=center</code>, <code>end_indent=center</code>.</li>
+<li>Changed <code>\kcatcode</code> for some characters (upLaTeX).</li>
+</ul></li>
+<li>2017-08-13
+<ul>
+<li>Added <code>column_spanning</code> to
+<code>\DeclareBlockHeading</code>.</li>
+<li>Sidenotes are a part of the main text now.</li>
+<li>Changed the default length of sidenotes to 0.</li>
+<li>jlreq does not define <code>\sidenote</code> if the length for
+sidenotes is zero.</li>
+<li>Added a command for the full-width ideographic space.</li>
+</ul></li>
+<li>2017-08-29
+<ul>
+<li>Fixed a bug.</li>
+</ul></li>
+<li>2017-11-23
+<ul>
+<li>Fixed bugs.</li>
+<li>Added <code>\SetBlockHeadingSpaces</code>.</li>
+<li>Removed a space from <code>\contentsname</code> and
+<code>\indexname</code>.</li>
+</ul></li>
+<li>2017-12-02
+<ul>
+<li>Fixed bugs.</li>
+</ul></li>
+<li>2017-12-22
+<ul>
+<li>Improved JFM.</li>
+<li>Change the way to detect <code>\label</code> between block
+headings.</li>
+<li>Added chapter number to
+<code>\theequation</code>，<code>\thefigure</code>，<code>\thetable</code>.</li>
+</ul></li>
+<li>2018-02-01
+<ul>
+<li>Sidenotes appears only odd pages in <code>tate</code> mode.</li>
+<li>Added <code>\fnfixbottomtrue</code> for LuaLaTeX.</li>
+<li>Added some options related to captions.</li>
+<li>Extended <code>itemization_beforeafter_space</code>.</li>
+<li>Fixed bugs.</li>
+</ul></li>
+<li>2018-04-11
+<ul>
+<li>Sidenotes (<code>\footnote</code>) appears in the second column in
+<code>tate</code> mode.</li>
+<li>Added options <code>begin_widh_(odd|even)_page</code> to
+<code>\DeclareBlockHeading</code>.</li>
+<li>Changed <code>\labelenumi</code> as in <code>jarticle</code>
+etc.</li>
+<li>Fix a bug on <code>column_gap</code> class option.</li>
+<li>Added <code>mark_format</code> to
+<code>\DeclarePageStyle</code>.</li>
+</ul></li>
+<li>2018-05-19
+<ul>
+<li>Made the width of the label in the table of contents longer.</li>
+<li>Moved some macros to jlreq-helpers.sty</li>
+<li>Fixed bugs.</li>
+</ul></li>
+<li>2018-06-17
+<ul>
+<li>Gothic font is attached to font shape 'b'.</li>
+<li>Fixed bugs.</li>
+</ul></li>
+<li>2018-08-08
+<ul>
+<li>Added <code>nombre_ii</code> etc. to
+<code>\DeclarePageStyle</code>.</li>
+<li>Fixed bugs.</li>
+<li>Added <code>footnote_second_indent</code> and
+<code>endnote_second_indent</code> to <code>\jlreqsetup</code>.</li>
+</ul></li>
+<li>2018-08-15
+<ul>
+<li>Fixed bugs.</li>
+</ul></li>
+<li>2018-09-01
+<ul>
+<li>jlreq works with unusual <code>\mag</code>.</li>
+<li>Fixed bugs.</li>
+</ul></li>
+<li>2018-12-10
+<ul>
+<li>Added <code>number=[true/false]</code> to
+<code>\New***Heading</code>.</li>
+<li>Added options for <code>\frontmatter</code> etc in
+<code>\jlreqsetup</code>.</li>
+<li>Made <code>\jlreqHeadingLabel</code> etc available in
+<code>format</code> in <code>\NewTobiraHeading</code> and
+<code>\NewBlockHeading</code>.</li>
+<li>Fixed bugs.</li>
+</ul></li>
+<li>2019-01-15
+<ul>
+<li>Added <code>nombre_font</code> etc to <code>\NewPageStyle</code>.
+<code>font</code> is deprecated.</li>
+<li><code>format</code> without <code>#1</code> is allowed in
+<code>\NewBlockHeading</code>.</li>
+<li>Extended <code>caption_label_format</code> etc. in
+<code>\jlreqsetup</code>.</li>
+<li>Fixed bugs.</li>
+</ul></li>
+<li>2019-04-01
+<ul>
+<li>Added <code>use_reverse_pagination</code> to the class option.</li>
+<li>Stopped to use <code>zref</code> package.</li>
+<li>New regnal year.</li>
+<li>Fixed bugs.</li>
+</ul></li>
+<li>2019-05-07
+<ul>
+<li>Added a small length to <code>\textwidth</code> and
+<code>\textheight</code>.</li>
+<li>Changed the implementation of <code>running_head_ii</code> etc. in
+<code>\DeclarePageStyle</code>.</li>
+<li>Fixed bugs.</li>
+</ul></li>
+<li>2019-09-24
+<ul>
+<li>Deleted the (re-)definitions of <code>\@cite</code> and
+<code>\@biblabel</code>.</li>
+<li>Added <code>\allowbreak</code> before block headings.</li>
+<li>Fixed bugs.</li>
+</ul></li>
+<li>2020-02-07
+<ul>
+<li>Changed the default value of <code>itemization_label_length</code>
+to <code>\leftmargini</code> etc.</li>
+<li>Removed the redefinitions <code>\rmfamily</code> etc and added a
+code to <code>\@rmfamilyhook</code>.</li>
+<li>Changed <code>\parskip</code> to <code>0pt</code>.</li>
+<li>Fixed bugs.</li>
+</ul></li>
+<li>2020-05-01
+<ul>
+<li>Added <code>theorem_label_font</code> and <code>theorem_font</code>
+to <code>\jlreqsetup</code>.</li>
+<li>Fixed bugs.</li>
+</ul></li>
+<li>2020-09-27
+<ul>
+<li>Added <code>*</code>-version of <code>\tatechuyoko</code>.</li>
+<li>Fixed bugs.</li>
+</ul></li>
+<li>2020-12-29
+<ul>
+<li><code>fontsize</code> etc. with LuaLaTeX accept <code>H</code>.</li>
+<li>Added <code>\jidori</code>.</li>
+<li>Fixed bugs.</li>
+</ul></li>
+<li>2021-03-17
+<ul>
+<li>Use the pagestyle <code>plain</code> at <code>\maketitle</code> if
+the current one is not <code>empty</code></li>
+<li>Removed JFM glue after <code>\item</code>.</li>
+<li>Removed JFM glue after block headings.</li>
+<li>Fixed bugs.</li>
+</ul></li>
+<li>2021-05-28
+<ul>
+<li>Extended <code>caption_align</code> in
+<code>\jlreqsetup</code>.</li>
+<li>Removed some <code>\ifthenelse</code>.</li>
+</ul></li>
+<li>2021-07-22
+<ul>
+<li>Stopped to use <code>\IfHookExistsTF</code>.</li>
+<li>Added <code>\akigumi</code>.</li>
+<li>Stopped to load packages <code>xkeyval</code> and
+<code>ifthen</code>.</li>
+<li>It has more compatibility with expl3.</li>
+<li>Added <code>pagestyle</code> to
+<code>\DeclareBlockHeading</code>.</li>
+<li>Fixed bugs.</li>
+</ul></li>
+<li>2021-07-25
+<ul>
+<li>Load <code>ifthen</code> again. (Only for Re:VIEW, will be removed
+in future.)</li>
+<li>Fixed bugs.</li>
+</ul></li>
+<li>2021-08-12
+<ul>
+<li>Removed the direct dependence on <code>etoolbox</code> package.</li>
+<li>Fixed a bug.</li>
+</ul></li>
+<li>2021-10-09
+<ul>
+<li>Fixed bugs.</li>
+</ul></li>
+<li>2021-11-05
+<ul>
+<li><code>paper=b*</code> is regarded as a ISO series.</li>
+<li>Removed many codes relating with LaTeX hooks mechanism (because it
+seems not stable.)</li>
+<li>Removed <code>\RequirePackage{ifthen}</code>.</li>
+<li>Removed <code>\kcatcode</code>settings with upLaTeX.</li>
+</ul></li>
+<li>2022-04-05
+<ul>
+<li>Added <code>warichu_opening</code> and <code>warichu_closing</code>
+to <code>\jlreqsetup</code>.</li>
+<li>Change a little bit penalties around block heading.</li>
+<li>Fixed a bug: <code>\selectfont</code> after
+<code>\DeclareFontShape</code> raised an error.</li>
+<li>Fixed a bug: <code>use_reverse_pagination</code> did not work.</li>
+<li>Fixed a bug: A second running head disappeared sometimes.</li>
+<li>Rewrote <code>\DeclarePageStyle</code>.</li>
+<li>Deleted <code>\@makefntext</code>, define <code>\@makefntext</code>
+directly.</li>
+<li>Fixed other bugs.</li>
+</ul></li>
+<li>2022-04-11
+<ul>
+<li>Fixed a bug.</li>
+</ul></li>
+<li>2022-07-13
+<ul>
+<li>Fixed a bug: The position of running heads were not correct.</li>
+</ul></li>
+<li>2022-11-28
+<ul>
+<li>Fixed a bug: did not register to running head when
+<code>\SetBlockHeadingSpaces</code> is used.</li>
+<li>Fixed a bug: wrong papersize for ISO C4.</li>
+<li>Added a package <code>jlreq-complements</code></li>
+<li>Fixed some other bugs and adjust with some other packages.</li>
+</ul></li>
+<li>2023-03-05
+<ul>
+<li>Fixed a bug on cutin headings.</li>
+</ul></li>
+<li>2023-06-19
+<ul>
+<li>Stopped to load `everyhook' package LuaLaTeX (it was not compatible
+with the document).</li>
+<li>Fixed a bug: a space before `enumerate' environment was not inserted
+sometimes.</li>
+<li>Fixed a bug on <code>use_reverse_pagination</code>.</li>
+</ul></li>
+<li>2024-02-13
+<ul>
+<li>Added some <code>\par</code> (for hook system in LaTeX kernel)</li>
+<li>Added <code>tableofcontents_twocolumn</code> and
+<code>abstract_with_maketitle</code> to <code>\jlreqsetup</code>.</li>
+<li>Deleted <code>\PushPostHook</code>.</li>
+<li>Some modifications of jfm.</li>
+<li>Fixed a bug: heading command may have an infinite loop.</li>
+<li>Load <code>stfloats</code> with LuaLaTeX.</li>
+<li>Improved position adjustment in pagestyle.</li>
+<li>Some other improvements etc.</li>
+</ul></li>
+<li>2024-02-16
+<ul>
+<li>Fixed a bug.</li>
+</ul></li>
+<li>2024-08-23
+<ul>
+<li>Fixed bugs.</li>
+<li>Changed the name of some internal variables.</li>
+<li>Added the usage of this class to English document.</li>
+<li>Use <code>\DeclareKeys</code> etc.</li>
+<li>Changed the internal processing of block headings a little.</li>
+</ul></li>
+<li>2024-09-26
+<ul>
+<li>Removed pattern matchings from Makefile.</li>
+</ul></li>
+<li>2024-10-04
+<ul>
+<li>Fixed: tfm files are mixed into the list of vf files in
+Makefile.</li>
+</ul></li>
+<li>2025-03-16
+<ul>
+<li>Improved compatibility with the hyperref package.</li>
+<li>Adjusted the depth and height of side notes to match the surrounding
+text.</li>
+<li>Changed the placement of <code>\addcontentsline</code> in heading
+commands.</li>
+<li>Modified the default values for spacing around theorem environments
+and the font of headings.</li>
+</ul></li>
+<li>2026-07-17
+<ul>
+<li>Switched to the new <code>\mark</code> system.</li>
+<li>Fixed: <code>\warichu</code> containing g was not split
+correctly.</li>
+<li>Fixed: <code>zw</code> couldn't be used in some class options.</li>
+<li>Changed the float placement settings.</li>
+<li>Fixed: <code>\SetBlockHeadingSpaces</code> did not clear existing
+settings.</li>
+<li>Fixed some bugs.</li>
+</ul></li>
+</ul>
+<hr />
+<p>Noriyuki Abe <a
+href="https://github.com/abenori/jlreq">https://github.com/abenori/jlreq</a></p>
+</article>
+</body>
+</html>

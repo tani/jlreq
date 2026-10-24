@@ -24,6 +24,9 @@
 #     （tests/check-banner-slots.py）、pdflatex-tate-pairs はsmokeのみ
 #     （T1 の JFM .def 等価性検査が実値検証を担うため、循環ログ判定は
 #     成功基準から外した）。
+#   - T12 staged install smoke（P12）: make install を一時 TEXMF へ行い、
+#     リポジトリ外 cwd から -no-shell-escape で yoko/tate 両文書を
+#     staged TDS だけからコンパイル。shell-out 証跡 0 件・抽出照合。
 #
 # 出力: 各検査の PASS/FAIL/XFAIL/XPASS と最終サマリ。作業ディレクトリは
 # 実行ごとの mktemp -d（先頭行にパスを表示）。
@@ -161,6 +164,7 @@ for f in jlreq-pdftex-jfm.def jlreq-pdftex-jfm-b.def jlreq-pdftex-jfm-z.def \
          jlreq-pdftex-jfm-tate-n.def jlreq-pdftex-jfm-tate-bn.def \
          pdftex-jfm-manifest.lua \
          jlreq-pdftex.sty jlreq-pdftex-rules.sty jlreq-pdftex-ruby.sty \
+         jlreq-pdftex-paragraph.sty \
          jlreq-trimmarks-pdftex.def jlreq.cls; do
   [ -f "$f" ] || T0_MISSING="$T0_MISSING $f"
 done
@@ -441,7 +445,76 @@ if grep -q 'INTER-FAIL' "$d/reference-mark-interlinear.log" 2>/dev/null \
 else
   pass "interlinear-log-assertions (3 assertions)"
 fi
-
+# ===========================================================================
+echo "== T11: strict paragraph jlreqparagraph (P11) =="
+# ===========================================================================
+# strict-basic: スナップショット一致 + 多行 + 連続環境（STRICT-PASS/FAIL）
+d=$(outdir_for t11 strict-basic)
+run_compile x "$d" pdflatex tests/fixtures/pdflatex-paragraph/strict-basic.tex
+sb_rc=$?
+if grep -q 'STRICT-FAIL' "$d/strict-basic.log" 2>/dev/null; then
+  fail "strict-basic-snapshot-multiline" "$d/strict-basic.log"
+elif [ "$sb_rc" -ne 0 ]; then
+  fail "strict-basic-snapshot-multiline" "$d/compile.out"
+else
+  pass "strict-basic-snapshot-multiline (snapshot + multiline + consecutive envs)"
+fi
+if grep -qE 'Overfull|Underfull' "$d/strict-basic.log" 2>/dev/null; then
+  fail "strict-basic-overfull-check" "$d/strict-basic.log"
+else
+  pass "strict-basic-overfull-check"
+fi
+# strict-inputmodel: 許可構成要素すべて（INM-PASS/FAIL + エラー0）
+d=$(outdir_for t11 strict-inputmodel)
+run_compile x "$d" pdflatex tests/fixtures/pdflatex-paragraph/strict-inputmodel.tex
+im_rc=$?
+if grep -q 'INM-FAIL' "$d/strict-inputmodel.log" 2>/dev/null \
+   || [ "$im_rc" -ne 0 ]; then
+  fail "strict-inputmodel-matrix" "$d/compile.out"
+else
+  pass "strict-inputmodel-matrix (CJK/word/space/inhibitglue/hspace/kern/penalty/allowbreak/math/mbox/makebox/label/hyperlink)"
+fi
+# strict-errors: 禁止構成要素の具体的エラー文言（halt なしで実行）
+d=$(outdir_for t11 strict-errors)
+pdflatex -interaction=nonstopmode -output-directory="$d" \
+  tests/fixtures/pdflatex-paragraph/strict-errors.tex >"$d/compile.out" 2>&1
+if grep -q 'footnote~is~not~allowed~inside' \
+     "$d/strict-errors.log" 2>/dev/null \
+   && grep -q 'display~math~is~not~allowed~inside' \
+     "$d/strict-errors.log" 2>/dev/null \
+   && grep -q 'Undefined control sequence' \
+     "$d/strict-errors.log" 2>/dev/null; then
+  pass "strict-errors-forbidden-constructs (footnote/display-math specific errors + unknown macro)"
+else
+  fail "strict-errors-forbidden-constructs" "$d/strict-errors.log"
+fi
+# strict-integration: 非ゼロ rightskip/parskip・looseness・emergencystretch・
+# parshape・前後接続（INTEG-PASS/FAIL）
+d=$(outdir_for t11 strict-integration)
+run_compile x "$d" pdflatex tests/fixtures/pdflatex-paragraph/strict-integration.tex
+ig_rc=$?
+if grep -q 'INTEG-FAIL' "$d/strict-integration.log" 2>/dev/null \
+   || [ "$ig_rc" -ne 0 ]; then
+  fail "strict-integration-params-continuity" "$d/compile.out"
+else
+  pass "strict-integration-params-continuity (rightskip/parskip/parshape/continuity)"
+fi
+if grep -qE 'Overfull|Underfull' "$d/strict-integration.log" 2>/dev/null; then
+  fail "strict-integration-overfull-check" "$d/strict-integration.log"
+else
+  pass "strict-integration-overfull-check"
+fi
+# strict-tate: 縦組みでの厳密段落（TATE-STRICT-PASS + エラー0）
+d=$(outdir_for t11 strict-tate)
+run_compile x "$d" pdflatex tests/fixtures/pdflatex-paragraph/strict-tate.tex
+tt_rc=$?
+if grep -q 'TATE-STRICT-FAIL' "$d/strict-tate.log" 2>/dev/null \
+   || [ "$tt_rc" -ne 0 ] \
+   || ! grep -q 'TATE-STRICT-PASS' "$d/strict-tate.log" 2>/dev/null; then
+  fail "strict-tate-environment" "$d/compile.out"
+else
+  pass "strict-tate-environment (tate strict paragraph)"
+fi
 # ===========================================================================
 echo "== T5b: wareki today / Japanese label（P9昇格済み: 通常ゲート）=="
 # ===========================================================================
@@ -541,15 +614,15 @@ echo "== T8: pdfTeX 縦組み（shipout rotation; tate .def 欠損はFAIL）=="
 if [ ! -f jlreq-pdftex-jfm-tate.def ]; then
   fail "tate-fixtures" "jlreq-pdftex-jfm-tate.def"
 else
-  # pdflatex+tate はエラーにならない（実験的回転経路 + ロード時警告）
+  # pdflatex+tate はエラーにならない（回転出荷アーキテクチャ + 情報行）
   d=$(outdir_for t8 tate-ok)
   printf '\\documentclass[pdflatex,tate]{jlreq}\n\\begin{document}あ\\end{document}' >"$d/tate-ok.tex"
   if pdflatex -interaction=nonstopmode -halt-on-error -output-directory="$d" \
        "$d/tate-ok.tex" >"$d/compile.out" 2>&1 \
-     && grep -q 'pdfTeX tate support is EXPERIMENTAL' "$d/tate-ok.log" 2>/dev/null; then
-    pass "tate-option-compiles-with-warning"
+     && grep -q 'pdfTeX tate support: shipout-rotation architecture' "$d/tate-ok.log" 2>/dev/null; then
+    pass "tate-option-compiles-with-info"
   else
-    fail "tate-option-compiles-with-warning" "$d/compile.out"
+    fail "tate-option-compiles-with-info" "$d/compile.out"
   fi
   # tate fixtures: コンパイル + ログ内 TATE-PASS 判定
   #   pdflatex-tate-pairs.tex はsmokeのみ（期待値と実値が同じペア表を読む
@@ -1108,6 +1181,64 @@ if pdflatex -interaction=nonstopmode -halt-on-error -output-directory="$nr" \
 else
   fail "ruby-adapter-noop-without-provider" "$nr/compile.out"
 fi
+
+# ===========================================================================
+echo "== T12: staged install smoke（P12: 配布物だけでの -no-shell-escape コンパイル）=="
+# ===========================================================================
+# PLAN §12: 「-no-shell-escape でインストール済みTDSだけから本文・縦中横・
+# ルビ・厳密段落をコンパイルできるようにする」。
+#   1. make install を一時 TEXMF へ（TEXMF 変数の上書きで全資源を配置）
+#   2. リポジトリ外の作業ディレクトリで、TEXINPUTS/TEXFONTS/ENCFONTS を
+#      staged TEXMF（+ システム既定）に向けて pdflatex -no-shell-escape
+#   3. 判定: rc=0、ログに shell-out 証跡（runsystem/write18/shellescape）
+#      0 件、STAGED-*-PASS マーカ、pdftotext 抽出に本文が含まれる
+# 欠損資源・失敗はSKIPではなくFAIL。
+staged=$(mktemp -d "${TMPDIR:-/tmp}/jlreq-staged.XXXXXXXX") || {
+  echo "FAIL: cannot create staged temp dir"; exit 1; }
+if make install TEXMF="$staged/texmf" >"$staged/install.out" 2>&1; then
+  pass "staged-install (make install TEXMF=<tmp>, all modules + fonts + defs + manifest)"
+else
+  fail "staged-install" "$staged/install.out"
+fi
+smokework=$(mktemp -d "${TMPDIR:-/tmp}/jlreq-smoke.XXXXXXXX") || {
+  echo "FAIL: cannot create smoke temp dir"; exit 1; }
+cp tests/fixtures/pdflatex-staged/staged-smoke-yoko.tex \
+   tests/fixtures/pdflatex-staged/staged-smoke-tate.tex "$smokework/"
+for f in staged-smoke-yoko staged-smoke-tate; do
+  d="$smokework/$f"
+  mkdir -p "$d"
+  cp "$smokework/$f.tex" "$d/"
+  ( cd "$d" \
+    && TEXINPUTS="$staged/texmf/tex/latex/jlreq:" \
+      TEXFONTS="$staged/texmf/fonts/tfm//:$staged/texmf/fonts/truetype//:" \
+      ENCFONTS="$staged/texmf/fonts/enc//:${ENCFONTS:-}" \
+      pdflatex -no-shell-escape -interaction=nonstopmode \
+        -halt-on-error "$f.tex" >compile.out 2>&1 )
+  rc=$?
+  marker=STAGED-YOKO-PASS
+  [ "$f" = staged-smoke-tate ] && marker=STAGED-TATE-PASS
+  if [ "$rc" -ne 0 ]; then
+    fail "staged-$f (repo-external cwd, -no-shell-escape)" "$d/compile.out"
+    continue
+  fi
+  # shell-out 証跡 0 件（PLAN §12: 実行時の texlua/python 起動は禁止）
+  if grep -qiE 'runsystem|write18|shellescape' "$d/$f.log" 2>/dev/null; then
+    fail "staged-$f (shell-out detected)" "$d/$f.log"
+    continue
+  fi
+  if ! grep -q "$marker" "$d/$f.log" 2>/dev/null; then
+    fail "staged-$f (missing $marker)" "$d/$f.log"
+    continue
+  fi
+  # 縦組みPDFのpdftotext出力は1文字1行になるため、改行を除去してから
+  # 本文の連続性を判定する（横組みでも同一パイプで成立する）。
+  if ! pdftotext "$d/$f.pdf" - 2>/dev/null | tr -d '\n' | grep -q 'これは'; then
+    fail "staged-$f (text extraction does not contain body)" "$d/$f.pdf"
+    continue
+  fi
+  pass "staged-$f (staged TDS only, -no-shell-escape, 0 shell-outs, extraction OK)"
+done
+echo "staged workdir: $smokework (texmf: $staged/texmf)"
 
 # ===========================================================================
 echo ""

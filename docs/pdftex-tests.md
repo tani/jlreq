@@ -12,6 +12,7 @@
 | T4 段落 | 行末調整 | tests/fixtures/pdflatex-rules/endadjust.tex | Overfull件数で判定 |
 | T5 文書 | 混植文書の全体動作・バナー幾何 | tests/fixtures/pdflatex-mixed.tex, trimmarks-banner.tex | pdftotext 抽出・tests/check-banner-slots.py |
 | T5b P9ゲート | wareki \today・日本語label（昇格済み）+ パッケージ行列・境界日・綴り | today-wareki.tex, label-japanese.tex, label-packages.tex, date-boundaries.tex, space-dispatcher.tex | lualatex 参照抽出比較 + check-{today-wareki,label-japanese,label-packages,date-boundaries,space-dispatcher}.py |
+| T11 厳密段落 | jlreqparagraph 環境: snapshot・入力モデル行列・禁止構成エラー・統合（rightskip/parskip/parshape/接続）・縦組み | tests/fixtures/pdflatex-paragraph/{strict-basic,strict-inputmodel,strict-errors,strict-integration,strict-tate}.tex | ログ内 STRICT/INM/INTEG/TATE-PASS 判定 + エラー文言 grep + Overfull/Underfull 0 件（T11 ブロック） |
 | T7 回帰 | p/u/l の既存動作（ベースライン照合） | tests/fixtures/{basic-mixed,math-japanese,tate-vertical}.tex | tests/reference/baselines/ とのバイト比較 |
 | T8 縦組み | tate shipout 回転・縦中横・局所方向 | tests/fixtures/pdflatex-tate-*.tex, pdflatex-tate/{tcy-*,dir-*}.tex | ログ判定 + tests/check-tatechuyoko.py（縦中横は P5 で通常ゲート昇格済み） |
 | T9 ruby | ruby.sty provider 適合（P10） | tests/fixtures/pdflatex-tate/ruby-{basic,tate}.tex + ruby-adapter-noop | ログ内自己表明（17+10件）+ lualatex+ruby.sty 同一ソース対照（yoko ベースライン完全一致）+ noop ゲート |
@@ -172,6 +173,33 @@ live 化し、縦中横が正規化組版される。P5 の追加ゲート:
 pdflatex 143.2pt）は f665eba の `\jlreqpdf@addendadj` 修正で解消済みで、
 2026-10-24 の再実測では4エンジン parity が成立するため、通常の回帰
 ゲートとして 0.1pt 許容で固定検査している。
+
+### T11 厳密段落（P11, 2026-10-25 追加）
+
+- `strict-basic`: 環境入口の hsize snapshot が保存値と一致すること
+  （hsize=333pt 下で `\jlreqpar@hsize` を照合）、多行・括弧・約物・
+  欧文混在の厳密段落が Overfull/Underfull 0 で組めること、
+  連続環境（2環境）の行間接続。
+- `strict-inputmodel`: 許可構成要素すべて（CJK 連続・欧文 word・空白・
+  `\inhibitglue`・`\hspace`・`\kern`・`\penalty`・`\allowbreak`・
+  inline math・`\mbox`・`\makebox[c]`・hyperref リンク・label）が
+  エラー 0 で itemize されること（INM-PASS）。
+- `strict-errors`: 未知マクロ（TeX 自身の Undefined control sequence）、
+  環境内 `\footnote`（`footnote~is~not~allowed~inside~jlreqparagraph`）、
+  環境内 `\[`（`display~math~is~not~allowed~inside~jlreqparagraph`）の
+  具体的エラー文言（-halt-on-error なしで実行し grep）。
+- `strict-integration`: 非ゼロ rightskip/parskip 下、looseness・
+  emergencystretch、parshape（3行形状）、通常段落との前後接続
+  （ページ跨ぎを含む長文）で INTEG-PASS + Overfull 0。
+- `strict-tate`: 縦組みでの厳密段落（TATE-STRICT-PASS、エラー 0）。
+
+**実装状況の注記（2026-10-25 更新）**: 配分エンジンを実装した
+（境界表の記録・行内 node 逆走・tier 分類・sp 充填計算まで;
+`\jlreqpar@distphase` ゲート付き）。tier 縮尺は ltj 準拠
+（JFM×10/kanjiskip 0/xkanjiskip +10,−30/explicit 50）。行 box への
+再適用（再構成）と、bare char/whatsit/ins を含む行の配分
+（現状 distskip: native 行のまま）は次段階。最終行 parfillskip
+候補選択の数値検証も次段階。
 
 ## 一括テスト実行
 

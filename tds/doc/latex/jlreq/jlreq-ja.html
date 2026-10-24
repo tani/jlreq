@@ -1,0 +1,841 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="generator" content="pandoc">
+  <title>jlreq</title>
+  <style>
+    .markdown-body {
+      padding-top: 10px;
+      padding-bottom: 10px;
+      background-color: white;
+      padding: 30px;
+      line-height: 170%;
+    }
+    h1{
+      font-size: 200%;
+    }
+    h2{
+      border-style: solid;
+      border-width: 0 0 0.1em 0em;
+      padding: 0 0 0.2em 0em;
+      border-color: #EEEEEE;
+      margin-top: 2em;
+    }
+    h3{
+      border-style: solid;
+      border-width: 0 0 0 0.5em;
+      padding: 0 0 0 0.5em;
+      border-color: #EEEEEE;
+      margin-top: 2em;
+    }
+    code{
+      white-space: pre;
+      font-weight: normal;
+      background-color: #F4F4F4;
+      border-color: #F4F4F4;
+      border-style: solid;
+      border-width: .2em .5em;
+      border-radius: .2em;
+    }
+    pre{
+      background-color: #F8F8F8;
+      border-color: #F8F8F8;
+      border-width: 1em;
+      border-style: solid;
+      border-radius: .5em;
+      padding: 0;
+      margin: 0;
+      line-height: 130%;
+    }
+    pre code{
+      background-color: #F8F8F8;
+      border-style: none;
+    }
+    div.sourceCode { overflow-x: auto; text-indent: 0em;}
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.fl { color: #40a070; } /* Float */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.st { color: #4070a0; } /* String */
+    code span.co { color: #008000; } /* Comment */
+    code span.ot { color: #007020; } /* Other */
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.fu { color: #0040FF; } /* Function */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+    code span.cn { color: #880000; } /* Constant */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.im { } /* Import */
+    code span.va { color: #19177c; } /* Variable */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.op { color: #666666; } /* Operator */
+    code span.bu { color: #0040FF; } /* BuiltIn */
+    code span.ex { } /* Extension */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+  </style>
+</head>
+<body>
+<article class="markdown-body">
+<h1 id="jlreq">jlreq</h1>
+<h2 id="これは何">これは何？</h2>
+<p><a
+href="https://www.w3.org/TR/jlreq/?lang=ja">日本語組版処理の要件</a>の実装を試みる<a
+href="https://osdn.jp/projects/luatex-ja/wiki/FrontPage">LuaTeX-ja</a> /
+pLaTeX /
+upLaTeX用のクラスファイルと，それに必要なJFMの組み合わせです（pdfLaTeXは実験的に対応）．</p>
+<h2 id="提供されるもの">提供されるもの</h2>
+<p>クラスファイルjlreq.clsと，横書きLuaTeX-ja用のJFMであるjfm-jlreq.luaが用意されています．また，縦書きのJFMやpLaTeX
+/ upLaTeX用のJFMを生成するいくつかのスクリプトがあります．
+開発用に<code>tests/</code>（回帰・規則フィクスチャと一括テスト）と<code>tests/reference/</code>（参照エンジンの定量検証結果）も同梱されています．詳細は<code>docs/pdftex-tests.md</code>を参照してください．</p>
+<h2 id="インストール">インストール</h2>
+<p><code>make</code>で必要なJFMを生成してください．その後，</p>
+<ul>
+<li>*.tfm -&gt; $TEXMF/fonts/tfm/public/jlreq</li>
+<li>*.vf -&gt; $TEXMF/fonts/vf/public/jlreq</li>
+<li>jfm-jlreq.lua, jfm-jlreqv.lua, jfm-jlreq-jidori.lua
+jfm-jlreqv-jidori.lua -&gt; $TEXMF/tex/luatex/jlreq</li>
+<li>jlreq.cls, jlreq-helpers.sty -&gt; $TEXMF/tex/latex/jlreq</li>
+</ul>
+<p>と配置します．<code>make install</code>とすると，<span
+class="math inline"><em>T</em><em>E</em><em>X</em><em>M</em><em>F</em>=</span>TEXMFHOMEとしてこのコピーを行います．</p>
+<h2 id="動作環境">動作環境</h2>
+<p>pLaTeX / upLaTeX /
+LuaLaTeX上で動きます．以下のパッケージを内部で読み込みます．</p>
+<ul>
+<li>（常時）：lmodern</li>
+<li>（LuaLaTeX非利用時）：everyhook</li>
+<li>（LuaLaTeX利用時）：luatexja,luatexja-adjust</li>
+</ul>
+<p>リリース時点での最新版での動作を確認しています．</p>
+<h3 id="pdflatex実験的">pdfLaTeX（実験的）</h3>
+<p>pdfLaTeXでも横書き文書がコンパイルできます（実験的なサポート）．クラスオプションに
+<code>pdflatex</code>を渡すか，エンジンを自動判定させてください．内部でbxcjkjatype
+（CJKutf8・IPAex明朝/ゴシックType 1フォント）と実験的なバックエンド
+（jlreq-pdftex.sty）を読み込み，JFMに基づく文字間グルー・禁則・和欧文間隔を
+適用します．既知の制限:</p>
+<ul>
+<li>縦書き（<code>tate</code>）は実験的コア実装（shipout rotation
+構成）。読み・段方向・禁則・約物配置は検証済み。ページ家具・脚注・浮動体・縦中横・数式など一部機能は対象外で、ロード時警告に列挙されます（詳細は
+<code>docs/pdftex-tate-eval.md</code>）</li>
+<li>ぶら下げ組み（<code>-b</code>系変種のみ）と数式内和文（<code>\mathmc</code>/<code>\mathgt</code>、数式中の直接和文）は対応済み</li>
+<li>約物はJFMのクラス幅（半角など）で組まれ、グリフはJFMの配置指定に従って納まります（インク形状はplatex参照と一致）</li>
+<li><strong>厳密段落（優先順位付き伸縮）</strong>:
+<code>jlreqparagraph</code>
+環境（<code>\begin{jlreqparagraph}...\end{jlreqparagraph}</code>、引数なし・一環境一段落。pdfLaTeX
+バックエンドと一緒に自動読込）は段落パラメータを全件 snapshot し、native
+改行器で一度だけ改行した上で行ごとに回復・再構成し、JFM
+ペアグルーの優先順位付き伸縮を厳密に扱います。入力モデルは明示（和文連続・欧文単語・空白・<code>\inhibitglue</code>・<code>\hspace</code>/<code>\kern</code>/<code>\penalty</code>/<code>\allowbreak</code>・インライン数式・<code>\mbox</code>/<code>\makebox</code>・<code>\label</code>/ハイパーリンク）。環境内の別行立て数式・脚注・傍注は具体的エラーになります。詳細は
+<code>docs/pdftex-internals.md</code>（P11 節）。</li>
+</ul>
+<p>詳細は <code>docs/pdftex-compatibility.md</code>
+を参照してください．</p>
+<p>リリース時点での最新版での動作を確認しています．</p>
+<h2 id="使い方">使い方</h2>
+<p>通常通り</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode latex"><code class="sourceCode latex"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="bu">\documentclass</span>{<span class="ex">jlreq</span>}</span></code></pre></div>
+<p>とします．これで横書きのarticle相当の文書クラスとなります．エンジンは自動判定されますが，指定する場合はクラスオプションに<code>platex/uplatex/lualatex/pdflatex</code>のいずれかを渡してください．縦書きにするには<code>tate</code>オプションを渡します．また，reportやbook相当の文書クラスとするには，それぞれ<code>report</code>や<code>book</code>オプションを渡します．たとえば，縦書きの本を作成するには</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode latex"><code class="sourceCode latex"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="bu">\documentclass</span>[tate,book]{<span class="ex">jlreq</span>}</span></code></pre></div>
+<p>とします．</p>
+<p>その他，<code>oneside</code> / <code>twoside</code> /
+<code>onecolumn</code> / <code>twocolumn</code> / <code>titlepage</code>
+/ <code>notitlepage</code> / <code>draft</code> / <code>final</code> /
+<code>landscape</code> / <code>openright</code> / <code>openany</code> /
+<code>leqno</code> /
+<code>fleqn</code>というよくあるオプションを受け付けます．また<code>disablejfam</code>オプションを渡すと，和文フォントを数式用に登録しません．</p>
+<p>標準的な文書クラスと同じように中身を書くことができますが，次のような命令が追加
+/ 拡張されています．なお，本ドキュメントでは<a
+href="https://www.w3.org/TR/jlreq/?lang=ja">日本語組版処理の要件</a>における用語を断りなく使います．</p>
+<h3 id="jlreqsetup"><code>\jlreqsetup</code></h3>
+<p>設定用命令です．プリアンブルでしか使えません．文書に対する設定は，クラスオプションとして行うか<code>\jlreqsetup</code>を通じて行うかします．どちらで設定するかは設定項目によります．</p>
+<h3 id="section"><code>\section</code></h3>
+<p><code>\section*[running head]{見出し文字列}[副題]</code>というように，通常の書式に加えて副題を受け付けられるように拡張されています．その他，<code>\part</code>（articleのみ），<code>\chapter</code>（book/reportのみ），<code>\subsection</code>，<code>\subsubsection</code>も副題を受け付けます．</p>
+<h3 id="abstract環境"><code>abstract</code>環境</h3>
+<p>プリアンブルにもかけ，そのときは<code>\maketitle</code>とともに出力されます．二段組の場合は，段組にならず概要を出力することができます．ただし今では非推奨の方法です．<code>\jlreqsetup</code>で<code>abstract_with_maketitle=true</code>を指定して<code>\maketitle</code>よりも前に書くことで同様のことができます．</p>
+<h3 id="sidenote"><code>\sidenote</code></h3>
+<p>この命令は傍注の幅が正の時にのみ定義されます．デフォルトの基本版面ではこの幅は0に設定されています．従って<code>\sidenote</code>は定義されません．後の基本版面の設定を参考にしてください．</p>
+<p><code>\sidenote</code>は傍注（縦組みの場合は脚注）を出力します．内部では<code>\marginpar</code>を使っています．デフォルトでは<code>\footnote</code>と同様の書式となりますが，<code>\jlreqsetup</code>で<code>sidenote_type=symbol</code>が指定されている場合，その書式は<code>\sidenote{該当項目}{注}</code>となります．たとえば</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode latex"><code class="sourceCode latex"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>刊行できる<span class="fu">\sidenote</span>{原稿}{印刷などの方法により……}を入手する仕事である．</span></code></pre></div>
+<p>とします．後の説明も参照してください．</p>
+<h3 id="endnote"><code>\endnote</code></h3>
+<p>後注を指定します．<code>\footnote</code>と同様の書式です．デフォルトでは，注自身の出力は見出し直前に行われます．この動作は<code>\jlreqsetup</code>に<code>endnote_position</code>を渡すことで制御できます．詳しくは後の注関係の説明をご覧ください．また<code>\theendnotes</code>を実行するとその場に出力をします．</p>
+<h3 id="warichu"><code>\warichu</code></h3>
+<p>割注を出力します．行分割位置などは自動で計算されます．（複数回のコンパイルが必要．）<code>\warichu*</code>ではこれらの位置を手動で指定できます．書式は</p>
+<pre><code>\warichu*{(一行目前) &amp; (一行目後)\\ (二行目前) &amp; (二行目後)...}</code></pre>
+<p>です．<code>&amp;</code>が省略されている場合は自動で調整されます．</p>
+<h3 id="tatechuyoko"><code>\tatechuyoko</code></h3>
+<p>縦中横を出力します．<code>\tatechuyoko{&lt;中身&gt;}</code>とします．<code>\tatechuyoko</code>は縦書きでない場所で使うとエラーになりますが，<code>\tatechuyoko*</code>は縦書きでない場所ではそのまま出力されます．</p>
+<h3 id="jidori"><code>\jidori</code></h3>
+<p><code>\jidori{&lt;寸法&gt;}{&lt;中身&gt;}</code>により，中身を寸法の長さに字取りしたものを出力することができます．</p>
+<h3 id="akigumi"><code>\akigumi</code></h3>
+<p><code>\akigumi{&lt;寸法&gt;}{&lt;中身&gt;}</code>により，中身の文字間を寸法の長さとして空き組した結果を出力することができます．ただしLuaLaTeX利用時以外は正しい出力結果とはなりません．</p>
+<h3 id="jafontsize"><code>\jafontsize</code></h3>
+<p>和文フォントサイズを指定する<code>\fontsize</code>です．クラスオプションで<code>jafontscale=0.9</code>とされている場合，<code>\fontsize{9pt}{15pt}</code>とすると和文フォントのサイズは<code>8.1pt</code>となりますが，<code>\jafontsize{9pt}{15pt}</code>とすると<code>9pt</code>となります．（欧文フォントサイズは<code>10pt</code>となる．）なお，第二引数は<code>\fontsize</code>の第二引数と全く同じです．</p>
+<h3 id="-"><code>\　</code></h3>
+<p>全角空白（U+3000）一文字からなるマクロです．和字間隔を挿入します．LuaLaTeXでは<code>　</code>のみでも和字間隔を入力できます．</p>
+<h3 id="その他">その他</h3>
+<ul>
+<li><p>ルビや圏点はクラス自身では提供されません．<a
+href="https://github.com/zr-tex8r/PXrubrica">PXrubrica</a>または<code>luatexja-ruby</code>（LuaLaTeX，LuaTeX-jaパッケージに付属）を使うと良いかと思います．pdfLaTeX利用時はCJKパッケージの<code>ruby</code>（<code>\usepackage{ruby}</code>、オプション<code>overlap</code>/<code>nooverlap</code>/<code>CJK</code>/<code>latin</code>、パラメータ<code>\rubysize</code>/<code>\rubysep</code>）が使えます:
+実験的なpdfTeXバックエンドにはプロバイダ適合ファイル（<code>jlreq-pdftex-ruby.sty</code>、自動読み込み）が同梱され、プロバイダの<code>\ruby{本文}{ルビ}</code>をバックエンドの境界・状態機構に接続します——横組みではルビは本文の上、縦組みでは読み-frame右に付き、境界グルーは通常本文と同一のクラス表値、プロバイダ自身のoverlap判定も保存されます（詳細は<code>docs/pdftex-compatibility.md</code>）．</p></li>
+<li><p>pLaTeX /
+upLaTeX利用時はそれぞれ<code>zw</code>および<code>zh</code>に展開されるマクロ<code>\zw</code>と<code>\zh</code>が定義されます．LuaLaTeX利用時はLuaTeX-ja内で同名のマクロが定義されます．</p></li>
+<li><p>日本語組版処理の要件2.3.2.dによれば，横組みにおける二段組の最後のページの各段の行数は揃えることが望ましいとされていますが，この処理は行われません．<code>nidanfloat</code>パッケージを使い，</p>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode latex"><code class="sourceCode latex"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="bu">\usepackage</span>[balance]{<span class="ex">nidanfloat</span>}</span></code></pre></div>
+<p>とするとこの処理が行われます．ただし，最終ページでの<code>\newpage</code>や<code>\clearpage</code>が正しく動作しません．詳しくは<code>nidanfloat</code>パッケージのマニュアルをご覧ください．</p></li>
+<li><p>フォントを設定する機能は有していません．和文フォントは，LuaLaTeX利用時は<code>luatexja-fontspec</code>や<code>luatexja-preset</code>（いずれもLuaTeX-jaパッケージに付属）により設定することができます．dvipdfmxを使う場合は，<a
+href="https://github.com/zr-tex8r/PXchfon">PXchfon</a>での設定が可能です．</p></li>
+<li><p>和文間の空白（(u)pTeXでは<code>\kanjiskip</code>に，LuateX-jaでは<code>kanjiskip</code>パラメータに格納されているもの）は，デフォルトでは1/4文字分までの空きを許容した設定になっています．これは日本語組版処理の要件に従ったものですが，TeXでの機能の制限などもあり，場合によってはあまり適切ではない結果を生じることがあります．この値を変更する場合は，<code>\jlreqkanjiskip</code>を再定義してください．例えば，</p>
+<div class="sourceCode" id="cb6"><pre
+class="sourceCode latex"><code class="sourceCode latex"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="bu">\documentclass</span>{<span class="ex">jlreq</span>}</span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="fu">\renewcommand</span>{<span class="ex">\jlreqkanjiskip</span>}{0pt plus .1<span class="fu">\zw</span> minus .01<span class="fu">\zw</span>}</span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="kw">\begin</span>{<span class="ex">document</span>}</span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>（本文）</span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a><span class="kw">\begin</span>{<span class="ex">document</span>}</span></code></pre></div>
+<p>のようにします．和文と欧文の間の空白（(u)pTeXでは<code>\xkanjiskip</code>に，LuateX-jaでは<code>xkanjiskip</code>パラメータに格納されているもの）も同様に<code>\jlreqxkanjiskip</code>を再定義することで変更することができます．</p></li>
+<li><p><code>book</code>指定時に，クラスオプションとして<code>openany</code>を指定していても，<code>\mainmatter</code>の後に白ページが挿入されることがあります．これは標準のクラスファイルと挙動を合わせたものです．<code>\jlreqsetup{mainmatter_pagebreak=clearpage}</code>とすることで白ページが入らなくなりますが，デフォルトでは<code>\mainmatter</code>でページ数をリセットしますので，ページ数の偶奇の整合性がとれなくなる可能性があります．<code>\jlreqsetup{frontmatter_pagination={arabic,continuous}}</code>のようにして通しノンブルに変更することを検討してみてください．詳しくは下記の「前付きなど」を参照してください．</p></li>
+</ul>
+<h2 id="各種設計">各種設計</h2>
+<p>設計はクラスオプションまたは<code>\jlreqsetup</code>によりkeyval形式で行います．ただし，クラスオプションではLaTeXの実装により，本来可能な入力が受け付けられないケースがあります．多くの場合は空白を除くことにより解決します．</p>
+<p>以下では次の用法を使います．</p>
+<ul>
+<li><code>[A/B]</code>：AまたはBです．<code>[A/B/C]</code>等も同様．</li>
+<li><code>&lt;寸法&gt;</code>：TeXが認識する寸法です．簡単な式（<code>10pt+10pt</code>のような）を使うこともできます．また，クラスオプションでは，場合によっては次のような特殊な値を使うこともできます．（これらはpLaTeX
+/
+upLaTeXではもとから利用可能ですが，LuaLaTeXでも利用可能なように処理されています．）<code>\jlreqsetup</code>内のような場所では，常に<code>\zw</code>や<code>\zh</code>により全角幅が記述できます．以下，たとえば<code>Q</code>，<code>H</code>が利用可能な場合は<code>&lt;寸法;Q,H&gt;</code>のように記述します．
+<ul>
+<li><code>Q</code>，<code>H</code>：0.25mmと解釈されます．</li>
+<li><code>zw</code>, <code>zh</code>：全角幅として解釈されます．</li>
+</ul></li>
+<li><code>&lt;コード&gt;</code>：LaTeXのコードです．</li>
+<li><code>&lt;フォント設定コード&gt;</code>：<code>\Large</code>や<code>\bfseries</code>のようなフォント設定の命令です．<code>\Large\bfseries</code>のように複数指定することもできます．</li>
+<li><code>&lt;カウンタ名&gt;</code>: LaTeXのカウンタの名前です．</li>
+</ul>
+<h3 id="基本版面">基本版面</h3>
+<p>クラスオプションです．</p>
+<ul>
+<li><code>paper=[&lt;紙サイズ名&gt;/{&lt;寸法&gt;,&lt;寸法&gt;}]</code>：紙サイズです．紙サイズ名は<code>a0paper</code>から<code>a10paper</code>，<code>b0paper</code>から<code>b10paper</code>，<code>c2paper</code>から<code>c8paper</code>を指定できます．B列はISO
+B列です．JIS
+B列を指定する場合は，<code>b0j</code>から<code>b10j</code>の対応するものを指定してください．また，<code>letterpaper</code>，<code>legalpaper</code>，<code>executivepaper</code>が指定できます．さらに，<code>{&lt;横&gt;,&lt;縦&gt;}</code>と直接寸法を指定することもできます．</li>
+<li><code>fontsize=&lt;寸法;Q,H&gt;</code>：欧文フォントサイズ．デフォルトは10pt．</li>
+<li><code>jafontsize=&lt;寸法;Q,H&gt;</code>：和文フォントサイズ．</li>
+<li><code>jafontscale=&lt;実数値&gt;</code>：欧文フォントと和文フォントの比（和文
+/
+欧文）．<code>fontsize</code>と<code>jafontsize</code>が両方指定されている場合は無視される．デフォルトは1．</li>
+<li><code>line_length=&lt;寸法;zw,zh&gt;</code>：一行の長さ．デフォルトは字送り方向の紙幅の0.75倍．実際の値は一文字の長さの整数倍になるように補正されます．</li>
+<li><code>number_of_lines=&lt;自然数値&gt;</code>：一ページの行数．デフォルトは行送り方向の紙幅の0.75倍になるような値．</li>
+<li><code>gutter=&lt;寸法;zw,zh&gt;</code>：のどの余白の大きさ．
+<ul>
+<li><code>tate</code>無指定時は奇数ページ左，偶数ページ右の余白</li>
+<li><code>tate</code>指定時は奇数ページ右，偶数ページ左の余白</li>
+<li><code>twoside</code>が指定されていない時は，常に奇数ページ扱いで余白が設定される</li>
+</ul></li>
+<li><code>fore-edge=&lt;寸法;zw,zh&gt;</code>：小口（のどでない方）の余白の大きさ．「日本語組版処理の要件」にある方法で余白を指定する限り使われることはありませんが，便利なこともあるので実装されています．</li>
+<li><code>head_space=&lt;寸法;zw,zh&gt;</code>：天の空き量．デフォルトは中央寄せになるような値．</li>
+<li><code>foot_space=&lt;寸法;zw,zh&gt;</code>：地の空き量．デフォルトは中央寄せになるような値．</li>
+<li><code>baselineskip=&lt;寸法;Q,H,zw,zh&gt;</code>：行送り．デフォルトは<code>jafontsize</code>の1.7倍．</li>
+<li><code>linegap=&lt;寸法;Q,H,zw,zh&gt;</code>：行間．</li>
+<li><code>headfoot_sidemargin=&lt;寸法;zw,zh&gt;</code>：柱やノンブルの左右の空き．</li>
+<li><code>column_gap=&lt;寸法;zw,zh&gt;</code>：段間（<code>twocolumn</code>指定時のみ）．</li>
+<li><code>sidenote_length=&lt;寸法;zw,zh&gt;</code>：傍注の幅を指定します．</li>
+</ul>
+<h3 id="組み方">組み方</h3>
+<p>クラスオプションです．</p>
+<ul>
+<li><code>open_bracket_pos=[zenkaku_tentsuki/zenkakunibu_nibu/nibu_tentsuki]</code>：始め括弧が行頭に来た際の配置方法を指定します．それぞれ段落開始全角折り返し行頭天付き（デフォルト），段落開始全角二分折り返し行頭二分，段落開始二分折り返し行頭天付きを意味します．</li>
+<li><code>hanging_punctuation</code>：ぶら下げ組をします．</li>
+</ul>
+<h3 id="逆ノンブル">逆ノンブル</h3>
+<p>クラスオプションです．</p>
+<ul>
+<li><code>use_reverse_pagination</code>：逆ノンブルの機能を利用可能にします．<code>jlreqreversepage</code>という「読み取り専用のカウンタ」が定義されます．（本物のカウンタではありません．）<code>\arabic</code>などの命令や<code>\value</code>が適用可能です．また<code>\thejlreqreversepage</code>が<code>\arabic{jlreqreversepage}</code>として定義されます．</li>
+</ul>
+<h3 id="注関係">注関係</h3>
+<p><code>\jlreqsetup</code>で指定します．</p>
+<ul>
+<li><code>reference_mark=[inline/interlinear]</code>：合印の配置方法を指定します．<code>inline</code>にすると該当項目の後ろの行中に配置します．<code>interlinear</code>を指定すると該当項目の上（横組）または右（縦組）に配置します．</li>
+<li><code>footnote_second_indent=&lt;寸法&gt;</code>:
+脚注（横書き時）または傍注（縦書き時）の二行目以降の字下げ量を指定します．一行目からの相対字下げ量です．</li>
+<li><code>sidenote_type=[number/symbol]</code>：傍注と本文との対応の方法を指定します．<code>number</code>が規定で，注の位置に通し番号が入り，それにより対応が示されます．<code>symbol</code>とすると，注の位置に特定の記号が入り，また注がついている単語が強調されます．</li>
+<li><code>sidenote_symbol=&lt;コード&gt;</code>：<code>sidenote_symbol=symbol</code>の時に，注の位置に入る記号．デフォルト＊</li>
+<li><code>sidenote_keyword_font=&lt;フォント設定コード&gt;</code>：<code>sidenote_symbol=symbol</code>の時に，注のついている単語のフォント指定．デフォルトは無し（強調しない）</li>
+<li><code>endnote_counter=&lt;カウンタ名&gt;</code>:
+後注に使うカウンタ名です．デフォルトは<code>endnote_counter=footnote</code>．</li>
+<li><code>endnote_second_indent=&lt;寸法&gt;</code>:
+後柱の二行目以降の字下げ量を指定します．一行目からの相対字下げ量です．</li>
+<li><code>endnote_position=[headings/paragraph/{_&lt;見出し名1&gt;,_&lt;見出し名2&gt;,...}]</code>：後注の出力場所を指定します．<code>headings</code>は各見出しの直前（デフォルト），<code>paragraph</code>は改段落の際に出力します．また，<code>endnote_position={_chapter,_section}</code>とすると，<code>\chapter</code>と<code>\section</code>の直前に出力します．<code>&lt;_見出し名&gt;</code>を指定するためには，対象の見出しが本クラスファイルの機能を使って作られていなければいけません．</li>
+<li><code>warichu_opening=&lt;コード&gt;</code>,
+<code>warichu_closing=&lt;コード&gt;</code>：それぞれ，割注の前と後ろに挿入されます．デフォルトは<code>（</code>と<code>）</code>です．</li>
+</ul>
+<h3 id="キャプション">キャプション</h3>
+<p>図表のキャプションを<code>\jlreqsetup</code>で変更できます．全ての設定で，各環境ごとの設定をすることができます．例えば<code>caption_font=\normalsize,table=\Large</code>とすると，table環境内では<code>\Large</code>が適用され，そのほかの環境内では<code>\normalsize</code>が適用されます．他の設定も同様です．</p>
+<ul>
+<li><code>caption_font=&lt;フォント設定コード&gt;</code>：キャプション自身のフォントを指定します．</li>
+<li><code>caption_label_font=&lt;フォント設定コード&gt;</code>：キャプションのラベルのフォントを指定します．</li>
+<li><code>caption_after_label_space=&lt;寸法&gt;</code>：ラベルとキャプションの間の空きを指定します．</li>
+<li><code>caption_label_format=&lt;コード&gt;</code>：ラベルの書式を指定します．<code>caption_label_format={#1：}</code>のようにします．<code>#1</code>が「図1」のような番号に置換されます．</li>
+<li><code>caption_align=[left/right/center/bottom/top]</code>：キャプションの場所を指定します．{center,*left}のようにすると，通常は中央配置だがキャプションが大きいときには左に配置されます．</li>
+</ul>
+<h3 id="引用">引用</h3>
+<p><code>quote / quotation / verse</code>環境の挙動を<code>\jlreqsetup</code>で指定できます．</p>
+<ul>
+<li><code>quote_indent=&lt;寸法&gt;</code>：字下げを指定します．デフォルトは2\zwです．一行の長さが文字サイズの整数倍になるように調整されます．</li>
+<li><code>quote_end_indent=&lt;寸法&gt;</code>：字上げを指定します．デフォルトは0\zwです．</li>
+<li><code>quote_beforeafter_space=&lt;寸法&gt;</code>：前後の空きを指定します．<code>quote_beforeafter_space=1\baselineskip</code>とすると一行あきます．</li>
+<li><code>quote_fontsize=[normalsize/small/footnotesize/scriptsize/tiny]</code>：フォントサイズを指定します．</li>
+</ul>
+<h3 id="箇条書き">箇条書き</h3>
+<p><code>\jlreqsetup</code>で指定します．</p>
+<ul>
+<li><code>itemization_beforeafter_space=&lt;寸法&gt;</code>：箇条書きの前後の空きを指定します．<code>itemization_beforeafter_space={i=&lt;寸法&gt;}</code>とするとトップレベルのみに設定を行います．<code>itemization_beforeafter_space={0pt,i=10pt,ii=5pt}</code>とすれば，レベル1の箇条書きに10ptを，レベル2のそれに5ptを，それ以外には0ptを設定します．レベルは上記のように小文字ローマ数字で指定します．</li>
+<li><code>itemization_itemsep=&lt;寸法&gt;</code>：項目同士の空きを指定します．</li>
+</ul>
+<h3 id="前付きなど">前付きなど</h3>
+<p><code>\frontmatter</code> / <code>\mainmatter</code> /
+<code>\backmatter</code> /
+<code>\appendix</code>での処理を<code>\jlreqsetup</code>で指定できます．</p>
+<ul>
+<li><code>frontmatter_pagebreak=[cleardoublepage/clearpage/]</code>：<code>\frontmatter</code>実行時の改ページを実行する命令名を指定します．空にすると何もしません．</li>
+<li><code>frontmatter_counter={&lt;カウンタ名&gt;={value=&lt;値&gt;, the=&lt;コード&gt;, restore=[true/false]},...}</code>：<code>\frontmatter</code>時でのカウンタの操作を指定します．例えば<code>chapter={value=0,the={[\arabic{chapter]}}</code>とすると，<code>chapter</code>カウンタの値が<code>0</code>になり，<code>\thechapter</code>が<code>[\arabic{chapter}]</code>となります．デフォルトでは<code>\mainmatter</code>時に値と<code>\the&lt;カウンタ名&gt;</code>の定義を戻しますが，<code>restore=false</code>とするとこの動きが抑制されます．</li>
+<li><code>frontmatter_heading={&lt;見出し命令名&gt;={&lt;設定&gt;},...}</code>：見出し命令の動きを変更します．<code>\Delare***Heading</code>で指定できる項目の他以下を受け付けます．
+<ul>
+<li><code>heading_type=[Tobira/Block/Runin/Cutin/Modify]</code>：見出しの種類です．<code>Modify</code>が指定された場合は<code>\ModifyHeading</code>での変更となります．</li>
+<li><code>heading_level=&lt;数値&gt;</code>：見出し命令のレベルを設定します．指定されなかった場合は，<code>\frontmatter</code>実行時の値が使われます．<code>heading_type=Modify</code>の時は無視されます．</li>
+<li><code>restore=[true/false]</code>：<code>true</code>が指定されると，<code>\mainmatter</code>で元の定義を復帰します．デフォルトは<code>true</code>です．</li>
+</ul></li>
+<li><code>frontmatter_pagestyle={&lt;ページスタイル名&gt;[,restore=[true/false]]}</code>：<code>\frontmatter</code>実行時にここで指定されたページスタイルへと切り替えます．デフォルトでは<code>\mainmatter</code>時にもとのページスタイルに戻しますが，<code>restore=false</code>を指定すると戻しません．</li>
+<li><code>frontmatter_pagination={&lt;ページ番号指定&gt;[,continuous,independent]}</code>：ページ番号の出力形式を，<code>frontmatter_pagination=roman</code>のようにLaTeXの命令名で指定します．更に<code>continuous</code>が指定されると通しノンブルとなります．<code>independent</code>で別ノンブルです．</li>
+<li><code>frontmatter_precode=&lt;コード&gt;</code>：<code>\frontmatter</code>時に最初に実行されるコードです．</li>
+<li><code>frontmatter_postcode=&lt;コード&gt;</code>：<code>\frontmatter</code>時に最後に実行されるコードです．</li>
+</ul>
+<p><code>frontmatter</code>を<code>mainmatter</code>や<code>backmatter</code>，<code>appendix</code>へと変えた設定も存在します．ただし，以下のような違いがあります．</p>
+<ul>
+<li><code>restore=[true/false]</code>は無効な設定です．</li>
+<li><code>mainmatter_pagination</code>に<code>continuous</code>と<code>independent</code>は指定できません．</li>
+<li><code>appendix_pagebreak</code>，<code>appendix_pagestyle</code>，<code>appendix_pagination</code>はありません．</li>
+</ul>
+<p>クラスオプションに<code>book</code>をしているときには，デフォルトでは<code>frontmatter_heading</code>に<code>chapter={number=false, restore = true}</code>および<code>backmatter_heading = {chapter = {number = false}}</code>を指定しています．したがって，<code>\chapter</code>を窓見出しに変更している場合はエラーが発生しますので，必要に応じて設定をし直してください．</p>
+<h3 id="概要">概要</h3>
+<ul>
+<li><code>abstract_with_maketitle=[true/false]</code>：abstract環境が<code>\maketitle</code>に先行して書かれた場合，その中身を<code>\maketitle</code>とともに遅延します．二段組みの場合でも一段で出力されます．デフォルトは<code>false</code>です．<code>article</code>および<code>report</code>時のみ．</li>
+</ul>
+<h2 id="見出し">見出し</h2>
+<p>新しい見出しを<code>\New***Heading</code>という命令で作ることができます（***には見出しの種類に応じた文字列が入る）．書式はすべて</p>
+<pre><code>\New***Heading{&lt;命令名&gt;}{&lt;レベル&gt;}{&lt;設定&gt;}</code></pre>
+<p>となっています．また，<code>\Renew***Heading</code>，<code>\Provide***Heading</code>，<code>\Declare***Heading</code>も同時に用意されます．それぞれ</p>
+<ul>
+<li><code>\Renew***Heading</code>：指定した名前の命令が定義されていなければエラー．</li>
+<li><code>\Provide***Heading</code>：指定した名前の命令が定義されていない場合に限り見出し命令の定義が行われる．</li>
+<li><code>\Declare***Heading</code>：指定した名前の命令が定義されているか否かによらず新しく見出し命令を定義する．</li>
+</ul>
+<p>となっています．</p>
+<h3 id="扉見出し">扉見出し</h3>
+<p><code>\NewTobiraHeading</code>で作成します．通常のクラスファイルにおける<code>\section</code>等と同じ書式の命令ができます．設定は以下の通り．</p>
+<ul>
+<li><code>type=[han/naka]</code>：<code>han</code>だと半扉見出しを，<code>naka</code>だと中扉見出しを作ります．</li>
+<li><code>pagestyle=&lt;ページスタイル名&gt;</code>：見出し箇所のページスタイルを指定します．</li>
+<li><code>label_format=&lt;コード&gt;</code>：ラベルを出力する命令を指定します．たとえば<code>label_format={第\thechapter 章}</code>のように指定します．</li>
+<li><code>format=&lt;コード&gt;</code>：実際に出力する書式を指定します．<code>format={\null\vfil {\Huge\bfseries #1#2}}</code>のようにします．<code>#1</code>はラベルに，<code>#2</code>は見出し文字列に置き換えられます．この中では<code>\jlreqHeadingLabel</code>，<code>\jlreqHeadingText</code>という命令が利用可能です．いずれも引数を一つとる命令で，それぞれラベル，見出し文字列が空ならば空に，そうでなければ与えられた引数自身を出力します．例えば<code>format={[\jlreqHeadingLabel{Label=#1}]}</code>と指定されていれば，ラベルが空でない時には<code>[Label=&lt;ラベル&gt;]</code>を，そうでなければ<code>[]</code>を出力します．</li>
+<li><code>number=[true/false]</code>：採番を行うかを指定します．ただし，<code>number=false</code>の場合でも対応するカウンタは定義されます．また<code>\the&lt;カウンタ名&gt;</code>の変更もされないので，必要ならば再定義が必要になります．</li>
+</ul>
+<h3 id="別行見出し">別行見出し</h3>
+<p><code>\NewBlockHeading</code>で作成します．<code>\&lt;命令名&gt;*[running head]{見出し文字列}[副題]</code>という書式の命令を作成します．設定は以下の通り．</p>
+<h4 id="書式関連">書式関連</h4>
+<ul>
+<li><code>font=&lt;フォント設定コード&gt;</code>：見出しのフォントを指定します．</li>
+<li><code>subtitle_font=&lt;フォント設定コード&gt;</code>：副題のフォントを指定します．</li>
+<li><code>label_format=&lt;コード&gt;</code>：ラベルのフォーマットを指定します．<code>label_format={第\thechapter 章}</code>などのようにします．</li>
+<li><code>subtitle_format=&lt;コード&gt;</code>：副題のフォーマットを指定します．<code>subtitle_format={「#1」}</code>のようにします．<code>#1</code>は副題自身に置き換えられます．</li>
+<li><code>format=&lt;コード&gt;</code>：見出し全体のフォーマットを指定します．<code>#1</code>がラベル，<code>#2</code>が見出し文字列，<code>#3</code>が副題に置き換えられます．内部では<code>\jlreqHeadingLabel</code>，<code>\jlreqHeadingText</code>，<code>\jlreqHeadingSubtitle</code>という命令が利用可能です．いずれも引数を一つとる命令で，それぞれラベル，見出し文字列，副題が空ならば空に，そうでなければ与えられた引数自身を出力します．例えば<code>format={[\jlreqHeadingLabel{Label=#1}]}</code>と指定されていれば，ラベルが空でない時には<code>[Label=&lt;ラベル&gt;]</code>を，そうでなければ<code>[]</code>を出力します．なお，実際に<code>#1</code>が置き換えられるのはラベル自身ではなく，それに空きの調整などが入ったコードです．従って，予期しない結果を得ることもあり得ます．<code>#2</code>，<code>#3</code>も同様です．</li>
+</ul>
+<h4 id="インデント関連">インデント関連</h4>
+<ul>
+<li><code>align=[left/center/right]</code>：見出し位置の横方向の配置場所を指定します．</li>
+<li><code>indent=&lt;寸法&gt;</code>：見出し全体の字下げ量を指定します．</li>
+<li><code>end_indent=&lt;寸法&gt;</code>：見出し全体の字上げ量を指定します．</li>
+<li><code>after_label_space=&lt;寸法&gt;</code>：ラベル後，見出し文字列までの空きを指定します．</li>
+<li><code>second_heading_text_indent=[&lt;寸法&gt;/{&lt;寸法&gt;,&lt;寸法&gt;}]</code>：見出し文字列の二行目以降のインデントを指定します．見出し文字列一行目の頭を起点として指定しますが，<code>second_heading_text_indent=*1\zw</code>のように先頭に<code>*</code>をつけるとラベルの頭を起点としての指定になります．また，<code>second_heading_text_indent={&lt;ラベルがある時&gt;,&lt;ラベルがない時&gt;}</code>という指定をすると，ラベルの有無に応じて値を変更することができます．<code>&lt;ラベルがある時&gt;</code>の指定ではやはり<code>*</code>を使うことができます．</li>
+<li><code>subtitle_indent=&lt;寸法&gt;</code>：副題のインデント量を指定します．見出し文字列の一行目を起点として指定します．ただし，<code>subtitle_indent=*1\zw</code>のように先頭に<code>*</code>をつけるとラベルの頭を起点としての指定になります．<code>subtitle_break=true</code>の時のみ有効です．</li>
+</ul>
+<h4 id="その他-1">その他</h4>
+<ul>
+<li><code>subtitle_break=[true/false]</code>：見出し文字列と副題の間を改行するか指定します．</li>
+<li><code>allowbreak_if_evenpage=[true/false]</code>：見出しが偶数ページにあった場合，その直後の改ページを許可します．</li>
+<li><code>pagebreak=[clearpage/cleardoublepage/clearcolumn/nariyuki/begin_with_odd_page/begin_with_even_page]</code>：見出し直前の改ページを指定します．それぞれ，改ページ，<code>\cleardoublepage</code>実行，改段，なりゆき，奇数ページ開始，偶数ページ開始，です．</li>
+<li><code>pagestyle=&lt;ページスタイル名&gt;</code>：見出し箇所のページスタイルを指定します．</li>
+<li><code>afterindent=[true/false]</code>：見出し直後の段落の字下げを行うかを指定します．</li>
+<li><code>column_spanning=[true/false]</code>：
+段抜きの見出しにします．<code>pagebreak=nariyuki</code>または<code>pagebreak=clearcolumn</code>の時には無視されます．</li>
+<li><code>number=[true/false]</code>：採番を行うかを指定します．<code>\NewTobiraHeading</code>と同様の注意が必要です．</li>
+</ul>
+<h4 id="行取り">行取り</h4>
+<p>行取りの指定は以下のいずれかの方法で行うことができます．</p>
+<ul>
+<li>行数を指定し，その中央に配置します．<code>lines=&lt;自然数値&gt;</code>により行数を指定します．<code>before_lines=&lt;自然数値&gt;</code>や<code>after_lines=&lt;自然数値&gt;</code>により，さらに前後に追加する行数を指定します．たとえば<code>lines=3,after_lines=1</code>とすれば，四行の中に配置され，前の空きよりも後ろの空きの方が一行分大きくなります．<code>before_lines</code>により指定された空きはページ頭には入りませんが，<code>before_lines=*1</code>というように<code>*</code>を先頭につけると常に入るようになります．</li>
+<li>行数と，前後いずれかの空きを指定します．<code>lines=&lt;自然数値&gt;</code>により行数を，<code>before_space=&lt;寸法&gt;</code>または<code>after_space=&lt;寸法&gt;</code>のいずれかの指定によりそれぞれ前または後ろの空きを指定します．</li>
+<li>前後の空きを指定します．<code>before_space=&lt;寸法&gt;</code>および<code>after_space=&lt;寸法&gt;</code>を指定します．</li>
+</ul>
+<h4 id="連続して掲げる見出しの行取り">連続して掲げる見出しの行取り</h4>
+<p><code>\SetBlockHeadingSpaces</code>により，見出しが連続して掲げられたときの行取りを設定することができます．<code>\SetBlockHeadingSpaces</code>は</p>
+<div class="sourceCode" id="cb8"><pre
+class="sourceCode latex"><code class="sourceCode latex"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="fu">\SetBlockHeadingSpaces</span>{</span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>  {_part{lines=3,before_lines=1},_section{lines=2},_subsection{lines=2}}</span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>  [lines=5]{_section,23pt,_subsection,16pt}</span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div>
+<p>のように使います．この意味は次の通りです．</p>
+<ul>
+<li><code>\part</code>，<code>\section</code>，<code>\subsection</code>という順番で見出しが掲げられていて，その前後が見出しでない場合は，<code>\part</code>は三行取り＋前に一行空き，<code>\section</code>と<code>\subsection</code>は二行取りとなります．</li>
+<li><code>\section</code>，<code>\subsection</code>という順番で見出しが掲げられていて，その前後が見出しでない場合は，全体で五行取りとし，<code>\section</code>と<code>\subsection</code>との間に<code>23pt</code>の空き，<code>\subsection</code>の後に<code>16pt</code>の空きを入れます．</li>
+</ul>
+<p>個々の設定は以下のようになります．</p>
+<ul>
+<li>各々の<code>{}</code>内には<code>_&lt;見出し命令名&gt;</code>か<code>&lt;寸法&gt;</code>をカンマ区切りで並べます．</li>
+<li>先頭に<code>[]</code>で囲まれた設定を追加できます．これは連続して掲げられた見出し全体への設定となります．<code>lines / before_lines / after_lines / before_space / after_space</code>が利用可能です．各々の意味は上述の行取り指定と同じです．</li>
+<li>寸法はそのまま空き量を表します．</li>
+<li><code>_&lt;見出し命令名&gt;</code>の後に<code>{}</code>で囲まれた設定を追加することで，その見出しの空き量を設定します．設定しない場合は前後に空きが入りません．</li>
+<li>見出しに対する<code>{}</code>で囲まれた設定内では，<code>lines / before_lines / after_lines / before_space / after_space</code>が利用可能です．各々の意味は上述の行取り指定と同じです．</li>
+<li><code>{}</code>で囲まれた部分を<code>*</code>のみにすると（例えば<code>_section{*}</code>とすると）単独で掲げた場合と同じ設定を使います．</li>
+</ul>
+<p>なお，見出しが連続しているかは単純に別行見出しの命令が並んで書かれているかのみで判断します．従ってそれらの命令間に出力には関係しないような命令が挟まっていたとしても，見出しが連続して掲げられているとは判断されません．ただし，見出し命令の間に空白，改行または<code>\label[&lt;オプション&gt;]{&lt;引数&gt;}…{&lt;引数&gt;}</code>という形のもののみが挟まれている場合は，見出しが連続していると判断されます．</p>
+<h3 id="同行見出し">同行見出し</h3>
+<p><code>\NewRuninHeading</code>で作成します．通常の文書クラスにおける<code>\section</code>と同様の，<code>\&lt;命令名&gt;*[running head]{見出し文字列}</code>という書式の命令が作成されます．設定は以下の通り．</p>
+<ul>
+<li><code>font=&lt;フォント設定コード&gt;</code>：見出しのフォントを指定します．</li>
+<li><code>indent=&lt;寸法&gt;</code>
+見出し文字列全体の字下げ量を指定します．</li>
+<li><code>after_label_space=&lt;寸法&gt;</code>：ラベル後，見出し文字列までの空きを指定します．</li>
+<li><code>label_format=&lt;コード&gt;</code>：ラベルのフォーマットを指定します．<code>label_format={\theparagraph}</code>などのようにします．</li>
+<li><code>after_space=&lt;寸法&gt;</code>：見出しと本文との間の空きを指定します．</li>
+<li><code>number=[true/false]</code>：採番を行うかを指定します．<code>\NewTobiraHeading</code>と同様の注意が必要です．</li>
+</ul>
+<h3 id="窓見出し">窓見出し</h3>
+<p><code>\NewCutinHeading</code>で作成します．<code>\&lt;命令名&gt;{見出し文字列}</code>という書式の命令を作成します．設定は以下の通り．</p>
+<ul>
+<li><code>font=&lt;フォント設定コード&gt;</code>：見出しのフォントを指定します．</li>
+<li><code>indent=&lt;寸法&gt;</code>：見出し全体の字下げ量を指定します．</li>
+<li><code>after_space=&lt;寸法&gt;</code>：見出しと本文との間の空きを指定します．</li>
+<li><code>onelinemax=&lt;寸法&gt;</code>,
+<code>twolinemax=&lt;寸法&gt;</code>：見出し文字列の長さが<code>onelinemax</code>以下ならば一行で，<code>twolinemax</code>以下ならば二行で窓見出しを出力します．それ以上の場合は三行です．デフォルトはそれぞれ6文字，20文字の長さ．</li>
+</ul>
+<h3 id="modifyheading"><code>\ModifyHeading</code></h3>
+<p>既に（上のどれかを使い）定義された見出し命令の設定を変更します．たとえば</p>
+<div class="sourceCode" id="cb9"><pre
+class="sourceCode latex"><code class="sourceCode latex"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="fu">\ModifyHeading</span>{section}{lines=10}</span></code></pre></div>
+<p>とすると，<code>\section</code>のフォントなどの設定はそのままに，行取りのみが10行に変更されます．見出しの種類を変更することはできません．</p>
+<h3 id="saveheading"><code>\SaveHeading</code></h3>
+<p>見出し命令の定義を待避します．</p>
+<div class="sourceCode" id="cb10"><pre
+class="sourceCode latex"><code class="sourceCode latex"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="fu">\SaveHeading</span>{section}{<span class="fu">\restoresection</span>} <span class="co">% \sectionの中身を\restoresectionに待避．</span></span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a><span class="fu">\RenewBlockHeading</span>{section}{1}{font=……} <span class="co">% \sectionを新しく定義する．</span></span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>……</span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a><span class="fu">\restoresection</span> <span class="co">% \sectionの中身を元に戻す．</span></span></code></pre></div>
+<p>のように使います．</p>
+<h2 id="ページスタイル">ページスタイル</h2>
+<pre><code>\NewPageStyle{&lt;ページスタイル名&gt;}{&lt;設定&gt;}</code></pre>
+<p>によりページスタイルを定義することができます．<code>&lt;設定&gt;</code>はkeyval形式です．定義したページスタイルは<code>\pagestyle</code>で適用できます．設定は以下の通り．</p>
+<ul>
+<li><code>yoko</code>：横書きで上下に出力します．デフォルト．</li>
+<li><code>tate</code>：縦書きで小口側に出力します．</li>
+<li><code>running_head_font=&lt;フォント設定命令&gt;</code>：柱のフォントを指定します．</li>
+<li><code>nombre_font=&lt;フォント設定命令&gt;</code>：ノンブルのフォントを指定します．</li>
+<li><code>running_head_position</code>,
+<code>nombre_position</code>：柱とノンブルの位置を指定します．<code>yoko</code>か<code>tate</code>のどちらが指定されているかで指定方法が変わります．
+<ul>
+<li><code>yoko</code>指定時：<code>top-left</code>のように指定できます．<code>top / bottom / center / left / right / gutter / fore-edge</code>が使えます．<code>gutter</code>はのど，<code>fore-edge</code>は小口です．<code>left</code>，<code>right</code>の指定は奇数ページに対するものです．<code>twoside</code>が指定されている場合，偶数ページはその逆になります．</li>
+<li><code>tate</code>指定時：<code>&lt;寸法&gt;</code>が指定できます．<code>running_head_position</code>は柱の天からの下げ量を，<code>nombre_position</code>はノンブルの地からの上げ量を指定します．</li>
+</ul></li>
+<li><code>nombre=&lt;書式&gt;</code>：出力するノンブルを指定します．デフォルトは<code>\thepage</code>．</li>
+<li><code>odd_running_head=&lt;書式&gt;</code>，<code>even_running_head=&lt;書式&gt;</code>：それぞれ奇数ページ，偶数ページの柱を指定します．<code>_section</code>のように<code>_</code>から始まる名前を指定すると，対応する見出しを出力します．（<code>_section</code>だと現在の<code>\section</code>を出力する．）</li>
+<li><code>mark_format={[odd=&lt;書式&gt;/even=&lt;書式&gt;/_&lt;見出し命令名&gt;=&lt;書式&gt;],...}</code>：見出しを柱に出力する際のフォーマットを指定します．<code>mark_format={_section={節\thesection：#1},_chapter={第\thechapter 章\quad #1}}</code>のように指定します．見出し命令名の代わりに<code>odd</code>や<code>even</code>も指定でき，それぞれ奇数ページ/偶数ページの柱の書式になります．<code>\pagestyle</code>実行時に<code>\sectionmark</code>等を定義することで実現しています．</li>
+<li><code>nombre_ii=&lt;書式&gt;</code>：二つ目のノンブルを指定します．<code>nombre_ii_position</code>で場所指定，<code>nombre_ii_font</code>でフォント設定もできます．指定方法は<code>nombre</code>や<code>nombre_position</code>と同じです．<code>odd_running_head_ii</code>，<code>even_running_head_ii</code>，<code>running_head_ii_position</code>，<code>running_head_ii_font</code>もあります．<code>nombre_ii_position</code>や<code>running_head_ii_position</code>が指定されなかった場合，<code>yoko</code>指定時にはそれぞれ<code>nombre_position</code>および<code>running_head_position</code>と同じ位置に設定されます．<code>tate</code>指定時は一つ目のノンブルや柱に続く場所に表示されます．</li>
+<li><code>odd_head_format=&lt;書式&gt;</code>,
+<code>odd_foot_format=&lt;書式&gt;</code>,
+<code>even_head_format=&lt;書式&gt;</code>,
+<code>even_foot_format=&lt;書式&gt;</code>：ヘッダやフッタのフォーマットを指定します．<code>#1</code>がヘッダまたはフッタ全体に書き換えられます．ただし<code>#1</code>には位置調整用のコードが入っている場合もあるので，特に<code>\NewPageStyle</code>に<code>tate</code>を指定している場合には思うようにならないこともあります．例えば奇数ページのヘッダに罫線を引くためには<code>odd_head_format={\underline{\makebox[\jlreqyokoheadlength]{#1}}}</code>とするとよいでしょう．なお，ここで使った<code>\jlreqyokoheadlength</code>は本クラスファイル内で定義されているマクロで，ヘッダの横方向の長さを与えます．（フッタの長さも同じです．）縦方向の長さ，すなわち<code>\NewPageStyle</code>で<code>tate</code>が指定されている場合の長さは<code>\jlreqtateheadlength</code>で取得できます．</li>
+</ul>
+<p><code>\RenewPageStyle</code>，<code>\ProvidePageStyle</code>，<code>\DeclarePageStyle</code>もあります．<code>\ModifyPageStyle</code>により既存のページスタイルを改変することが可能です．</p>
+<h2 id="jfm">JFM</h2>
+<p>以下のような独自のJFMを使います．パッケージによっては，パッケージ独自のJFMや，また標準のJFMを使うように設定がし直される場合があります．本クラスファイルで使用するJFMを使う場合には，パッケージオプションなどを適切に与えて設定をする必要があります．</p>
+<h3 id="platexuplatexの場合">pLaTeX/upLaTeXの場合</h3>
+<p>JFMの名前は次の通りです．<code>[]</code>で囲まれている文字は設定により入ったり入らなかったりします．</p>
+<pre><code>[u][b][z]jlreq[g][-v]</code></pre>
+<p>それぞれの文字は以下の場合に入ります．</p>
+<ul>
+<li><code>u</code>: upLaTeX利用時</li>
+<li><code>b</code>:
+ぶら下げ組み利用時．（クラスオプションに<code>hanging_punctuation</code>が指定された時．）</li>
+<li><code>z</code>:
+行頭における開き括弧類の前の空きが，段落開始時が全角二分，折り返し時が二分の時．（クラスオプションに<code>open_bracket_pos=zenkakunibu_nibu</code>が指定された時．）</li>
+<li><code>g</code>: ゴシック用フォント．</li>
+<li><code>-v</code>: 縦書き用．</li>
+</ul>
+<p>例えば，ぶら下げ組みを利用せず，クラスオプションに<code>open_bracket_pos=zenkakunibu_nibu</code>が指定されいてるソースをpLaTeXで処理した場合，横書き明朝体には<code>zjlreq</code>という名前のJFMが使われます．</p>
+<h3 id="lualatexの場合">LuaLaTeXの場合</h3>
+<ul>
+<li>横書き用のJFMは<code>jlreq</code></li>
+<li>縦書き用のJFMは<code>jlreqv</code></li>
+</ul>
+<p>となります．ゴシックも同じJFMを使います．本クラスファイルは，LuaTeX-ja標準のJFMをこれらに変更します．</p>
+<h2 id="その他-2">その他</h2>
+<ul>
+<li>クラスオプション<code>jlreq_notes</code>が渡されると，日本語組版処理の記述と矛盾する設定が行われた場合に通知がされます．</li>
+</ul>
+<h2 id="jlreq-complements">jlreq-complements</h2>
+<p><code>jlreq-complements</code>パッケージはLaTeXのドキュメントクラスで標準的に提供される環境などをカスタマイズ可能なものに変更するパッケージです．以下のように使います．次のオプションを受け付けます．</p>
+<ul>
+<li><code>platex</code>, <code>uplatex</code>,
+<code>lulalatex</code>：エンジンの指定です．</li>
+<li><code>setupname=&lt;名前&gt;</code>：カスタマイズするための命令名を指定します．デフォルトでは<code>jlreqcomplementssetup</code>で，<code>jlreqcomplementssetup{&lt;設定項目&gt;}</code>とプリアンブルに書くことで設定できます．</li>
+</ul>
+<p><code>jlreq</code>内では<code>\usepackage[&lt;jlreq内で認識しているエンジン&gt;,setupname=jlreqsetup]{jlreq-complements}</code>相当で読み込みがされていますので，今までの<code>\jlreqsetup</code>で環境のカスタマイズをすることができます．なお，このように既存の名前を指定してうまく行くためにはもともとの命令と整合的である必要があります．通常は避けた方がよいでしょう．</p>
+<h3 id="thebibliography環境"><code>thebibliography</code>環境</h3>
+<ul>
+<li><code>thebibliography_heading=&lt;コード&gt;</code>：<code>thebibliography</code>環境の見出しを出力する命令を指定します．<code>thebibliography_heading={\section*{\refname}}</code>のように使います．</li>
+<li><code>thebibliography_after_label_space=&lt;寸法&gt;</code>：<code>thebibliography</code>環境における各項目のラベル以降の空きを指定します．</li>
+<li><code>thebibliography_indent=&lt;寸法&gt;</code>：<code>thebibliography</code>環境全体の字下げ量を指定します．</li>
+<li><code>thebibliography_mark=&lt;コード&gt;</code>：<code>thebibliography</code>環境の見出しを柱に登録するためのコードを指定します．</li>
+<li><code>thebibliography_precode=&lt;コード&gt;</code>，<code>thebibliography_postcode=&lt;コード&gt;</code>：それぞれ，<code>thebibliography</code>環境の前後に実行されるコードを指定します．</li>
+</ul>
+<h3 id="theindex環境"><code>theindex</code>環境</h3>
+<ul>
+<li><code>theindex_heading=&lt;コード&gt;</code>：<code>theindex</code>環境の見出しを出力する命令を指定します．</li>
+<li><code>theindex_mark=&lt;コード&gt;</code>：<code>theindex</code>環境の見出しを柱に登録するためのコードを指定します．</li>
+<li><code>theindex_twocolumn=[true/false]</code>：<code>theindex</code>環境を二段組みで出力するかを指定します．</li>
+<li><code>theindex_column_gap=&lt;寸法&gt;</code>：<code>theindex_twocolumn=true</code>の時の<code>theindex</code>環境内での段間を指定します．</li>
+<li><code>theindex_column_rule_width=&lt;寸法&gt;</code>：<code>theindex_twocolumn=true</code>の時の<code>theindex</code>環境内での<code>\columnseprule</code>の値を指定します．</li>
+<li><code>theindex_pagestyle=&lt;ページスタイル名&gt;</code>：<code>theindex</code>環境でのページスタイルを指定します．</li>
+<li><code>theindex_postcode=&lt;コード&gt;</code>，<code>theindex_precode=&lt;コード&gt;</code>：それぞれ，<code>theindex</code>環境の前後に実行されるコードを指定します．</li>
+</ul>
+<h3 id="定理環境">定理環境</h3>
+<ul>
+<li><code>theorem_beforeafter_space=&lt;寸法&gt;</code>：定理環境の前後の空きを指定します．</li>
+<li><code>theorem_label_font=&lt;フォント設定コード&gt;</code>：定理環境のラベル部分のフォントを設定します．</li>
+<li><code>theorem_font=&lt;フォント設定コード&gt;</code>：定理環境本体のフォントを設定します．</li>
+<li><code>theorem_indent=&lt;寸法&gt;</code>：定理環境本体の字下げ量を指定します．</li>
+<li><code>proof_label_font=&lt;フォント設定コード&gt;</code>：<code>amsthm</code>パッケージが読み込まれたときのみ有効な設定です．<code>proof</code>環境のラベルのフォントを指定します．</li>
+</ul>
+<p><code>amsthm</code>パッケージが読み込まれると，新しい定理スタイル<code>jlreq</code>が定義され，現在のスタイルが<code>jlreq</code>へと変更されます．このとき，上記設定はこの<code>jlreq</code>スタイルへの設定として機能します．</p>
+<h2 id="ライセンス">ライセンス</h2>
+<p>このパッケージは二条項BSDライセンスの元で配布されています．詳しくは<a
+href="LICENSE">LICENSE</a>をご覧ください．</p>
+<h2 id="履歴">履歴</h2>
+<ul>
+<li>2017-02-08
+<ul>
+<li>最初のバージョン．</li>
+</ul></li>
+<li>2017-02-17
+<ul>
+<li>いくつかバグを修正．</li>
+<li>クラスオプション/<code>\jlreqsetup</code>にいくつかのキーを追加/変更．</li>
+<li><code>abstract</code>環境を実装．</li>
+<li>パッケージを読み込んでいるだけのはやめた．</li>
+</ul></li>
+<li>2017-03-14
+<ul>
+<li>いくつかバグを修正．</li>
+<li>和文ファミリを欧文ファミリに従属させるようにした．</li>
+<li><code>\DeclareBlockHeading</code>にオプションをたくさん追加．</li>
+<li>quote環境などを調整するオプションを追加．</li>
+</ul></li>
+<li>2017-03-20
+<ul>
+<li>バグ修正．</li>
+<li><code>\footnote / \sidenote / \endnote</code>の周りに必要ならば空白を挿入するようにした．</li>
+</ul></li>
+<li>2017-04-04
+<ul>
+<li>バグ修正．</li>
+<li><code>\DeclarePageStyle</code>に<code>tate</code>と<code>font</code>オプションを追加．</li>
+</ul></li>
+<li>2017-04-29
+<ul>
+<li>バグ修正</li>
+<li><code>jafontsize</code>と<code>jafontscale</code>をクラスオプションに，また<code>\jafontsize</code>を追加．</li>
+<li><code>\tatechuyoko</code>を追加．</li>
+<li>クラスオプション<code>jlreq_warnings</code>を<code>jlreq_notes</code>に変更．</li>
+<li>いくつかのクラスオプションを<code>\jlreqsetup</code>に移動．</li>
+<li>いくつかのオプションを<code>\jlreqsetup</code>に追加．</li>
+<li>クラスオプションの<code>paper={&lt;縦&gt;,&lt;横&gt;}</code>を<code>paper={&lt;横&gt;,&lt;縦&gt;}</code>に変更．</li>
+</ul></li>
+<li>2017-06-11
+<ul>
+<li><code>plext</code> / <code>lltjext</code>の読み込みを中止．</li>
+<li><code>\DeclareBlockHeading</code>に<code>align</code>を追加．<code>indent=center</code>や<code>end_indent=center</code>を廃止．</li>
+<li>一部の<code>\kcatcode</code> (upLaTeX時) を変更．</li>
+</ul></li>
+<li>2017-08-13
+<ul>
+<li><code>column_spanning</code>を<code>\DeclareBlockHeading</code>に追加．</li>
+<li>ページレイアウトにおける「本文の長さ」に傍注の長さを入れるようにした．</li>
+<li>傍注の長さのデフォルトを0とした．</li>
+<li>傍注の長さが0の時には<code>\sidenote</code>を定義しないようにした．</li>
+<li>和字間隔を挿入する命令を追加．</li>
+</ul></li>
+<li>2017-08-29
+<ul>
+<li>縦書きでも著者名が横書きで出てしまうバグを修正．</li>
+</ul></li>
+<li>2017-11-23
+<ul>
+<li>バグ修正</li>
+<li><code>\SetBlockHeadingSpaces</code>を追加．</li>
+<li><code>\contentsname</code> と
+<code>\indexname</code>に入っていたスペースを削除．</li>
+</ul></li>
+<li>2017-12-02
+<ul>
+<li>バグ修正</li>
+</ul></li>
+<li>2017-12-22
+<ul>
+<li>JFMを改善．</li>
+<li>別行見出しの間の<code>\label</code>の検出方法を変更．</li>
+<li><code>\theequation</code>，<code>\thefigure</code>，<code>\thetable</code>に章番号を追加．</li>
+</ul></li>
+<li>2018-02-01
+<ul>
+<li>縦書きの傍注は奇数ページにのみ出るようにした（改善の余地ありかも）．</li>
+<li>LuaTeX時に<code>\fnfixbottomtrue</code>を追加．</li>
+<li>キャプション関係のオプションを<code>\jlreqsetup</code>に追加．</li>
+<li><code>itemization_beforeafter_space</code>を拡張．</li>
+<li>バグ修正．</li>
+</ul></li>
+<li>2018-04-11
+<ul>
+<li>縦書き二段組みの傍注を下段に出すようにした．</li>
+<li><code>begin_width_(odd|even)_page</code>を<code>\DeclareBlockHeading</code>に追加．</li>
+<li><code>\labelenumi</code>らをjarticleなどにあわせた．</li>
+<li><code>column_gap</code>クラスオプションを使うとコンパイルできなかったバグ修正．</li>
+<li><code>mark_format</code>を<code>\DeclarePageStyle</code>に追加．</li>
+</ul></li>
+<li>2018-05-19
+<ul>
+<li>目次内のラベルの長さを今までよりも長くした．</li>
+<li>一部のマクロをjlreq-helpers.styに分離した．</li>
+<li>バグ修正．</li>
+</ul></li>
+<li>2018-06-17
+<ul>
+<li>シリーズbもゴシックにするようにした．</li>
+<li>バグ修正．</li>
+</ul></li>
+<li>2018-08-08
+<ul>
+<li><code>\DeclarePageStyle</code>に<code>nombre_ii</code>等を追加．</li>
+<li>バグ修正．</li>
+<li><code>\jlreqsetup</code>に<code>footnote_second_indent</code>と<code>endnote_second_indent</code>を追加．</li>
+</ul></li>
+<li>2018-08-15
+<ul>
+<li>バグ修正．</li>
+</ul></li>
+<li>2018-09-01
+<ul>
+<li><code>\mag</code>が<code>1000</code>でない場合も動くようにした（つもり）．</li>
+<li>バグ修正．</li>
+</ul></li>
+<li>2018-12-10
+<ul>
+<li>見出し命令を作る命令に<code>number=[true/false]</code>を追加．</li>
+<li><code>\frontmatter</code>等の挙動を設定できるようにした．</li>
+<li><code>\jlreqHeadingLabel</code>等を扉見出しと別行見出しの<code>format</code>内で使えるようにした．</li>
+<li>バグ修正</li>
+</ul></li>
+<li>2019-01-15
+<ul>
+<li><code>\NewPageStyle</code>に<code>nombre_font</code>などを追加．<code>font</code>もまだ有効だが以降非推奨とする．</li>
+<li><code>\NewBlockHeading</code>の<code>format</code>に<code>#1</code>が含まれてもエラーが起こらないようにした．</li>
+<li><code>\jlreqsetup</code>の<code>caption_label_format</code>などを拡張．</li>
+<li>バグ修正．</li>
+</ul></li>
+<li>2019-04-01
+<ul>
+<li>逆ノンブルを利用可能にするクラスオプション<code>use_reverse_pagination</code>を追加．</li>
+<li><code>zref</code>パッケージの利用をやめた．</li>
+<li>新元号を追加．</li>
+<li>バグ修正．</li>
+</ul></li>
+<li>2019-05-07
+<ul>
+<li>わずかな誤差で行数が減ってしまうのを防ぐために，<code>\textwidth</code>と<code>\textheight</code>を少しだけ増やした．</li>
+<li><code>\DeclarePageStyle</code>内の<code>running_head_ii</code>などの実装を変更．</li>
+<li>バグ修正</li>
+</ul></li>
+<li>2019-09-24
+<ul>
+<li><code>\@cite</code>と<code>\@biblabel</code>を再定義していたのをやめた．</li>
+<li>別行見出しの前に<code>\allowbreak</code>を追加．</li>
+<li>バグ修正．</li>
+</ul></li>
+<li>2020-02-07
+<ul>
+<li><code>itemization_label_length</code>のデフォルト値を<code>\leftmargini</code>などにした．</li>
+<li><code>\rmfamily</code>などの再定義をやめ，<code>\@rmfamilyhook</code>などにコードを挿入することにした．</li>
+<li><code>\parskip</code>を<code>0pt</code>に変更．</li>
+<li>バグ修正．</li>
+</ul></li>
+<li>2020-05-01
+<ul>
+<li><code>\jlreqsetup</code>に<code>theorem_label_font</code>と<code>theorem_font</code>を追加．</li>
+<li>バグ修正．</li>
+</ul></li>
+<li>2020-09-27
+<ul>
+<li><code>\tatechuyoko</code>の<code>*</code>版を追加．</li>
+<li>バグ修正</li>
+</ul></li>
+<li>2020-12-29
+<ul>
+<li>クラスオプションの<code>fontsize</code>などで，LuaLaTeXでも<code>H</code>を使えるようにした．</li>
+<li><code>\jidori</code>を追加．</li>
+<li>バグ修正．</li>
+</ul></li>
+<li>2021-03-17
+<ul>
+<li><code>\maketitle</code>でのページスタイルを<code>empty</code>でないときには<code>plain</code>にするようにした．</li>
+<li><code>\item</code>直後のJFMグルーをなくした．</li>
+<li>同行見出し直後のJFMグルーをなくした．</li>
+<li>バグ修正．</li>
+</ul></li>
+<li>2021-05-28
+<ul>
+<li><code>\jlreqsetup</code>の<code>caption_align</code>を拡張．</li>
+<li><code>\ifthenelse</code>を少し削除．</li>
+</ul></li>
+<li>2021-07-22
+<ul>
+<li><code>\IfHookExistsTF</code>の利用を中止．</li>
+<li><code>\akigumi</code>を追加．</li>
+<li><code>xkeyval</code>パッケージと<code>ifthen</code>パッケージの利用をやめた．</li>
+<li>expl3コードとの親和性を高めた．</li>
+<li><code>\DeclareBlockHeading</code>に<code>pagestyle</code>を追加．</li>
+<li>バグ修正</li>
+</ul></li>
+<li>2021-07-25
+<ul>
+<li>ifthenの読み込みを復活．（Re:VIEWのための一時的なもの．）</li>
+<li>バグ修正</li>
+</ul></li>
+<li>2021-07-30
+<ul>
+<li>バグ修正</li>
+</ul></li>
+<li>2021-08-12
+<ul>
+<li><code>etoolbox</code>への直接の依存をなくした．</li>
+<li>バグ修正</li>
+</ul></li>
+<li>2021-10-09
+<ul>
+<li>バグ修正</li>
+</ul></li>
+<li>2021-11-05
+<ul>
+<li><code>paper=b*</code>をISO系列とした．</li>
+<li>LaTeXのフック関連コードの多くを削除．（まだ安定していなそうなので．）</li>
+<li><code>\RequirePackage{ifthen}</code>をやめた．</li>
+<li>upLaTeXにおける<code>\kcatcode</code>の再設定をやめた．</li>
+</ul></li>
+<li>2022-04-05
+<ul>
+<li><code>\jlreqsetup</code>に<code>warichu_opening</code>と<code>warichu_closing</code>を追加．</li>
+<li>別行見出し周りのペナルティを少し調整．</li>
+<li><code>\DeclareFontShape</code>後の<code>\selectfont</code>でエラーが出るバグ修正．</li>
+<li><code>use_reverse_pagination</code>がうまく動いていなかったのを修正．</li>
+<li>二番目の柱を使うと不自然に消えることがあるバグの修正．ついでに<code>\DeclarePageStyle</code>を書き直した．</li>
+<li><code>\@makefntext</code>を調整．</li>
+<li>その他バグ修正．</li>
+</ul></li>
+<li>2022-04-11
+<ul>
+<li>バグ修正．</li>
+</ul></li>
+<li>2022-07-13
+<ul>
+<li>右側の柱が正しく配置されないバグ修正．</li>
+</ul></li>
+<li>2022-11-28
+<ul>
+<li><code>\SetBlockHeadingSpaces</code>時に柱への登録が行われなかったバグを修正．</li>
+<li>ISO C4の用紙サイズが間違っていたのを修正．</li>
+<li><code>jlreq-complements</code>を追加．</li>
+<li>その他バグ修正やその他のパッケージとの調整など．</li>
+</ul></li>
+<li>2023-03-05
+<ul>
+<li>窓見出しに関するバグ修正</li>
+</ul></li>
+<li>2023-06-19
+<ul>
+<li>LuaLaTeX利用時の`everyhook'パッケージの利用をやめた（ドキュメントと整合的でなかった）．</li>
+<li>`enumerate'環境直前の空白が入らないことがあったのを修正．</li>
+<li><code>use_reverse_pagination</code>に関するバグ修正．</li>
+</ul></li>
+<li>2024-02-13
+<ul>
+<li>LaTeXのhookシステムのために\parをいくつか挿入．</li>
+<li><code>\jlreqsetup</code>に<code>tableofcontents_twocolumn</code>，<code>abstract_with_maketitle</code>を追加．</li>
+<li><code>everyhook</code>の機能が呼び出されていたのを削除．</li>
+<li>jfmを少し修正．</li>
+<li>見出し内で無限ループが出ることがあったのを修正．</li>
+<li>LuaLaTeX利用時に<code>stfloats</code>を読み込むようにした．</li>
+<li>ページスタイル内の位置調整を改善．</li>
+<li>そのほかいくつか改善など．</li>
+</ul></li>
+<li>2024-02-16
+<ul>
+<li>バグ修正</li>
+</ul></li>
+<li>2024-08-23
+<ul>
+<li>バグ修正</li>
+<li>内部変数名の変更</li>
+<li>英語ドキュメントに使い方を書いた</li>
+<li><code>\DeclareKeys</code>などを使うようにした．</li>
+<li>行見出しの内部処理をちょっとだけ変更．</li>
+</ul></li>
+<li>2024-09-26
+<ul>
+<li>Makefileでのパターンマッチングの使用をやめた</li>
+</ul></li>
+<li>2024-10-03
+<ul>
+<li>Makefile内のvf一覧にtfmが紛れていたのを修正．</li>
+</ul></li>
+<li>2025-03-16
+<ul>
+<li>hyperrefパッケージへの対応を進めた．</li>
+<li>割注の深さと高さをまわりにあわせた．</li>
+<li>見出し内での<code>\addconentsline</code>の発行場所を変更．</li>
+<li>定理環境前後の空白や見出しのフォントなどのデフォルト値を少し変更．</li>
+</ul></li>
+<li>2026-07-17
+<ul>
+<li>新しい<code>\mark</code>のシステムを使うようにした．</li>
+<li>割注内に<code>g</code>があるとうまく分割されないバグ修正．</li>
+<li><code>zw</code>がクラスオプションで効かないケースがあったのを修正．</li>
+<li>フロートの配置指定を変更．</li>
+<li><code>\SetBlockHeadingSpaces</code>で既存の設定がクリアされていなかったのを修正．</li>
+<li>その他バグ修正．</li>
+</ul></li>
+</ul>
+<hr />
+<p>Noriyuki Abe <a
+href="https://github.com/abenori/jlreq">https://github.com/abenori/jlreq</a></p>
+</article>
+</body>
+</html>

@@ -178,6 +178,10 @@
 % kanjiskip_natural/stretch/shrink flags are 0). \jlreqpdf@nat/@str/
 % @shr hold the JFM pair glue itself. A future jlreqparagraph module
 % reads these registers right after each boundary evaluation.
+% P11 flag: when 1, \jlreqpdf@placeglyph boxes EVERY glyph (1zw classes
+% too) -- set by the jlreqparagraph measurement so line interiors are
+% fully walkable (boxes/glues/kerns/penalties only, no bare chars).
+\newcount\jlreqpdf@boxglyphs \global\jlreqpdf@boxglyphs=0
 
 %. --------------------------------------------------- semantic frames
 % Box/paragraph boundaries must not inherit (nor leak) the running
@@ -1237,7 +1241,22 @@
   \expandafter\jlreqpdf@splitcls#1%
   \edef\jlreqpdf@tmpw{\jlreqpdf@cls@w\jlreq@zw}%
   \ifdim\jlreqpdf@tmpw=1\jlreq@zw
-    \jlreqpdf@orig@CJKsymbol{#2}%
+    \ifnum\jlreqpdf@boxglyphs=1
+      % P11 (jlreqparagraph): the strict paragraph boxes EVERY glyph
+      % (1zw classes too) so its line interior contains only
+      % boxes/glues/kerns/penalties -- the per-line distribution walk
+      % can then address each item box. Nest-guarded like the punct
+      % path (same frame-machinery reason).
+      \global\advance\jlreqpdf@nest1
+      \setbox\jlreqpdf@charbox=\hbox{\jlreqpdf@orig@CJKsymbol{#2}}%
+      \hbox to \jlreqpdf@cls@w\jlreq@zw{%
+        \jlreqpdf@placealign
+        \box\jlreqpdf@charbox
+        \jlreqpdf@placealign@post}%
+      \global\advance\jlreqpdf@nest-1
+    \else
+      \jlreqpdf@orig@CJKsymbol{#2}%
+    \fi
   \else
     % backend-internal boxes: guard the frame machinery for BOTH the
     % measurement hbox and the outer JFM-width hbox (the everyhbox

@@ -36,6 +36,7 @@ pdfLaTeXでも横書き文書がコンパイルできます（実験的なサポ
 * 縦書き（`tate`）は実験的コア実装（shipout rotation 構成）。読み・段方向・禁則・約物配置は検証済み。ページ家具・脚注・浮動体・縦中横・数式など一部機能は対象外で、ロード時警告に列挙されます（詳細は `docs/pdftex-tate-eval.md`）
 * ぶら下げ組み（`-b`系変種のみ）と数式内和文（`\mathmc`/`\mathgt`、数式中の直接和文）は対応済み
 * 約物はJFMのクラス幅（半角など）で組まれ、グリフはJFMの配置指定に従って納まります（インク形状はplatex参照と一致）
+* **厳密段落（優先順位付き伸縮）**: `jlreqparagraph` 環境（`\begin{jlreqparagraph}...\end{jlreqparagraph}`、引数なし・一環境一段落。pdfLaTeX バックエンドと一緒に自動読込）は段落パラメータを全件 snapshot し、native 改行器で一度だけ改行した上で行ごとに回復・再構成し、JFM ペアグルーの優先順位付き伸縮を厳密に扱います。入力モデルは明示（和文連続・欧文単語・空白・`\inhibitglue`・`\hspace`/`\kern`/`\penalty`/`\allowbreak`・インライン数式・`\mbox`/`\makebox`・`\label`/ハイパーリンク）。環境内の別行立て数式・脚注・傍注は具体的エラーになります。詳細は `docs/pdftex-internals.md`（P11 節）。
 
 詳細は `docs/pdftex-compatibility.md` を参照してください．
 

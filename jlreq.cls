@@ -514,8 +514,8 @@
       \@ehc}
   \fi
 \fi
-% pdfTeX：実験的バックエンド（jlreq-pdftex.sty）を読み込む．
-% バックエンドファイルが無ければ元の「未対応」エラーで停止する（黙って
+% pdfTeX：バックエンド（jlreq-pdftex.sty）を読み込む．
+% バックエンドファイルが無ければ明示エラーで停止する（黙って
 % 進んでpTeX専用プリミティブを踏むことはない）．
 % pdfTeXフォント設定の既定（P4）。未指定時は ipaex-type1（現行挙動）。
 \ifx d\jlreq@engine
@@ -526,32 +526,24 @@
     \RequirePackage{jlreq-pdftex}
   }{
     \ClassError{jlreq}{pdfTeX~backend~file~jlreq-pdftex.sty~is~not~found.}{%
-      The~experimental~pdfTeX~backend~is~missing~from~the~installation.\MessageBreak
-      Please~use~platex,~uplatex~or~lualatex~instead.\MessageBreak
+      The~pdfTeX~backend~is~missing~from~the~installation.\MessageBreak
+      Please~use~platex,~uplatex~or~lualatex~instead,\MessageBreak
+      or~install~the~jlreq~pdfTeX~backend~files.\MessageBreak
       \@ehc}
   }
 \fi
-% 縦組み（pdfTeX: T1 回転出荷アーキテクチャ、実験的）
+% 縦組み（pdfTeX: T1 回転出荷アーキテクチャ）
 % 実現原理: 内側水平枠組みで組み、出荷時にページ全体を時計回り90°回転する
-% (shipout rotation; poc/v4-tate.tex の検証結果)。範囲外の仕組みは警告として
-% 明示する（黙って壊れた出力は出さない）。
+% (shipout rotation)。P5–P10 で全機能面（縦中横・局所方向・家具・注・
+% 数式・trimmarks・ルビ）の実出力検査が通り、out-of-scope は残っていな
+% いため（docs/pdftex-tate-eval.md 参照）、警告で列挙する項目は無い。
+% アーキテクチャの違いだけを行の情報として出す。
 \ifx d\jlreq@engine
   \if@tate
-    \ClassWarning{jlreq}{pdfTeX~tate~support~is~EXPERIMENTAL~(rotation-based).\MessageBreak
-      Verified:~columns/kinsoku/punct-placement,~headings,~TOC,~page~furniture,\MessageBreak
-      footnote/endnote/sidenote/~\string\marginpar,~basic~floats,~inline/display~math,\MessageBreak
-      local~direction~+~\string\tatechuyoko~(1zw-normalized,~star/non-star),\MessageBreak
-      jlreq-trimmarks~banners~in~tate~(P8:~all~slot~families~match~the~uplatex\MessageBreak
-      ground~truth~within~0.01pt;~see~tests/check-banner-tate.py),\MessageBreak
-      P7:~output~routine~is~a~thin~wrapper~over~the~kernel~original;~asymmetric\MessageBreak
-      gutter/fore_edge/head_space/foot_space~+~twoside~+~twocolumn~+~deferred\MessageBreak
-      footnotes~+~\string\marginpar~match~uplatex~bit-for-bit,~savepos~line-extents\MessageBreak
-      (warichu)~match~bit-for-bit,~tate~TOC~ships~both~passes,\MessageBreak
-      P10:~ruby~via~the~ruby.sty~provider~and~the~jlreq-pdftex-ruby~adapter\MessageBreak
-      (annotation~above~in~yoko,~reading-frame~right~in~tate;~consecutive/\MessageBreak
-      overlap/nooverlap,~boundary~glue~=~the~class~table,~lualatex+ruby.sty\MessageBreak
-      placement~parity;~see~tests/fixtures/pdflatex-rules/ruby-*.tex).\MessageBreak
-      See~docs/pdftex-tate-eval.md~and~the~pdflatex-tate~fixtures.}
+    \ClassInfo{jlreq}{pdfTeX~tate~support:~shipout-rotation~architecture\MessageBreak
+      (inner~horizontal~galley,~glyphs~rotated~+90,~page~box~rotated~-90~at\MessageBreak
+      \string\@outputpage).~All~verified~areas~are~covered~by~the~test~suite\MessageBreak
+      (tests/run-pdftex-tests.sh;~see~docs/pdftex-tate-eval.md).}
   \fi
 \fi
 % T1: 柱（ページスタイル）構築用の方向切替マーカー．pTeX系では
