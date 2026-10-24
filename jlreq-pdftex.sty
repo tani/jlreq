@@ -570,26 +570,44 @@
   \protected@write#1{}{#2}%
 }
 
-%. ----------------------------------------------------------- tate (T1..T2)
-% 出荷時回転（shipout rotation）: 本文ボックス(\@outputbox)を時計回り90°
-% 回転して出す。柱・ノンブル・フッタはカーネル既定の横組み機構で出すが、
-% 縦組みでは家具行の幅は段長（\textwidth、内側枠組み = 送り方向）ではなく
-% 版面巾(\textheight、内側枠組み総高 = 最終枠巾)にする必要がある
-% （uplatex 対照で確立）。T1では家具を簡易ラップしていたが、T2で
-% \@outputpage を完全オーバーライドして家具を版面巾に揃える。
-% NOTE: the \@outputpage body below contains \if@newlist (a \newif conditional
-% token).  A plain `\if@tate ... \fi' wrapper would mis-skip when tate is
-% false: TeX's conditional skip counts \if@newlist as an open, EOF hits ->
-% "Incomplete \iffalse".  The \expandafter\@firstofone/\@gobble idiom closes
-% the conditional BEFORE the block is read as a macro argument.
-% P5 page-direction flag: theindex (and complements' theindex_yoko) typeset
-% real yoko LOGICAL pages inside a tate document. The page-level direction
-% is this flag: a page ships ROTATED iff \if@tate AND the flag is 1 (the
-% tate default). \jlreqpdf@pagedir{<0|1>} sets the direction for the page
-% currently being built (the shipout reads it); it is the interface the
-% future output-routine thinning (P7) keeps. Pages flipped by the flag
-% must be flushed first (the caller's \clearpage) so the flag never
-% applies retroactively to a half-built tate page.
+%. ------------------------------------------------ tate output (T1..T2, P7)
+% 出荷時回転（shipout rotation）＋薄い出力ラッパ（plan §7）。
+%
+% 【P7 再構成】T2 はカーネル \@outputpage 本体を丸写しして家具行の幅を
+% \textheight に差し替えていた。丸写しは (a) カーネル進化（tagging
+% socket・catcode ブロック等）に自動追従しない、(b) 本体パッチや
+% build/page フックの追加を複製し忘れる、という構造的リスクを抱える。
+% P7 はこれを廃止し、begin document で「その時点のカーネル実装」を
+% \jlreqpdf@saved@outputpage に保存して呼び出す薄いラッパに置き換えた:
+%
+%   1. ページ方向フラグ \jlreqpdf@pagedir@count（1=tate 論理ページ/
+%      0=yoko 論理ページ; theindex 系が 0 にする; 既定 1）を見る。
+%   2. tate のとき本文箱 \@outputbox を -90° 回転して \@outputbox に
+%      戻す（回転はここだけ; 家具・shipout は元実装のまま流れる）。
+%   3. 家具行の幅: カーネル本体は \hb@xt@\textwidth{\@thehead} で
+%      柱・ノンブル行を組む。縦組みページの最終枠巾は版面高
+%      （\textheight）なので、ラッパは saved 本体の実行中だけ
+%      \textwidth を \textheight に（局所 group。版面巾と版面高という
+%      論理寸法と物理寸法の区別はこの一箇所に集約する — 散在する
+%      raise/kern・寸法上書きはしない）。yoko 論理ページ（theindex）も
+%      同じ最終枠巾で家具を組むため同じ差し替えを使う（T2 実測どおり）。
+%   4. 保存した元実装を呼ぶ。build/page/* フック・kernel の hook 付き
+%      shipout・trimmarks の \@tombowreset@@paper（build/page/reset）は
+%      すべて元実装の内部でそのまま走る。
+%
+% yoko 文書（\if@tate が偽）はこのラッパを一切通さない: カーネルの
+% \@outputpage がそのまま使われる。
+%
+% NOTE: \if@tate は \newif 条件トークン。\if@tate...\fi の中に本体を
+% 置くと条件スキップが \if@newlist を数えてしまうので、
+% \expandafter\@firstofone/\@gobble イディオムで条件を閉じてから
+% ブロックを読む（T2 以来の注意を維持）。
+%
+% P5 ページ方向フラグ: theindex（complements の theindex_yoko を含む）は
+% tate 文書内に本当の横組み論理ページを作る。ページレベルの方向はこの
+% フラグ: \if@tate かつフラグ=1 のとき出荷回転が掛かる。フラグを切り
+% 替えたページは先に \clearpage で流し切る（呼出し側; フラグが作り途中
+% のページに遡って効かないため）。
 \newcount\jlreqpdf@pagedir@count \global\jlreqpdf@pagedir@count=1
 \def\jlreqpdf@pagedir@restore{\global\jlreqpdf@pagedir@count=1 }%
 \def\jlreqpdf@pagedir#1{\global\jlreqpdf@pagedir@count=#1\relax}%
@@ -597,88 +615,22 @@
   {\AtBeginDocument{%
     \expandafter\let\expandafter\jlreqpdf@saved@outputpage\csname @outputpage\endcsname
     \expandafter\def\csname @outputpage\endcsname{%
-      \UseHook {build/page/before}%
       \begingroup
-        \language\document@default@language
-        \@resetactivechars
-        \global\let\@@if@newlist\if@newlist
-        \global\@newlistfalse
-        \@parboxrestore
-        \UseHook {build/page/reset}%
-        \let \protect \noexpand
-        \shipout \vbox{%
-          \set@typeset@protect
-          \aftergroup \endgroup
-          \aftergroup \set@typeset@protect
-        \if@specialpage
-          \global \@specialpagefalse
-          \@nameuse {ps@\@specialstyle}%
+        \ifnum\jlreqpdf@pagedir@count=1
+          % tate 論理ページ: 本文箱を -90° 回転（advance=元の ht+dp、
+          % cross=体幅半分ずつ — rotatebox の正規化。回転はここだけ）。
+          \setbox\@outputbox=\hbox{\rotatebox{-90}{\box\@outputbox}}%
+        \else
+          % yoko 論理ページ（theindex）: 内枠は既に最終方位なので
+          % 無回転で出す。行長（\textwidth）は版面巾より狭く、余白は
+          % galley 側で配分される（T2 実測どおり）。
         \fi
-        \if@twoside
-          \ifodd\count\z@
-            \let \@thehead \@oddhead
-            \let \@thefoot \@oddfoot
-            \let \@themargin \oddsidemargin
-          \else
-            \let \@thehead \@evenhead
-            \let \@thefoot \@evenfoot
-            \let \@themargin \evensidemargin
-          \fi
-        \fi
-        \reset@font
-        \normalsize
-        \normalsfcodes
-        \let \label \@gobble@with@sphack@om
-        \let \index \@gobble@with@sphack@som
-        \let \glossary \@gobble@with@sphack@om
-        \baselineskip \z@skip
-        \lineskip \z@skip
-        \lineskiplimit \z@
-          \@begindvi
-          \vskip \topmargin
-          \moveright\@themargin \vbox {%
-            \setbox\@tempboxa \vbox to\headheight {%
-              \vfil
-              \pdfannot@link@off@@
-              \UseTaggingSocket{build/page/header}{}%
-                {
-                  \color@hbox
-                    \normalcolor
-                    \hb@xt@ \textheight {\@thehead }%
-                  \color@endbox
-                }
-              \pdfannot@link@on@@
-            }
-            \dp \@tempboxa \z@
-            \box \@tempboxa
-            \vskip \headsep
-            \ifnum\jlreqpdf@pagedir@count=1
-              \hbox{\rotatebox{-90}{\box\@outputbox}}%
-            \else
-              % yoko logical page inside a tate document (theindex):
-              % ships UNROTATED -- the inner frame is already its final
-              % orientation. Furniture width stays \textheight (the
-              % final frame width of a tate page); the logical line
-              % extent of the yoko page is \textwidth, narrower, and
-              % the surplus is evenly distributed by the galley.
-              \box\@outputbox
-            \fi
-            \baselineskip \footskip
-            \pdfannot@link@off@@
-            \UseTaggingSocket{build/page/footer}{}%
-               {
-                  \color@hbox
-                     \normalcolor
-                     \hb@xt@ \textheight {\@thefoot }%
-                   \color@endbox
-               }
-            \pdfannot@link@on@@
-            }
-          }
-        \global \let \if@newlist \@@if@newlist
-        \global \@colht \textheight
-        \stepcounter{page}%
-        \UseHook {build/page/after}%
+        % 家具行の幅 = 最終枠巾（縦組みページでは版面高）。saved 本体は
+        % \hb@xt@\textwidth{...} を 2 箇所で読むため、実行中だけ差し替え
+        % る。物理用紙寸法（\paperwidth/\paperheight）や版面高は無関係。
+        \textwidth\textheight
+        \jlreqpdf@saved@outputpage
+      \endgroup
     }%
   }}
 
@@ -846,16 +798,27 @@
 \def\jlreqpdf@math@array@unflag{%
   \global\advance\jlreqpdf@math@in@array-\@ne
 }
-% \jlreq@pdftex@math@internal{<body>}: クラス内部の数式（目次のドット
-% リーダー等）をフラグ保護下で実行する。body 内の数式開始は
-% everymath 経路で「内部扱い = 素通り」となる。
-% \aftergroup は使わない: このヘルパは \leaders\hbox{..} の直前でも
-% 呼ばれるため、aftergroup トークンが \leaders とその後続グルーとの
-% 間に落ちて "Leaders not followed by proper glue" になる（実測）。
-% ボディ直後の即時解除で十分（body は1つのグループ）。
+% \jlreq@pdftex@math@internal{<body>}: クラス内部の数式（tabular 等の
+% フラグ保護実行）。body 内の数式開始は everymath 経路で
+% 「内部扱い = 素通り」となる。ボディ直後の即時解除で十分
+% （body は1つのグループ; \aftergroup は使わない）。
 \long\def\jlreq@pdftex@math@internal#1{%
   \global\advance\jlreqpdf@math@in@array\@ne
   #1%
+  \global\advance\jlreqpdf@math@in@array-\@ne
+}
+% P7: グループ引数を取らない on/off 対命令。\leaders\hbox{...}<glue> の
+% ように「ボックスとグルーの間にグループ終端が入ってはならない」場所
+% で使う（\leaders のグルー走査は群終端を越えられないため、引数形
+% {\leaders\hbox{..}}\hfill は純TeXでも "Leaders not followed by
+% proper glue" になる。目次リーダー＝TOC 2パス目不良の第二要因）。
+% on と off の間で \leaders が break/エラーで中断されても破綻しない
+% よう、off 側は現在値を明示的に戻す（保存値の完全な対称性は
+% 保護対象が浅い入れ子（leader 箱内の $..$）のみのため不要）。
+\def\jlreq@pdftex@math@internal@on{%
+  \global\advance\jlreqpdf@math@in@array\@ne
+}
+\def\jlreq@pdftex@math@internal@off{%
   \global\advance\jlreqpdf@math@in@array-\@ne
 }
 % 表示数式環境の登録（plan §6 の表示入口; ネイティブ処理を維持）

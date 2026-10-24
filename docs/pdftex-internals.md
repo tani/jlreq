@@ -82,14 +82,15 @@ jlreq.cls（公開API・版面設計: 共通）
    （判定は CJK@X helper head の `\jlreqpdf@latadj` で実行——
    デコーダ内の font whatsit により `\pre` 内では lastnodetype が
    常に -1 になるため。latin-adjacency.tex 7アサーション）。
-6. **局所方向（P5, 2026-10-24）**: 方向状態 `\jlreqpdf@dir`（count, 0=yoko/1=tate）
-   は frame tuple の一要素（`\jlreqpdf@frame@push/@pop` が
-   lastclass/lastnodechar/pend/inhibit/lastzw とともに保存復帰;
-   jlreq-pdftex-rules.sty:199-213）。主文書方向は `\if@tate` から
-   begin document で播種（`jlreqpdf@setmaindir`）。判定:
+6. **局所方向（P5, 2026-10-24; P7 改訂）**: 方向状態 `\jlreqpdf@dir`
+   （count, 0=yoko/1=tate）は begin document で `\if@tate` から播種
+   （`jlreqpdf@setmaindir`）。判定:
    `\jlreqpdftex@ifydir/@iftdir`（バックエンド内部）と
    `\jlreq@ifydir/@iftdir`（jlreq.cls d 分岐, `\ifnum1=\jlreqpdf@dir\fi`
    形式——expl3構文下で空白が食われるため被比較数を末尾に置く）。
+   （旧 P3 の frame tuple による `\jlreqpdf@dir` の保存復帰は P7 で
+   frame 機構ごと撤去——下の semantic frames 参照。バックエンド箱工場・
+   theindex は nest ガード/page フラグで方向を自前管理する。）
    **箱工場** `jlreq-pdftex.sty`:
    `\jlreqpdf@yokobox{body}` / `\jlreqpdf@tatebox{body}`（同方向なら恒等）
    および `\jlreqpdf@yokobox@strut{ht}{dp}{body}`（body の ht/dp を指定値に
@@ -103,14 +104,168 @@ jlreq.cls（公開API・版面設計: 共通）
    契約——pdfTeX に box 属性は存在しない）。
    **ページ方向** `\jlreqpdf@pagedir@count` + `\jlreqpdf@pagedir{0|1}`:
    出荷回転は `\if@tate && pagedir=1` のときのみ掛かる（theindex 等の
-   横組み論理ページは回転なしで出荷）。フラグは P7（出力ルーチン薄層化）
-   のインターフェース。cls theindex d 分岐は
+   横組み論理ページは回転なしで出荷）。フラグは P7 出力ラッパ
+   （次節）が読む。cls theindex d 分岐は
    `clearpage → pagedir=0 → dir=0 → \hsize=\textheight`（pTeX の \yoko ページ
    の寸法役割交換, uplatex 実測: 2段幅=(textheight-colsep)/2）を行い、
    終端で `pagedir=1 → dir=1 → \hsize=\textwidth` を復帰。
    ゲート: tests/fixtures/pdflatex-tate/{dir-roundtrip,dir-callers,
    dir-index-yoko,tcy-digits,tcy-fontchange,tcy-star-error}.tex
    （T8 が TATE-PASS/TATE-FAIL・エラー文言を検査）。
+
+## 出力ルーチンと semantic frames（P7, 2026-10-24 追記）
+
+### 薄い出力ラッパ（kernel 本体丸写しの撤去）
+
+T2〜P6 はカーネル `\@outputpage` の本体をソースに丸写しし、家具行の幅を
+`\hb@xt@\textheight` に差し替えていた。P7 で撤去した。現行構成
+（jlreq-pdftex.sty「tate output (T1..T2, P7)」節）:
+
+- **保存**: begin document でその時点のカーネル `\@outputpage` を
+  `\jlreqpdf@saved@outputpage` に `\let` して呼び出す。**d+tate のみ**
+  インストール（yoko/p/u/l は一切通さない）。
+- **ラッパの仕事は2つだけ**:
+  1. `pagedir=1` のとき本文箱 `\@outputbox` を `\rotatebox{-90}` で
+     回転して戻す（回転はこの一箇所。yoko 論理ページ=theindex は無回転）。
+  2. 家具行の幅: カーネル本体は `\hb@xt@\textwidth{\@thehead}` で柱・
+     ノンブル行を組むが、縦組みページの最終枠巾は版面高なので、
+     saved 本体の実行中だけ `\textwidth\textheight`（局所 group）。
+     **論理寸法（版面巾 = 行長）と最終枠巾（版面高）の区別はこの一箇所に
+     集約**し、散在する raise/kern や寸法上書きはしない。
+- カーネルの進化（tagging socket、catcode ブロック——旧コピーはこれを
+  落としていた、今後の修正）は自動的に追従する。build/page/* フック・
+  kernel の hook 付き shipout・trimmarks の `\@tombowreset@@paper`
+  （build/page/reset）は元実装内部でそのまま走る。
+- ゲート: `out-hook-probe`（tate+yoko 各3ページで build/page/before・
+  after・shipout/before が各ページ1回だけ発火）、`outputpage-copy-gone`
+  （`\shipout `/`\@begindvi`/`\stepcounter{page}` の backend ソース内
+  grep が0件であることを機械検査）。
+
+### 縦組みの Cht/Cdp（論理寸法で縦家具計算）
+
+`\hbox{阿}` の ht/dp は pdfTeX 縦組みではグリフ層の横組メトリクスに
+なる（実測 Cht=8.8pt/Cdp=1.2pt）が、pTeX の `\cht/\cdp` は縦 JFM
+class 0 の h/d（0.5/0.5zw = 5pt/5pt）。この差は
+`oddsidemargin`/`topmargin`/`footskip` の縦組み幾何（`-Cht+Cdp` の項）
+にそのまま混入し、uplatex 対照の一定オフセット（3.8pt）として
+T3 注釈の「数ミリの家具由来オフセット」に残っていた。jlreq.cls の
+測定直後に生成縦 JFM データ（`jlreqpdf@jfm@class@0` の h/d）×現在zw で
+上書きする（`\jlreq@pdftex@tate@chtc@dp`）。実測: 修飾後
+Cht=Cdp=5.0pt、縦家具オプション対照の余白差は 0.0000pt。
+
+### savepos と論理行方向
+
+`\pdfsavepos` が記録する座標は shipout 回転（cm）の**前**の内枠座標で
+デザイン寸法（mag 不変）である（P8 トンボ実測と同じ根拠。実測:
+`\mag=1200` でも同一文書の raw `\pdflastxpos` は同一値）。
+内枠の X 方向が縦組みの読み方向＝論理行方向なので、
+`\jlreq@calc@current@linewidth` の d 分岐は縦組みでもそのまま論理行
+方向の測定になる。aux の frame id は `\jlreq@reference@count` 連番
+ラベル（`jlreq@rest@width.pos.X.<n>`）で、pass 2 が pass 1 の原点を
+消費する。
+
+数値表（P7 実測、2026-10-24、いずれも pass 2 の確定値）:
+
+| 対照項目 | pdfTeX | upLaTeX | mag=1200 (pdfTeX) |
+|---|---|---|---|
+| 割注前 current linewidth（20zw 行・6 セル） | 60.0pt | 60.0pt | 60.0pt |
+| 割注前 rest linewidth | 140.0001pt | 140.0001pt | 140.0001pt |
+| 割注行 linewidth | 200.0001pt | 200.0001pt | 200.0001pt |
+| 合印（interlinear）挟み込みのペアグルー差分 | 0.0pt | 0.0pt | — |
+| marginpar/遅延脚注マーカの行方向相対距離 | 160.0007pt | 160.0007pt | — |
+
+**mag≠1000 の補正**: クラスの mag 補償（`\pdfhorigin=1truein`・側余白の
+`−1truein`）で原点と側余白が物理 1in 基準に揃うため、計測式の末項も
+`−1in`（デザイン）ではなく `−1truein`（物理）にした（jlreq.cls
+d 分岐、P7）。mag=1000 では 1truein=1in で無変換。これにより論理行
+方向の current/rest は mag 不変（上表のとおり mag=1200 でも同一値）。
+
+**PDF インクレベル対照**（`savepos-anchor-pdf` ゲート +
+`tests/check-anchor-parity.py`、pymupdf、あ原点合わせ後）:
+
+| 対照項目 | worst Δ |
+|---|---|
+| 本文グリフ走り（あ..こ、先頭行10字） | **0.0010pt**（ゲート閾値 0.1pt） |
+| 行内合印（interlinear mark）オープナー（（＊） の （） | (+1.49, +7.61)pt |
+| 脚注テキスト先頭字（◆/☆） | (−1.71, +2.39)/(−4.00, +1.28)pt |
+| 脚注マーク→脚注本文の行方向オフセット | pd 22.43pt vs up 27.90pt |
+| 脚注列間隔（行直交方向） | pd 11.458pt vs up 13.748pt |
+
+本文（論理フレーム本体）は PDF インクでも実質完全一致。合印・脚注領域の
+残差は **tate 脚注・合印マイクロレイアウト**（T3 以来の「家具由来
+オフセット」の実体）で、同一機構の yoko 対照は 0.006/0.53pt である
+ことから縦組み固有のマーク鎖差分。数値は上表に固定し、脚注・合印
+スライスでの回収対象とする（savepos 機構自体は論理レベルで
+ビット一致している）。
+
+### tate TOC「Leaders not followed by proper glue」——解決
+
+P6 報告の「2パス目で必ず落ちる」不良は**2つの独立した原因**の重畳:
+
+1. **frame-pop `\aftergroup`（P3 由来）**: 旧 semantic frames は各 box の
+   入口で frame を push し、閉じ時に `\aftergroup\jlreqpdf@frame@pop` で
+   pop していた。`\aftergroup` は box 直後に**実代入トークン**を挿入する
+   が、`\leaders\hbox{...}<glue>` は box と glue の間に展開不能トークンを
+   許さない——**全リーダー箱**（TOC ドット、ユーザーの `\leaders`/
+   `\xleaders`）が内容に関係なく落ちた（yoko/tate・CJK 有無無関係;
+   article+rules.sty 単独でも再現）。これが「P6 以前から再現」の正体。
+2. **P6 の引数形ゲート**: `\jlreq@pdftex@math@internal{...}` は必ず
+   グループ引数を取るため `{\leaders\hbox{..}}\hfill` の形を作り、
+   リーダー箱と glue の間に**群終端**が入る。`\leaders` の glue 走査は
+   群終端を越えられない——**純TeXでも再現**する（plain article +
+   `{\leaders\hbox{a}}\hfill`）。
+
+**修正**: (1) は semantic frames の全面再構成（下記）で `\aftergroup` を
+撤去。(2) はグループを作らない `\jlreq@pdftex@math@internal@on/@off` 対命令
+に置き換え（jlreq.cls `\@dottedtocline`）。ゲート: `toc-twopass`
+（tate・subsection 入り・2パス双方で Leaders エラーゼロ + TOC-PASS マーカ）。
+
+### semantic frames の現行構成（P3 からの置換）
+
+box 境界の状態隔離は2つの機構で行い、**どちらも `\aftergroup` を使わない**:
+
+- **入口**: everyhbox/everyvbox に前置した `\jlreqpdf@box@enter` が
+  `\jlreqpdf@box@neutralize`（lastclass=90, lastnodechar=-1, pend=0,
+  lastzw=現行, glyphmark=0; **inhibit は保存**——box 直前の
+  `\inhibitglue` が box 内最初の境界も抑止する一発契約のため）で
+  box 内部を中立状態で開始させる。バックエンド内部箱（charbox・
+  math 箱・測定箱）は `\jlreqpdf@nest` ガードで素通り。
+- **閉じ**: トークン挿入なし。読み取り点が直前に閉じた**ユーザー箱**を
+  検出したとき（`\lastnodetype` 13/14 かつ glyphmark=0）に boxbdd
+  再中立化（`\jlreqpdf@boxbdd`: 境界疑似クラス90でペア評価）を行う。
+  読み取り点: `\jlreqpdf@pre`（各和文グリフ）、`\jlreqpdf@para@endhook`、
+  クラス側 `\tatechuyoko`/`\　` の lastnodechar 読み
+  （`\jlreqpdf@boxbddlastchar`）。他のノードが間に入る場合は peek 機構が
+  状態を再駆動するため旧設計と収束する（実測: `\hbox{あ}Xい` の X→い 境界は
+  両設計で同一の xkanjiskip）。
+- **glyphmark**: 各グリフ観測で1、（非バックエンド）box 入口で0。
+  縦組みでは**全グリフが回転 charbox**（`\lastnodetype=13`）なので、
+  この印なしには「自前の charbox」と「ユーザー箱」を区別できない。
+- 既知の残り角: `\leaders\hbox{..<和文グリフ>}`（リーダー箱の末尾が裸の
+  和文グリフ）は、peek の egroup 再開 `\futurelet` が箱縁で走るため
+  依然失敗する。LaTeX の TOC リーダー箱はグリフの後に `\null` を置くため
+  この経路を通らない（jlreq-pdftex-rules.sty の該当コメント参照）。
+
+### 家具オプションの縦組み対照（P7 実測）
+
+`furniture-options` フィクスチャ（tate・twoside・twocolumn・
+gutter=15zw, fore_edge=8zw, head_space=10zw, foot_space=6zw）での
+uplatex 同一ソース対照（2026-10-24 実測）:
+
+| 対照項目 | pdfTeX | upLaTeX | 差 |
+|---|---|---|---|
+| textwidth / textheight | 551.31902 / 270.7686pt | 同左 | 0 |
+| columnwidth / columnsep | 265.6595pt / 20pt | 同左 | 0 |
+| oddsidemargin | 12.7299pt（Cht 修正後） | 12.7299pt | 0 |
+| evensidemargin | 82.73001pt（同上） | 82.73001pt | 0 |
+| 遅延脚注カウンタ / 出荷後 textwidth 不変 | 2 / FURN-PASS | 2 / 同 | 0 |
+| marginpar・遅延脚注マーカの行方向相対距離 | 160.0007pt | 160.0007pt | 0.0000pt |
+
+（Cht/Cdp 修正前は余白系に一定 3.8pt のオフセットがあった——上記
+「縦組みの Cht/Cdp」節のとおり、修正で消えた。marginpar 列/側と
+遅延注位置は `savepos-marginpar` ゲートが行方向相対距離で対照する。
+脚注領域内部のマイクロレイアウト残差は「savepos と論理行方向」節の
+PDF 対照表参照。）
 
 ## 数式キャプチャ（P6, 2026-10-24 追記）
 
@@ -155,10 +310,13 @@ active-$ 機構は撤去した。`$` は catcode 3 のままで、カーネル�
   `\hbox/\vbox/\vtop/\vcenter` があると実行前に ClassError（置換提案
   `\mbox{...}` / `\text{...}` 付き）。wrapper 引数 `{..}` は1引数として
   不透過（= exempt）。マクロ展開で生成される primitive は契約外。
-- **既知の未解決**: tate + `\tableofcontents` のドットリーダーは数式と
-  関係なく 2 パス目で "Leaders not followed by proper glue" になる
-  （HEAD でも再現・数式なしでも発生。TOC 実測は P7 出力ルーチンでの
-  回収対象）。
+- ~~tate + `\tableofcontents` のドットリーダーが 2 パス目で
+  "Leaders not followed by proper glue" になる~~ → **解決（P7）**。
+  数式キャプチャとは無関係だった: 実因は (1) 旧 semantic frames の
+  frame-pop `\aftergroup` が全リーダー箱を破壊、(2) 本節の内部数式
+  ゲートの引数形が `{\leaders\hbox{}}\hfill` を作り群終端で glue 走査を
+  妨げていた——2つの独立バグ。詳細・ゲートは「出力ルーチンと
+  semantic frames（P7）」節参照。
 
 ## jlreq-pdftex-jfm*.def（生成データ）
 

@@ -42,11 +42,11 @@
 | `jafontscale=…` | jlreq.cls:296 | 和文/欧文サイズ比 | **implemented** | M2 | `jafontscale=1.2` 実測: SCALE=1.2/JAFS=11.99997pt 正常 |
 | `line_length=…` | jlreq.cls:301 | 行長 | **implemented** | M6 | `line_length=40zw` 検証済み（options-sweep.tex） |
 | `number_of_lines=…` | jlreq.cls:304 | 1 ページ行数 | **implemented** | M6 | `number_of_lines=10` 検証済み（options-sweep.tex） |
-| `head_space=…` / `foot_space=…` / `gutter=…` / `fore_edge=…` / `fore-edge=…` | jlreq.cls:309–321 | 天・地・のど・小口 | **implemented** | M6 | options-sweep.tex で検証（pt指定）。縦組（`tate`）併用時の座標系は M7 |
+| `head_space=…` / `foot_space=…` / `gutter=…` / `fore_edge=…` / `fore-edge=…` | jlreq.cls:309–321 | 天・地・のど・小口 | **implemented** | M6+P7 | options-sweep.tex で検証（pt指定）。**P7**: tate 併用の幾何対照を `furniture-options` ゲートで固定（twoside 非対称 gutter + twocolumn + 遅延注 + marginpar; oddsidemargin 12.7299pt / evensidemargin 82.73001pt が uplatex 同一ソースとビット一致——旧「数ミリのオフセット」は縦組み `\Cht/\Cdp` を縦JFM class 0 で測り直して解消） |
 | `baselineskip=…` / `linegap=…` | jlreq.cls:336–339 | 行送り | **implemented** | M6 | `baselineskip=20pt` 検証済み（options-sweep.tex）。zw/zhリテラルはクラスロード時書き換えパスで処理 |
 | `column_gap=…` | jlreq.cls:332 | 段間 | **implemented** | M6 | `column_gap=2zw` 検証済み（options-sweep.tex + microtype-twocolumn.tex で二段組実測） |
 | `sidenote_length=…` | jlreq.cls:355 | 傍注の長さ | **implemented** | M6 | `sidenote_length=5zw` 実測 rc=0（zwリテラル書き換え対象リストに追加済み） |
-| `headfoot_verticalposition=…` / `headfoot_sidemargin=…` | jlreq.cls:326–329 | 柱・ノンブル位置 | **implemented** | M6 | `3zw`/`2zw` 指定実測 rc=0（zwリテラル書き換え対象） |
+| `headfoot_verticalposition=…` / `headfoot_sidemargin=…` | jlreq.cls:326–329 | 柱・ノンブル位置 | **implemented** | M6 | `3zw`/`2zw` 指定実測 rc=0（zwリテラル書き換え対象）。縦組文書では柱行は P7 ラッパで版面高巾に組まれる（家具行幅の論理/物理区別は jlreq-pdftex.sty の一箇所に集約） |
 
 ### 2.3 組み方
 
@@ -80,7 +80,7 @@
 | `abstract_with_maketitle=` | jlreq.cls:5638 | abstract の配置 | **implemented** | M6 | `abstract_with_maketitle=true`+\maketitle 実測 rc=0 |
 | `itemization_beforeafter_space=…` / `itemization_itemsep=…` / `itemization_labelsep=…` / `itemization_label_length=…` | jlreq.cls:5816 | 箇条書き | **implemented** | M6 | itemization_* 検証済み（options-sweep.tex）、リスト実測（lists.tex） |
 | `quote_indent=…` / `quote_end_indent=…` / `quote_fontsize=…` / `quote_beforeafter_space=…` | jlreq.cls:5844 | 引用 | **implemented** | M6 | quote_indent=2\zw 実測 rc=0。リテラル形式も対応: `quote_indent=2zw` 実測 JSETUP-QI=20.0pt、`quote_end_indent=0.5zw` 実測 JSETUP-QEI=5.0pt（jlreqsetup-zw.tex） |
-| `tableofcontents_heading=…` / `tableofcontents_twocolumn=` | jlreq.cls:5980 | 目次 | **implemented** | M6 | `tableofcontents_heading` 実測 rc=0（2パス）。リーダーの\inhibitglueはno-opシムで無害化、headings-toc-aux.tex で目次・\ref 往復実測 |
+| `tableofcontents_heading=…` / `tableofcontents_twocolumn=` | jlreq.cls:5980 | 目次 | **implemented** | M6+P7 | `tableofcontents_heading` 実測 rc=0（2パス）。リーダーの\inhibitglueは実装済み（1境界抑止）。headings-toc-aux.tex で目次・\ref 往復実測。**P7**: tate 2パス目の "Leaders not followed by proper glue" 不良（frame-pop `\aftergroup` + P6 ゲートの群括りの重畳）を解消、`toc-twopass` ゲートで固定（docs/pdftex-internals.md P7節） |
 | `frontmatter_*` / `mainmatter_*` / `backmatter_*`（pagebreak/pagestyle/counter/heading/precode/postcode/pagination 計 21 キー） | jlreq.cls:6176, 6249, 6284 | 前付・本体・後付 | **implemented**（既定動作） | M6 | \frontmatter/\mainmatter/\backmatter 実測 rc=0（book、ローマ数字→アラビア数字切替）。個別キー上書きは未網羅 |
 | `appendix_counter=…` / `appendix_heading=…` / `appendix_precode=…` / `appendix_postcode=…` | jlreq.cls:6321 | 付録 | **implemented**（横組既定） | M6 | \appendix+\chapter 実測 rc=0（横組）。縦組時の `\tatechuyoko*` は M7 |
 | `year_style=`（`seireki`/`wareki`） | jlreq.cls:6516–6519 | 西暦/和暦 | **implemented**（横組） | M6 | `wareki` 実測 rc=0。\todayは横組固定。`\kansuji` は展開可能マクロとして実装済み（4.1の行を参照） |
@@ -123,11 +123,11 @@
 
 | 命令/環境 | 定義行 | 役割 | pdfTeX ステータス | 対応工程 | 備考 |
 |---|---|---|---|---|---|
-| `\DeclarePageStyle` / `\NewPageStyle` / `\ModifyPageStyle` | jlreq.cls:4964, 5238, 5247 | ページスタイルの宣言 | **implemented**（横組） | M6 | NewPageStyle+ModifyPageStyle 実測 rc=0。`tate`指定の縦組柱は M7 |
-| `headings` / `myheadings` 等の既定ページスタイル | jlreq.cls:6599–6626 | 標準ページスタイル | **implemented** | M6 | `\pagestyle{headings}` 実測 rc=0。plain/headings/myheadings全て横組定義 |
+| `\DeclarePageStyle` / `\NewPageStyle` / `\ModifyPageStyle` | jlreq.cls:4964, 5238, 5247 | ページスタイルの宣言 | **implemented**（横組; 縦組柱は T2 で実装済み） | M6+P7 | NewPageStyle+ModifyPageStyle 実測 rc=0。縦組柱・ノンブルは P7 の薄い出力ラッパで本数値対照済み（`furniture-options` ゲート: 家具行幅=版面高、uplatex 対照ビット一致） |
+| `headings` / `myheadings` 等の既定ページスタイル | jlreq.cls:6599–6626 | 標準ページスタイル | **implemented** | M6 | `\pagestyle{headings}` 実測 rc=0。plain/headings/myheadings全て横組定義（縦組文書では柱はP7ラッパ経由で版面高巾に組まれる） |
 | `\frontmatter` / `\mainmatter` / `\backmatter` | jlreq.cls:6234, 6261, 6308 | 前付・本体・後付 | **implemented** | M6 | book実測: ローマ数字ノンブル(iii/iv)→アラビア数字(1)切替、\appendix で付録A出力（full3.tex） |
 | `\appendix` | jlreq.cls:6326 | 付録 | **implemented** | M6 | 実測: 付録A出力（full3.tex） |
-| `\tableofcontents` / `theindex` / `thebibliography` | jlreq.cls:5955, 6066, 6038 | 目次・索引・参考文献 | **implemented**（toc/bibliography） | M6 | 目次リーダー・\bibitem 実測（full2/full3.tex、headings-toc-aux.tex）。`theindex` は横組文書で`\yoko`がno-opのため実質利用可 |
+| `\tableofcontents` / `theindex` / `thebibliography` | jlreq.cls:5955, 6066, 6038 | 目次・索引・参考文献 | **implemented**（toc/bibliography; tate TOC は P7 で完全化） | M6+P7 | 目次リーダー・\bibitem 実測（full2/full3.tex、headings-toc-aux.tex）。**P7**: tate + TOC の2パス目不良を解消（`toc-twopass` ゲート）。`theindex` は横組文書で`\yoko`がno-opのため実質利用可（縦組文書では P5 のページ方向フラグで本当の横組みページ） |
 | `figure` / `table` / `caption` | jlreq.cls:5476, 5504（環境）、5306–5340（キャプション機構） | 図表 | **implemented** | M6 | figure/table+caption、tabular 実測 rc=0（env.tex、table-tabular.tex、graphicx-xcolor.tex） |
 | `enumerate` / `itemize`（`\@listi`–`\@listvi` 再定義） / `quote` / `quotation` / `verse` / `description` | jlreq.cls:5835–5842（リスト初期化）、5873, 5893（quote 系）、5739（description） | 箇条書き・引用 | **implemented** | M6 | 6環境すべて実測 rc=0（env.tex、lists.tex） |
 
@@ -151,7 +151,7 @@
 
 ## 6. 既知の制約（現時点で確定しているもの）
 
-1. **~~縦組み（`tate` オプション）~~ → 実験的コア実装済み（2026-10-23、T1）**： 「`\tate`/`\yoko` プリミティブが無い＝縦組み不可能」との初回判定は、shipout rotation 構成（内枠横組 galley＋和文グリフ+90°回転＋出力箱 −90°回転）によって覆された。縦組み JFM データ・約物配置・禁則・2ページ継起まで実測済み（T8）。**残件（個別スライス、いずれも構造ブロックではない）**： 縦組み見出し・柱等のページ家具、~~`\tatechuyoko`~~（**P5 で実装済み**: 局所方向エンジン+箱工場、tcy-*/dir-* ゲート、docs/pdftex-tate-eval.md 参照）、縦組み `\kansuji`/`\today` 縦組表示、脚注・傍注・float の縦組み調整、数式隣接、ルビ、tate 連動 jlreqsetup キー。回転バナーは従来の `\rotatebox{-90}` 版（4.4参照）。初期評価（bxcjkvert 再評価の経緯）は `docs/pdftex-tate-eval.md` 参照。
+1. **~~縦組み（`tate` オプション）~~ → コア実装済み（T1–T4）、縦家具・目次・保存位置は P7 で数値対照済み**： 「`\tate`/`\yoko` プリミティブが無い＝縦組み不可能」との初回判定は、shipout rotation 構成（内枠横組 galley＋和文グリフ+90°回転＋出荷時 −90°回転）によって覆された。**P7** では出力ルーチンを薄いラッパに再構成（kernel `\@outputpage` 本体丸写しを撤去; build/page フックと hook 付き shipout は素通りを機械検証）、縦家具オプション（head_space/foot_space/gutter/fore_edge 非対称 + twoside + 段組 + 遅延注 + marginpar）の幾何を uplatex 同一ソースと**ビット一致**で対照（`furniture-options` ゲート）、tate TOC 2パス不良を解消（`toc-twopass` ゲート）、savepos の論理行方向測定（割注）も uplatex とビット一致（`savepos-warichu` ゲート）。~~縦組み見出し・柱等のページ家具~~・~~tate 連動 jlreqsetup キー~~ は本対照で解消。**残件**: ルビ（P10）、縦組み `\kansuji`/`\today` 縦組表示の個別対照。回転バナーは従来の `\rotatebox{-90}` 版（4.4参照）。初期評価（bxcjkvert 再評価の経緯）は `docs/pdftex-tate-eval.md` 参照。
 2. **~~`mag` オプション相当（`\mag` 可変運用）~~ → 解決（2026-10-23）**： jlreq.cls:1677–1690 の d 分岐で `\pdfhorigin`=`\pdfvorigin`=`1truein` を再代入し `\pdfpagewidth`/`\pdfpageheight` を 1000/`\mag` 倍に再スケールする相殺を実装。実測: `\mag=1200` の版面寸法が uplatex 参照とビット等価（94.152bp）、`\mag=1000` では出力が導入前後でバイト一致。**トンボ描画も `\mag=1200` で一致**： jlreq-trimmarks-pdftex.def:58–77 の `\put` 原点補正（`\mag≠1000` 時に描画 stored 座標へ混入する `\hoffset`/`\voffset` 成分を相殺； uplatex は stored 座標が mag 不変＝全描画がストック隅から単純 mag 倍であることの実測・コンテントストリーム照合に基づく）により、描画 HiRes ink-bbox が uplatex と完全一致（`42.048 42.174 845.082 1140.894`）。`\mag=1000` では描画ストリームが導入前後で一致（HiRes `35.041 35.136 704.234 950.742`）。検証 fixture: `tests/fixtures/pdflatex-coexist/mag-tombow.tex` ＋ `tests/check-tombow-mag.py`（トンボ罫線の stored 座標が mag 不変で (35.05, 922.444) かつページ CTM が ×1.2 であることを機械判定、runner 登録済み）。テキストブロックの +1truein 再センタリングは jlreq-trimmarks-pdftex.def:79–89 で実装済み（uplatex 比較で y 誤差 ≤0.065bp、x ビット一致）。
 3. **~~`hanging_punctuation`（ぶら下げ）の完全再現~~ → 実装済み（2026-10-23）**： 先行の「pdfTeX は行末突出し機構を持たない」は誤りと判明。`\pdfprotrudechars=2`＋`\rpcode` で `-b`/`-bz` 変種の句読点突出しを実装（2.3表・poc/README-g3b.md 参照）。LuaTeX-ja の `ltjenableadjust[lineend=extended,priority=true]`（jlreq.cls:502）相当の**優先順位付き伸縮**の厳密な意味論は、引き続き近似（shrink 畳み込み、実害非計測——poc/README-m5-numeric.md）として残る。
 4. **~~和文 `\label` 名~~ → 実装済み（2026-10-24、P9）**： label key の対称正規化 `\jlreqpdf@labelkey`（`\protected@edef` で通常マクロ展開・UTF8 byte は CJK byte マクロの保護分岐で凍結 → `\detokenize` で catcode 12 化、byte 不変）を write（`\label`）・read（aux の `\newlabel`、begindocument/before フック）・query（`\ref`/`\pageref` star 両形）に接続。パッケージ面も対応: nameref（`\NR@setref`）、hyperref（`\label@hyperref`/`\HyRef@autoref`/`\hyperref[..]`）、refcount（`\refused`/`\rc@set`/`\getrefnumber` — edef 内完全展開を維持）、cleveref（`\@cref` 入口の key 事前正規化 + `\cref@getref`/`\cpageref@getref`）。ASCII ラベルの aux は byte 不変（HEAD tree との cmp 一致を実測）。eqref-hyperref.tex の「日本語label不可」コメントは解消済み（label-packages.tex が全面行列を実測）。

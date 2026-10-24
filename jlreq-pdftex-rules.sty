@@ -181,56 +181,96 @@
 
 %. --------------------------------------------------- semantic frames
 % Box/paragraph boundaries must not inherit (nor leak) the running
-% inter-glyph state (P3 bullet 5). A frame saves
-%   {lastclass, lastnodechar, pend, inhibit, direction, fontkey, zw}
-% on entry and restores it on exit; the glyph layer inside starts from
-% the neutral paragraph-boundary state.
-%   - push: at everyhbox/everyvbox entry (prepended tokens; user's own
-%     tokens still run exactly once, after ours)
-%   - pop : via \aftergroup at the same group end (boxes are groups)
-%   - backend-internal boxes (charbox, math boxes, measurement boxes)
-%     bracket the guard count \jlreqpdf@nest so the hook is a no-op
-%     inside them.
-% After a box closes, the NEXT CJK entry inspects \lastnodetype: an
-% h/v box (13/14) means the boundary is boxbdd-like; a mere measurement
-% (\sbox) keeps the restored parent state (no forced neutralization).
-\newcount\jlreqpdf@framedepth
+% inter-glyph state (P3 bullet 5). Two mechanisms, both WITHOUT
+% \aftergroup (P7 -- see the long comment below):
+%   * ENTRY: everyhbox/everyvbox tokens (prepended; the user's own
+%     tokens still run exactly once, after ours) neutralize the state
+%     at box start (boxbdd semantics: 90/-1/0) so the glyph layer
+%     inside starts from the neutral paragraph-boundary state. The
+%     inhibit flag is preserved (one-shot semantics: \inhibitglue
+%     issued just before a box must still suppress the first eligible
+%     boundary INSIDE it). Backend-internal boxes (charbox, math
+%     boxes, measurement boxes) bracket the guard count
+%     \jlreqpdf@nest so this hook is a no-op inside them.
+%   * CLOSE: no token is inserted. Reads that directly follow a box
+%     (\lastnodetype 13/14 with the glyphmark below clear) re-apply
+%     the same neutralization (boxbdd); the direction field of the
+%     old frame tuple is gone (the factory and theindex switch
+%     direction only inside nest-guarded boxes or outside boxes).
+% P7 NOTE (2026-10-24): the old design saved the state at entry and
+% restored it via \aftergroup\jlreqpdf@frame@pop at each box close.
+% \aftergroup inserts real assignment tokens right after the box --
+% and \leaders\hbox{...}<glue> REQUIRES the glue to follow the box
+% with nothing unexpandable in between. Every leader box (LaTeX TOC
+% dot leaders, user \leaders/\xleaders, \cleaders) therefore died
+% with "Leaders not followed by proper glue" -- reproduced for
+% yoko AND tate, with or without CJK in the leader box, with
+% article+rules.sty alone (no output routine involved). The tate TOC
+% pass-2 defect assigned to P7 was exactly this, not a rotation
+% problem. Candidate replacements via eTeX \currentgrouplevel were
+% measured unusable: the quantity is not readable in restricted
+% horizontal mode (\raise\hbox{}, math), so box entries there fail.
+% The present design (neutralize at entry + boxbdd at reads +
+% glyphmark to tell our own glyph boxes from user boxes) has the
+% same observable boundary semantics and leaves leader scans clean.
+%     glyphmark: 1 after each observed CJK glyph, 0 at each
+%     (non-backend) box entry. The backend's own glyph boxes are
+%     nest-guarded, so the mark distinguishes "\lastnodetype 13 is
+%     our charbox" (mark=1, ordinary pair lookup) from "a user box
+%     has just closed" (mark=0, boxbdd). Without the mark every tate
+%     glyph (a rotated charbox, 13) would read as a box boundary.
 \newcount\jlreqpdf@nest % backend-internal box guard (see glyph@tate/math)
-% P5: group-local direction enum, 0=yoko 1=tate. Part of the frame tuple
-% (pushed/popped with the other boundary-state fields) so a box that
-% switches direction (backend factory, theindex pages) restores the
-% parent direction on exit. The MAIN document direction seeds it from
-% \if@tate at begin document (jlreq-pdftex.sty); the glyph layer reads
-% it via \jlreqpdftex@ifydir/@iftdir (frame-live, not constants).
+\newcount\jlreqpdf@glyphmark \global\jlreqpdf@glyphmark=0
+% P5: group-local direction enum, 0=yoko 1=tate, switched by the box
+% factory / theindex pages; the glyph layer reads it via
+% \jlreqpdftex@ifydir/@iftdir. The MAIN document direction seeds it
+% from \if@tate at begin document (jlreq-pdftex.sty).
 \newcount\jlreqpdf@dir \global\jlreqpdf@dir=0
-\def\jlreqpdf@frame@push{%
-  \expandafter\edef\csname jlreqpdf@frame@\the\jlreqpdf@framedepth\endcsname{%
-    \noexpand\jlreqpdf@lastclass=\the\jlreqpdf@lastclass\relax
-    \noexpand\jlreqpdf@lastnodechar=\the\jlreqpdf@lastnodechar\relax
-    \noexpand\jlreqpdf@pend=\the\jlreqpdf@pend\relax
-    \noexpand\jlreqpdf@inhibit=\the\jlreqpdf@inhibit\relax
-    \noexpand\jlreqpdf@lastzw=\the\jlreqpdf@lastzw\relax
-    \noexpand\jlreqpdf@dir=\the\jlreqpdf@dir\relax}%
-  \global\advance\jlreqpdf@framedepth1
-  % neutral box-start state (boxbdd semantics: 90, no pending penalty)
+% neutral box-start state (boxbdd semantics: 90, no pending penalty).
+% Keep inhibit (see above); resync lastzw so the first interior
+% boundary blends against the live glyph size.
+\def\jlreqpdf@box@neutralize{%
   \global\jlreqpdf@lastclass=90
   \global\jlreqpdf@lastnodechar=-1
   \global\jlreqpdf@pend=0
-  % NOTE: inhibit is NOT cleared here: \inhibitglue issued just before
-  % a box must still suppress the first eligible boundary INSIDE it
-  % (one-shot semantics; init-at-entry would swallow the user's token).
+  \global\jlreqpdf@lastzw=\jlreq@jareg
+  \global\jlreqpdf@glyphmark=0
 }
-\def\jlreqpdf@frame@pop{%
-  \global\advance\jlreqpdf@framedepth-1
-  \csname jlreqpdf@frame@\the\jlreqpdf@framedepth\endcsname
-  % the saved macro body performed the assignments; drop the macro
-  \expandafter\global\expandafter\let
-    \csname jlreqpdf@frame@\the\jlreqpdf@framedepth\endcsname\relax
+% boxbdd re-neutralization at a read whose previous node is a closed
+% USER box (\lastnodetype 13/14 and glyphmark=0): the pair is
+% evaluated against the boundary pseudo class 90, not against the
+% stale interior state -- pTeX box semantics (boxes isolate JFM
+% state). Keep inhibit; resync lastzw.
+\def\jlreqpdf@boxbdd{%
+  \ifnum\jlreqpdf@glyphmark=0
+    \ifnum\lastnodetype=13
+      \jlreqpdf@boxbdd@
+    \else
+      \ifnum\lastnodetype=14
+        \expandafter\jlreqpdf@boxbdd@
+      \fi
+    \fi
+  \fi}
+\def\jlreqpdf@boxbdd@{%
+  \global\jlreqpdf@lastclass=90
+  \global\jlreqpdf@lastnodechar=-1
+  \global\jlreqpdf@pend=0
+  \global\jlreqpdf@lastzw=\jlreq@jareg
 }
-% neutral paragraph start (everypar / para/begin / math entry): the
-% boundary class, pending penalty and the last-node scalar reset. The
-% inhibit flag is reset here too -- a stale \inhibitglue from the
-% previous paragraph must not eat the next paragraph's first boundary.
+% class-side reader variant (jlreq.cls \tatechuyoko/\　 consumers):
+% when the reader directly follows a closed user box, the observed
+% lastnodechar must read as "no preceding char" (-1), matching the
+% boxbdd semantics of the glyph-side reader above.
+\def\jlreqpdf@boxbddlastchar{%
+  \ifnum\jlreqpdf@glyphmark=0
+    \ifnum\lastnodetype=13
+      \global\jlreqpdf@lastnodechar=-1
+    \else
+      \ifnum\lastnodetype=14
+        \global\jlreqpdf@lastnodechar=-1
+      \fi
+    \fi
+  \fi}
 % neutral paragraph start (everypar / para/begin / math entry): the
 % boundary class, pending penalty, the last-node scalar and the
 % inhibit flag reset; lastzw re-syncs to the CURRENT zw so the first
@@ -243,13 +283,14 @@
   \global\jlreqpdf@pend=0
   \global\jlreqpdf@inhibit=0
   \global\jlreqpdf@lastzw=\jlreq@jareg
+  \global\jlreqpdf@glyphmark=0
 }
-% the implicit group of \hbox{...} closes. Guard: no push inside
-% backend-internal construction.
+% entry hook for everyhbox/everyvbox. NO \aftergroup (P7, see the
+% semantic-frames comment). Guard: no-op inside backend-internal
+% construction.
 \def\jlreqpdf@box@enter{%
   \ifnum\jlreqpdf@nest=0
-    \jlreqpdf@frame@push
-    \aftergroup\jlreqpdf@frame@pop
+    \jlreqpdf@box@neutralize
   \fi
 }
 %. -------------------------------------------- JA<->LA xspc class table
@@ -633,6 +674,9 @@
 %     ltj insert_lineend_kern_tail (ltj-adjust.lua:397-411) 相当。
 \newdimen\jlreqpdf@tailkern
 \def\jlreqpdf@para@endhook{%
+  % P7: if the paragraph's last node is a box, the tail-kern read
+  % must use boxbdd semantics (no stale interior end_adjust).
+  \jlreqpdf@boxbdd
   % inside the paragraph, before \parfillskip is added: if the last
   % observed CJK class has a negative minimal end_adjust candidate,
   % insert its kern so the final short line keeps the protrusion.
@@ -896,6 +940,10 @@
     % (math counts as an alchar/latin boundary, set by the $-peek or
     % left over from the preceding latin run)
   \else
+    % P7: if the reader directly follows a closed user box, apply
+    % boxbdd semantics -- the boundary pseudo class 90, not the stale
+    % interior state (see \jlreqpdf@boxbdd).
+    \jlreqpdf@boxbdd
     \jlreqpdf@setclassof{#1}%
     \ifnum\jlreqpdf@inhibit=1
       \global\jlreqpdf@inhibit=0
@@ -904,6 +952,11 @@
       \jlreqpdf@setpost
     \fi
     \global\jlreqpdf@lastclass=\jlreqpdf@curclass
+    % P7: this glyph's node (bare char or our nest-guarded charbox)
+    % is about to become the last node; mark it ours so a following
+    % \lastnodetype=13/14 read at the next boundary is not mistaken
+    % for a user box (see the semantic-frames comment).
+    \global\jlreqpdf@glyphmark=1
   \fi
 }
 % \jlreqpdf@beforeglyph: the F1 zero-glue \unskip (kinsoku residual --
@@ -938,6 +991,19 @@
   \fi
   {\jlreqpdf@peek@do}%
 }
+% P7: \jlreqpdf@peek@resume -- the aftergroup continuation of a peek
+% deferred at a group end. It is the plain futurelet form: no
+% correction is re-emitted at the group end itself (the follower's
+% own hook emits the boundary), so no double boundary emission can
+% happen (P3 bullet 6). Note: when the closing group was a BOX whose
+% last node was a CJK glyph, this resume still runs its \futurelet at
+% the box edge -- the case \leaders\hbox{..<CJK>}<glue> remains
+% unsupported (leader boxes with a bare CJK tail; the LaTeX TOC
+% leader box ends in \null after the glyph, so the TOC path never
+% defers). The universal leader breakage (every \leaders box, any
+% content, via the frame-pop \aftergroup) is fixed by removing that
+% \aftergroup (see the semantic-frames comment above).
+\def\jlreqpdf@peek@resume{\jlreqpdf@peek}
 % 非数式モードのときだけ実行される本体．
 \def\jlreqpdf@peek@do{%
   \futurelet\jlreqpdf@next\jlreqpdf@peek@a
@@ -981,11 +1047,16 @@
   \else
     \ifx\jlreqpdf@next\egroup
       % group end: resume the peek after the group (G2 PoC pattern).
-      % The resumed peek is the plain futurelet form: no correction is
-      % re-emitted at the group end itself (frame restore handles the
-      % state; the follower's own hook emits the boundary), so no
-      % double boundary emission can happen (P3 bullet 6).
-      \aftergroup\jlreqpdf@peek
+      % P7: the resume macro (not \jlreqpdf@peek itself) first checks
+      % whether the group that closed was a BOX (\lastnodetype 13/14
+      % and glyphmark=0): a box edge is boxbdd, no boundary glue is
+      % emitted against the box, and -- critically -- the check makes
+      % the aftergroup token expand to NOTHING there, so
+      % \leaders\hbox{...}<glue> scans stay intact (this aftergroup
+      % is what previously surfaced as \futurelet inside the leader
+      % glue scan). Plain {..} groups contribute no node, so the
+      % resumed peek proceeds there exactly as before.
+      \aftergroup\jlreqpdf@peek@resume
     \else
       \ifx\jlreqpdf@next$%
         \jlreqpdf@peek@lat
@@ -1183,6 +1254,25 @@
 \def\jlreqpdf@splitcls#1#2#3#4#5{%
   \def\jlreqpdf@cls@w{#1}%
   \def\jlreqpdf@cls@align{#4}%
+}
+% P7: \jlreq@pdftex@tate@chtc@dp -- jlreq.cls measures \Cht/\Cdp via
+% \hbox{阿} at class load (before begin document); under the pdfTeX
+% tate path the glyph layer gives horizontal-metric box extents, not
+% the pTeX \cht/\cdp (= vertical JFM class-0 h/d). This helper reads
+% the tate class-0 h/d from the generated JFM data (already input by
+% the time jlreq.cls reaches its measurement) and hands them to the
+% class, which applies them against the current zw. Called ONLY in
+% the d+tate branch of the class measurement.
+\def\jlreqpdf@cls@h{}
+\def\jlreqpdf@cls@d{}
+\def\jlreq@pdftex@tate@chtc@dp#1{%
+  \expandafter\jlreqpdf@tate@chtc@dp@split#1%
+}
+\def\jlreqpdf@tate@chtc@dp@split#1#2#3#4#5{%
+  \def\jlreqpdf@cls@h{#2}%
+  \def\jlreqpdf@cls@d{#3}%
+  \setlength\Cht{\jlreqpdf@cls@h\jlreq@jareg}%
+  \setlength\Cdp{\jlreqpdf@cls@d\jlreq@jareg}%
 }
 % leading spacer: absent for left (glyph flush left), \hss otherwise
 \def\jlreqpdf@placealign{%

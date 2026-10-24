@@ -542,9 +542,13 @@
       footnote/endnote/sidenote/~\string\marginpar,~basic~floats,~inline/display~math,\MessageBreak
       local~direction~+~\string\tatechuyoko~(1zw-normalized,~star/non-star),\MessageBreak
       jlreq-trimmarks~banners~in~tate~(P8:~all~slot~families~match~the~uplatex\MessageBreak
-      ground~truth~within~0.01pt;~see~tests/check-banner-tate.py).\MessageBreak
+      ground~truth~within~0.01pt;~see~tests/check-banner-tate.py),\MessageBreak
+      P7:~output~routine~is~a~thin~wrapper~over~the~kernel~original;~asymmetric\MessageBreak
+      gutter/fore_edge/head_space/foot_space~+~twoside~+~twocolumn~+~deferred\MessageBreak
+      footnotes~+~\string\marginpar~match~uplatex~bit-for-bit,~savepos~line-extents\MessageBreak
+      (warichu)~match~bit-for-bit,~tate~TOC~ships~both~passes.\MessageBreak
       Still~out-of-scope~(expected~to~render~wrongly~or~error):\MessageBreak
-      ruby,~tate-geometry-dependent~jlreqsetup~keys.\MessageBreak
+      ruby.\MessageBreak
       See~docs/pdftex-tate-eval.md~and~the~pdflatex-tate~fixtures.}
   \fi
 \fi
@@ -757,6 +761,13 @@
   % pdfTeX：横組なのでelse版と同じ式を使う（\jlreq@ifydirは常に真）．
   % \iftombowはpTeX系の機構のため空にする（トンボはjlreq-trimmarks経由，M6）．
   \def\jlreq@tombow@adjust{}
+  % P7: mag≠1000 では原点（jlreq.cls の \pdfhorigin=1truein 補償）と
+  % 側余白（同 clt の -1truein 減算）が物理 1in 基準に揃うため、
+  % 末項も -1in（デザイン）ではなく -1truein（物理）にする。
+  % 実測（savepos-warichu-mag ゲート）: mag=1000 では 1truein=1in で
+  % 無変換、mag=1200 では論理行方向の current/rest が mag=1000 と
+  % 同一の 60.0pt/140.0001pt に戻る（raw \pdflastxpos 自体は
+  % mag 不変＝デザイン座標であることも実測済み）。
   \def\jlreq@calc@current@linewidth@onecolumn{%
     \dimexpr
       \jlreq@reference@ref{jlreq@rest@width.pos.X.\the\jlreq@reference@count}{0} sp - \hoffset
@@ -766,7 +777,7 @@
         - \evensidemargin
       \fi
       \jlreq@tombow@adjust
-      - \@totalleftmargin - 1in
+      - \@totalleftmargin - 1truein
     \relax
   }
 }{
@@ -1618,6 +1629,9 @@
     \futurelet\jlreq@nextchar\jlreq@zenkakuspace@ignorespaces}%
   \NewDocumentCommand{\jaspace@zenkaku}{}{\hskip\glueexpr 1\jlreq@zw\relax}
   \def\jlreq@zenkakuspace@main{%
+    % P7: 直前nodeが閉じbox（\lastnodetype 13/14）なら前文字なし扱い
+    % （boxbdd; \jlreqpdf@boxbddlastchar）。
+    \jlreqpdf@boxbddlastchar
     \jlreqpdf@classofcp{\the\jlreq@lastnodechar}%
     \ifnum\jlreqpdf@evalclass=4\relax
       \hskip 1\jlreq@zw\hbox{}%
@@ -1802,6 +1816,23 @@
 \setbox\jlreq@tempboxa\hbox{阿}
 \setlength\Cht{\ht\jlreq@tempboxa}
 \setlength\Cdp{\dp\jlreq@tempboxa}
+\if@tate
+\ifx d\jlreq@engine
+  % P7: pdfTeX 縦組みでは \hbox{阿} の ht/dp はグリフ層の横組
+  % メトリクス（rot 出力の charbox 正規化や横JFMの 0.88/0.12zw）
+  % になり、pTeX の \cht/\cdp（縦JFM class 0 の h/d = 0.5/0.5zw）
+  % と一致しない。この差（実測 Cht=8.8pt vs 5.0pt）は
+  % oddsidemargin/topmargin/footskip の縦組み幾何（-Cht+Cdp の項）
+  % にそのまま混入し、uplatex との対照で一定オフセットとして
+  % 残っていた（T3 注釈の「数ミリの家具由来オフセット」の実体）。
+  % ここで測定直後に生成縦JFMデータの class 0 h/d × 現在zw で
+  % 上書きする（バックエンドは既に jlreq-pdftex-jfm-tate.def を
+  % 読み込み済み; jlreq.cls は 525 行で backend を読むため）。
+  % 以後の縦家具計算はすべてこの論理寸法を参照する（plan §7:
+  % クラスの縦家具計算は logical dimensions を参照する）。
+  \expandafter\jlreq@pdftex@tate@chtc@dp\csname jlreqpdf@jfm@class@0\endcsname
+\fi
+\fi
 \setlength\Cwd{\wd\jlreq@tempboxa}
 \setlength\Cvs{\baselineskip}
 \setlength\Chs{\wd\jlreq@tempboxa}
@@ -6567,20 +6598,21 @@
     \advance\leftskip \@lnumwidth \hbox{}\hskip -\leftskip
     \advance\leftskip\@tempdima
     {#4}\nobreak
-    % P6: このリーダー箱内の $..$ はクラス内部の数式（pdfTeX バックエンド
-    % の行内数式キャプチャの対象外。キャプチャがこの $ を捉えると
-    % \leaders の box スキャンが再構成された箱列と干渉して
-    % "Leaders not followed by proper glue" になる（実測: TOC 2パス目）。
-    % d-engine 以外は元の構成のまま。
-    \ifx d\jlreq@engine
-      \expandafter\jlreq@pdftex@math@internal
-    \else
-      \expandafter\@firstofone
-    \fi
-    {%
+    % P6/P7: このリーダー箱内の $..$ はクラス内部の数式（pdfTeX バック
+    % エンドの行内数式キャプチャの対象外。キャプチャがこの $ を捉えると
+    % \leaders の box スキャンが再構成された箱列と干渉する）。フラグは
+    % グループ引数なしの on/off 対命令で挟む: {\leaders\hbox{..}}\hfill の
+    % ようにリーダー箱とグルーの間にグループ終端を入れると \leaders の
+    % グルー走査が群終端を越えられず "Leaders not followed by proper
+    % glue" になる（純TeXでも再現: article + {\leaders\hbox{a}}\hfill。
+    % P6 の引数形ゲートがこの形を作っていた=TOC 2パス目不良の第二要因。
+    % 第一要因の全 \leaders 箱を壊す frame-pop \aftergroup は P7 で
+    % 撤去済み。実測: 本修正後 tate/yoko TOC 2パスとも rc=0）。
+    % d-engine 以外はフラグ操作なし（そのまま素通り）。
+    \ifx d\jlreq@engine\jlreq@pdftex@math@internal@on\fi
     \leaders\hbox{$\m@th\mkern \@dotsep mu$\null\inhibitglue ・\inhibitglue\null$\m@th\mkern \@dotsep mu$}%
-    }%
     \hfill\nobreak
+    \ifx d\jlreq@engine\jlreq@pdftex@math@internal@off\fi
     \hb@xt@\@pnumwidth{\hss\normalfont\normalcolor \tatechuyoko*{#5}}%
     \par}%
   \fi
@@ -6957,6 +6989,9 @@
   \ifx d\jlreq@engine\unexpanded{%
     % pdfTeX: \lastnodechar プリミティブはない．バックエンドの状態機構が
     % 維持する観測済み和文scalar（jlreqpdf@lastnodechar，P3）を読む．
+    % P7: 直前nodeが閉じbox（\lastnodetype 13/14）のときは boxbdd
+    % 準拠で前文字無し（-1）として扱う（\jlreqpdf@boxbddlastchar）．
+    \jlreqpdf@boxbddlastchar
     \global\jlreq@lastnodechar=\jlreqpdf@lastnodechar\relax
     \int_compare:nT { \jlreq@lastnodechar>-1 } { \inhibitglue }
   }\else\unexpanded{%

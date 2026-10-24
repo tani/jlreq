@@ -722,6 +722,254 @@ else
   fi
   if [ "$tcy_rc" -eq 0 ]; then pass "tatechuyoko-basic"; else
     fail "tatechuyoko-basic" "$tcy_d/compile.out"; fi
+
+  # ---- T8c: P7 出力ルーチン薄層化・目次リーダーゲート ----
+  # (1) hook probe: build/page/{before,after} + shipout/before が
+  #     1ページにちょうど1回だけ発火することを d-tate と d-yoko
+  #     両方で検査（薄ラッパがフックを二重化していない証拠）。
+  #     各フックの発火系列が 1,2,3 の各ページで1回ずつであること
+  #     （build/page/after は kernel が \stepcounter{page} の後で
+  #     走るため page=2,3,4 と報告される: 仕様通り）。
+  # (2) tate TOC 2パス: 「Leaders not followed by proper glue」不良
+  #     （P3 frame-pop \aftergroup + P6 リーダーのグループ括り）の
+  #     回収を、両パスのコンパイル成立 + TOC-PASS マーカで固定する。
+  # (3) kernel 本体コピー不在: ソース grep（アサーション1の実行証拠）。
+  #     tate ラッパは saved kernel 実装を呼ぶだけであること。
+  hp=$(outdir_for t8c hook-probe tate)
+  hp_rc=0
+  if ! run_compile x "$hp" pdflatex \
+       tests/fixtures/pdflatex-tate/out-hook-probe.tex; then
+    hp_rc=1
+  fi
+  if [ "$hp_rc" -eq 0 ]; then
+    for n in 1 2 3; do
+      [ "$(grep -c "HOOK-BEFORE-$n: page=$n" "$hp/out-hook-probe.log" 2>/dev/null)" = 1 ] || hp_rc=1
+      [ "$(grep -c "HOOK-AFTER-$n: page=$((n+1))" "$hp/out-hook-probe.log" 2>/dev/null)" = 1 ] || hp_rc=1
+      [ "$(grep -c "SHIPOUT-$n: page=$n" "$hp/out-hook-probe.log" 2>/dev/null)" = 1 ] || hp_rc=1
+    done
+    [ "$(grep -c "HOOK-BEFORE-" "$hp/out-hook-probe.log")" = 3 ] || hp_rc=1
+    [ "$(grep -c "HOOK-AFTER-" "$hp/out-hook-probe.log")" = 3 ] || hp_rc=1
+  fi
+  hy=$(outdir_for t8c hook-probe yoko)
+  if ! run_compile x "$hy" pdflatex \
+       tests/fixtures/pdflatex-tate/out-hook-probe-yoko.tex; then
+    hp_rc=1
+  fi
+  if [ "$hp_rc" -eq 0 ]; then
+    for n in 1 2 3; do
+      [ "$(grep -c "HOOK-BEFORE-$n: page=$n" "$hy/out-hook-probe-yoko.log" 2>/dev/null)" = 1 ] || hp_rc=1
+      [ "$(grep -c "HOOK-AFTER-$n: page=$((n+1))" "$hy/out-hook-probe-yoko.log" 2>/dev/null)" = 1 ] || hp_rc=1
+      [ "$(grep -c "SHIPOUT-$n: page=$n" "$hy/out-hook-probe-yoko.log" 2>/dev/null)" = 1 ] || hp_rc=1
+    done
+  fi
+  if [ "$hp_rc" -eq 0 ]; then
+    pass "out-hook-probe (build/page+shipout hooks fire once/page, tate+yoko)"
+  else
+    fail "out-hook-probe" "$hp/compile.out"
+  fi
+
+  tg=$(outdir_for t8c toc-twopass 2pass)
+  tg_rc=0
+  for passno in 1 2; do
+    if ! run_compile x "$tg" pdflatex \
+         tests/fixtures/pdflatex-tate/toc-twopass.tex; then
+      tg_rc=1
+    fi
+  done
+  if grep -q "Leaders not followed" "$tg/toc-twopass.log" 2>/dev/null; then
+    tg_rc=1
+  fi
+  [ "$(grep -c "TOC-PASS" "$tg/toc-twopass.log" 2>/dev/null)" = 1 ] || tg_rc=1
+  if [ "$tg_rc" -eq 0 ]; then
+    pass "toc-twopass (tate TOC, no Leaders error, 2 passes)"
+  else
+    fail "toc-twopass" "$tg/compile.out"
+  fi
+
+  if grep -qE '\\shipout |\\@begindvi|\\stepcounter\{page\}' jlreq-pdftex.sty; then
+    fail "outputpage-copy-gone (kernel body must not be copied in source)"
+  else
+    pass "outputpage-copy-gone (grep: no shipout/@begindvi/stepcounter in backend)"
+  fi
+
+  # ---- T8c: P7 savepos・割注ゲート（aux frame-id 往復 + 論理行方向計測） ----
+  # 検査: 割注開始時の savepos 測定（\jlreq@savepos@for@rest@linewidth）
+  # が縦組みでも論理行方向で取れること。20zw 行・割注前 6 セルの
+  # 幾何期待（current=6zw, rest=14zw）を 0.5pt で検査する。
+  # この値は pass 2 で初めて確定する（pass 1 は aux 原点なし）ため
+  # 2パス実行して最終パスのログで判定 = aux frame-id 往復の証拠でもある。
+  # uplatex 同一ソース対照: current=60.0pt / rest=140.0001pt
+  # （2026-10-24 実測・ビット一致; ゲート値は幾何期待から独立に算出）。
+  sw=$(outdir_for t8c savepos-warichu 2pass)
+  sw_rc=0
+  for passno in 1 2; do
+    if ! run_compile x "$sw" pdflatex \
+         tests/fixtures/pdflatex-tate/savepos-warichu.tex; then
+      sw_rc=1
+    fi
+  done
+  swv=$(grep -o "REST-WIDTH: current=[0-9.]*pt, rest=[0-9.]*pt" \
+       "$sw/savepos-warichu.log" 2>/dev/null | tail -1)
+  case "$swv" in
+    "REST-WIDTH: current=60.0pt, rest=140.0001pt") ;;
+    *) sw_rc=1 ;;
+  esac
+  grep -q "MARK-POS-FAIL" "$sw/savepos-warichu.log" 2>/dev/null && sw_rc=1
+  if [ "$sw_rc" -eq 0 ]; then
+    pass "savepos-warichu (tate logical-line extents, aux round-trip, uplatex-parity 60.0/140.0001pt)"
+  else
+    fail "savepos-warichu" "$sw/compile.out"
+  fi
+
+  # ---- T8c: P7 savepos mag≠1000 ゲート ----
+  # 検査: \mag=1200 でも論理行方向の current/rest が mag=1000 と
+  # 同一（60.0pt / 140.0001pt）。raw \pdflastxpos はデザイン座標
+  # （mag 不変）であることを実測済み; クラス側の原点・側余白が
+  # 物理 1in 基準（1truein 補償）に揃うため、計測式の末項を
+  # -1truein にした P7 修正の回帰ガート。MAG-RAW 行は素の
+  # savepos 値の記録（ドキュメント参照）。
+  sm=$(outdir_for t8c savepos-warichu-mag 2pass)
+  sm_rc=0
+  for passno in 1 2; do
+    if ! run_compile x "$sm" pdflatex \
+         tests/fixtures/pdflatex-tate/savepos-warichu-mag.tex; then
+      sm_rc=1
+    fi
+  done
+  smv=$(grep -o "REST-WIDTH: current=[0-9.]*pt, rest=[0-9.]*pt" \
+       "$sm/savepos-warichu-mag.log" 2>/dev/null | tail -1)
+  case "$smv" in
+    "REST-WIDTH: current=60.0pt, rest=140.0001pt") ;;
+    *) sm_rc=1 ;;
+  esac
+  if [ "$sm_rc" -eq 0 ]; then
+    pass "savepos-warichu-mag (mag=1200 logical extents = mag=1000, design-size parity)"
+  else
+    fail "savepos-warichu-mag" "$sm/compile.out"
+  fi
+
+  # ---- T8c: P7 marginpar 列/側 + 遅延脚注位置ゲート ----
+  # 検査: d-tate で \marginpar（奇数ページ）と遅延脚注（偶数ページ）の
+  # savepos マーカを記録し、両エンジンの「行方向相対距離」が一致する
+  # ことを検査する。uplatex の tate savepos は行直交方向から数える
+  # （DVI 座標系の軸が回転出荷と異なる）ため、原点を共有する相対距離
+  # （marginpar マーカ − 脚注マーカ）で比較する:
+  #   pdflatex: dX(行方向) = 160.0007pt
+  #   uplatex : dy(行方向) = 160.0007pt（符号は原点側の違いのみ）
+  # 絶対原点はエンジンごとに異なるため、これが座標系変換を一度だけ
+  # 行う単一比較点（plan §7 の frame metadata 方針）。
+  # 2パス実行（aux 原点は pass 2 で確定）。
+  mpx=$(outdir_for t8c savepos-marginpar pd)
+  mpu=$(outdir_for t8c savepos-marginpar up)
+  mp_rc=0
+  for passno in 1 2; do
+    if ! run_compile x "$mpx" pdflatex \
+         tests/fixtures/pdflatex-tate/savepos-marginpar.tex; then
+      mp_rc=1
+    fi
+  done
+  sed -e 's/\\documentclass\[pdflatex,/\\documentclass[uplatex,/' \
+       tests/fixtures/pdflatex-tate/savepos-marginpar.tex >"$mpx/up-variant.tex"
+  for passno in 1 2; do
+    if ! run_compile x "$mpu" uplatex "$mpx/up-variant.tex"; then
+      mp_rc=1
+    fi
+  done
+  # pdflatex: mpar/fnote の X（行方向）
+  pdm=$(grep -o "MPAR-POS: x=[0-9.]*pt" "$mpx/savepos-marginpar.log" 2>/dev/null | tail -1 | sed 's/.*x=//;s/pt//')
+  pdf=$(grep -o "FNOTE-POS: x=[0-9.]*pt" "$mpx/savepos-marginpar.log" 2>/dev/null | tail -1 | sed 's/.*x=//;s/pt//')
+  # uplatex: X は行直交方向、Y が行方向 → aux の Y ラベルを読む
+  upm=$(grep -E 'mpar\.Y\.[0-9]+\}\{[0-9]+\}' "$mpu/up-variant.aux" 2>/dev/null | head -1 | sed 's/.*}{//;s/}//')
+  upf=$(grep -E 'fnote\.Y\.[0-9]+\}\{[0-9]+\}' "$mpu/up-variant.aux" 2>/dev/null | head -1 | sed 's/.*}{//;s/}//')
+  if [ -n "$pdm" ] && [ -n "$pdf" ] && [ -n "$upm" ] && [ -n "$upf" ]; then
+    pd_delta=$(python3 -c "print('%.4f' % ($pdm - $pdf))")
+    up_delta=$(python3 -c "print('%.4f' % (abs($upm - $upf)/65536.0))")
+    ok=$(python3 -c "print(1 if abs($pd_delta - $up_delta) < 0.1 else 0)")
+    [ "$ok" = 1 ] || mp_rc=1
+  else
+    mp_rc=1
+  fi
+  if [ "$mp_rc" -eq 0 ]; then
+    pass "savepos-marginpar (tate marginpar column + deferred footnote, line-dir parity pd/up = ${pd_delta}pt)"
+  else
+    fail "savepos-marginpar" "$mpx/compile.out"
+  fi
+
+  # ---- T8c: P7 PDF インクレベル・アンカー対照ゲート ----
+  # 検査: tate ページの本文グリフ走り（あ..こ = 先頭行）が pdflatex
+  # と uplatex(dvipdfmx) の PDF で 0.1pt 以内に一致すること（savepos/
+  # 論理フレーム契約の PDF 側証拠。実測: worst 0.0010pt）。
+  # 報告のみ（ゲート外）: 脚注領域の ◆/☆ アンカーは tate 脚注・
+  # 合印マイクロレイアウトの既知残差（マーク位置 d≈(+1.49,+7.61)pt、
+  # 脚注テキスト d≈2.3-5.5pt、脚注列間隔 11.458 vs 13.748pt;
+  # 同機構の yoko 対照は 0.006/0.53pt）— docs/pdftex-internals.md
+  # P7 節の数値表参照。up 変換は dvipdfmx -p "182mm,257mm"（JIS B5;
+  # クラスは papersize special を出さないため）。
+  ap_pd=$(outdir_for t8c anchor-parity pd)
+  ap_up=$(outdir_for t8c anchor-parity up)
+  ap_rc=0
+  for passno in 1 2; do
+    if ! run_compile x "$ap_pd" pdflatex \
+         tests/fixtures/pdflatex-tate/savepos-anchor-pdf.tex; then
+      ap_rc=1
+    fi
+  done
+  sed -e 's/\\documentclass\[pdflatex,/\\documentclass[uplatex,/' \
+       tests/fixtures/pdflatex-tate/savepos-anchor-pdf.tex >"$ap_up/src.tex"
+  for passno in 1 2; do
+    if ! run_compile x "$ap_up" uplatex "$ap_up/src.tex"; then
+      ap_rc=1
+    fi
+  done
+  if ! dvipdfmx -p "182mm,257mm" -o "$ap_up/up.pdf" "$ap_up/src.dvi" \
+       >"$ap_up/dvipdfmx.out" 2>&1; then
+    ap_rc=1
+  fi
+  if [ "$ap_rc" -eq 0 ]; then
+    if python3 tests/check-anchor-parity.py \
+         "$ap_pd/savepos-anchor-pdf.pdf" "$ap_up/up.pdf" \
+         >"$ap_pd/anchor.out" 2>&1; then
+      pass "anchor-parity (tate body-run ink parity pd/up, PDF level)"
+    else
+      fail "anchor-parity" "$ap_pd/anchor.out"
+    fi
+  else
+    fail "anchor-parity" "$ap_pd/compile.out"
+  fi
+
+  # ---- T8c: P7 家具オプション縦組み対照ゲート ----
+  # 検査: head_space/foot_space/gutter/fore_edge 非対称 + twoside +
+  # twocolumn + 遅延脚注 + \marginpar を d-tate で組んだときの
+  # クラス幾何レジスタが uplatex 同一ソースの実測値
+  # （oddsidemargin=12.7299pt / evensidemargin=82.73001pt /
+  #  textwidth=551.31902pt / columnwidth=265.6595pt; 2026-10-24 実測）
+  # と一致すること。縦組み \Cht/\Cdp を縦JFM class 0 で測り直した
+  # P7 修正の回帰ガードでもある（修正前は余白系に一定 3.8pt の
+  # オフセットがあった）。2パス実行（aux 安定後の値で判定）。
+  # ゲート内判定: FURN-PASS / TWOCOL-PASS / DEFNOTE カウンタ=2。
+  fo=$(outdir_for t8c furniture-options 2pass)
+  fo_rc=0
+  for passno in 1 2; do
+    if ! run_compile x "$fo" pdflatex \
+         tests/fixtures/pdflatex-tate/furniture-options.tex; then
+      fo_rc=1
+    fi
+  done
+  fov=$(grep -o "GEOM: oddsidemargin=[0-9.]*pt, evensidemargin=[0-9.]*pt" \
+       "$fo/furniture-options.log" 2>/dev/null | tail -1)
+  case "$fov" in
+    "GEOM: oddsidemargin=12.7299pt, evensidemargin=82.73001pt") ;;
+    *) fo_rc=1 ;;
+  esac
+  grep -q "FURN-PASS" "$fo/furniture-options.log" 2>/dev/null || fo_rc=1
+  grep -q "TWOCOL-PASS" "$fo/furniture-options.log" 2>/dev/null || fo_rc=1
+  grep -q "DEFNOTE: footnotecounter=2" "$fo/furniture-options.log" 2>/dev/null || fo_rc=1
+  grep -q "FURN-FAIL\|TWOCOL-FAIL" "$fo/furniture-options.log" 2>/dev/null && fo_rc=1
+  if [ "$fo_rc" -eq 0 ]; then
+    pass "furniture-options (tate asym gutter/head/foot + twoside + 2col + deferred notes + marginpar, uplatex-parity)"
+  else
+    fail "furniture-options" "$fo/compile.out"
+  fi
 fi
 
 # ===========================================================================

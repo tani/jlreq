@@ -145,6 +145,27 @@ live 化し、縦中横が正規化組版される。P5 の追加ゲート:
 `dir-roundtrip`・`dir-callers`・`dir-index-yoko`・`tcy-digits`・
 `tcy-fontchange`・`tcy-star-error` も T8 の通常検査として登録）。
 
+**追加ゲート（P7, 2026-10-24）**: T8 に T8c ブロックを追加した（出力
+ルーチン薄層化・目次リーダー・savepos・家具オプションの受け入れ）。
+- `out-hook-probe` / `out-hook-probe-yoko`: build/page/before・after・
+  shipout/before が 1ページにちょうど1回だけ発火（d-tate と d-yoko
+  両方）。
+- `toc-twopass`: tate + `\tableofcontents` 2パスで Leaders エラーゼロ
+  （P3 frame-pop `\aftergroup` + P6 リーダー群括りの2要因を解消）。
+- `outputpage-copy-gone`: backend ソースから kernel `\@outputpage` 本体
+  丸写しの grep 証拠（`\shipout `/`\@begindvi`/`\stepcounter{page}` 0件）。
+- `savepos-warichu`: 割注の savepos 論理行方向測定（current=60.0pt/
+  rest=140.0001pt、uplatex ビット一致、aux frame-id 往復は pass 2 判定で証明）。
+- `savepos-warichu-mag`: `\mag=1200` でも同一値（`−1truein` 修正の回帰ガート）。
+- `savepos-marginpar`: marginpar 列/側 + 遅延脚注の行方向相対距離が
+  pd/up 同一（160.0007pt）。
+- `anchor-parity`: 本文グリフ走りの PDF インク対照（pymupdf、
+  worst 0.0010pt）。up 変換は dvipdfmx -p "182mm,257mm"（JIS B5）。
+- `furniture-options`: 非対称 gutter/fore_edge/head_space/foot_space +
+  twoside + 段組 + 遅延注 + marginpar の幾何対照（oddsidemargin
+  12.7299pt 等が uplatex とビット一致——縦組み `\Cht/\Cdp` を縦JFM
+  class 0 で測り直した P7 修正の回帰ガート）。
+
 `tests/fixtures/pdflatex-rules/endadjust-lineend.tex` はこのリストには
 **入っていない**: 記録されていた行末追込み不良（kinsoku-lines.md の
 pdflatex 143.2pt）は f665eba の `\jlreqpdf@addendadj` 修正で解消済みで、
