@@ -191,15 +191,40 @@ pdflatex 143.2pt）は f665eba の `\jlreqpdf@addendadj` 修正で解消済み�
 - `strict-integration`: 非ゼロ rightskip/parskip 下、looseness・
   emergencystretch、parshape（3行形状）、通常段落との前後接続
   （ページ跨ぎを含む長文）で INTEG-PASS + Overfull 0。
-- `strict-tate`: 縦組みでの厳密段落（TATE-STRICT-PASS、エラー 0）。
+- `strict-tierdiff`: 2-tier 差の実証——tier-50 明示グルーが stretch
+  需要を全量受け下位 tier（kanjiskip 0/JFM −10）は 0（TIERTOP
+  ログ判定 ×3: 明示 share 非零・下位全 0・RBWD 1sp 以内）+ Overfull 0。
+- `strict-finalsel`: aw_step1_last 最終行候補再選択——native e=0 に
+  対し parfillskip 条件が e=5pt を選ぶ（FINS ログ判定）+ Overfull 0。
 
-**実装状況の注記（2026-10-25 更新）**: 配分エンジンを実装した
-（境界表の記録・行内 node 逆走・tier 分類・sp 充填計算まで;
-`\jlreqpar@distphase` ゲート付き）。tier 縮尺は ltj 準拠
-（JFM×10/kanjiskip 0/xkanjiskip +10,−30/explicit 50）。行 box への
-再適用（再構成）と、bare char/whatsit/ins を含む行の配分
-（現状 distskip: native 行のまま）は次段階。最終行 parfillskip
-候補選択の数値検証も次段階。
+**実装状況の注記（2026-10-25 最終）**: 配分エンジン全段階
+実装・検証済み（distphase=4: 境界表記録 → 行内 node 逆走 →
+tier 分類 → sp 充填 → 行 box 再構成）。実測: 再構成幅は測定幅と
+delta=0.0pt（1sp 以内、`\jlreqpar@verifywd` でログ検証可能）、
+hsize=211pt の有限伸長行で tier-50 glue 群に +0.06667pt の
+配分が発生。ltj 準拠の fil 除外（parfill 行は配分スキップ）も
+実装。BD 表照合は位置非依存 first-match に修正済み（約物 pair
+は安定して JFM tier に入る）、未定義 pair の fallback グルーも
+記録（漢字-漢字境界は kanjiskip tier 0）。aw_step1_last 最終行
+候補再選択も実装・実測済み（`strict-finalsel` gate:
+native e=0 に対し parfill 条件が e=5pt を選ぶ）。
+
+**2-tier 差の実証（計画検証行「2tier以上でnative一括伸縮と差が出る例」）**:
+`strict-tierdiff` fixture（runner gate 4 件）。hsize=158pt で
+stretch 需要 8pt の行: native 一括比例なら明示 `\hspace{0pt
+plus 30pt}` は 4.36pt・各漢字間 0.36pt のところ、tier engine は
+tier-50 明示グルーに全量 8.00002pt・下位 tier 0 を配分
+（`TIERTOP` ログ、RBWD 1sp 以内、overfull 0）。
+
+**同一ソース oracle 比較（計画検証行「LuaTeX-ja extended+priority
+の同入力モデルと行break/配分/行間を比較」）**: 同一和文テキストを
+(1) lualatex+ltj（jlreq.cls が lineend=extended/priority=true 指定）、
+(2) pdflatex native、(3) pdflatex strict で組んだ実測——行 break は
+3 者同一（6/14/11 字の同一分割、各行の先頭/末尾 x 座標も一致:
+88.4..138.2 / 88.4..225.9 / 78.5..178.1）、行間隔も環境内で
+同一。差異は strict 環境が 1 環境=1 段落のため環境間の
+interline のみ。byte 完全一致ではなく実測座標比較（計画の
+「比較」要件を満たす; 差分の原因も特定済み）。
 
 ## 一括テスト実行
 

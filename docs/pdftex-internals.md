@@ -566,17 +566,69 @@ peek は handler 引数の `{` を見るため handler は引数なしにする�
   誤って食う）; `\skip={...}` の波括弧 glue 代入は本 backend では
   誤走査する; 名前渡しの split helper は二段展開にする
   （csname 展開 + マクロ本体展開）。
-- **配分の適用範囲（現時点のゲート）**: 行内部に再挿入不能な node
-  （bare char=欧文語、whatsit=hyperref anchor、ins=label 書込、
-  mark、disc=明示ハイフン）がある行は **distskip**（配分をスキップ
-  し native 行 box のまま出力）。1zw 和文グリフの box 化
-  （`\jlreqpdf@boxglyphs`、rules.sty 側に実装済みフラグ）は改行
-  結果を変えてしまうため既定では使わない（probed:
-  strict-basic で 124pt overfull 回帰）——約物（JFM 幅 box が
-  既定の F2）と latin 語の item box 化が次段階で適用範囲を広げる。
-  行 box の再構成（段階 4）は残作業: 現在 `\jlreqpar@distphase=3`
-  （記録・分類・充填計算まで検証済み、行 box への再適用は
-  native 行のまま）。
+- **配分の適用（P11 完了、distphase=4）**: 行 box の再構成まで通る。
+  測定中は 1zw 和文グリフも box 化（`\jlreqpdf@boxglyphs=1`、
+  rules.sty 側フラグ + latadj 拡張で native 改行との差を解消済み）
+  し、行内部を完全走査可能にする。各行: PASS 1 で tail から全 node
+  を pop して専用 slot（RB@<k>、load 時確保 1024 個）へ退避、
+  PASS 2 で head から再構成——box は slot から一回だけ移し、
+  glue は **kern(nat+delta)** へ置換（skip zone=role 5 は fil order
+  込みで native glue 保持）、kern/penalty は NS 表から再出力。
+  **行は測定幅へ \hbox to で pack**（native breaker が hsize へ
+  pack したのと同一契約; 自然 pack だと parfill 領域の 0 自然長で
+  264pt vs 440pt の不一致——probed）。実測検証
+  （`\jlreqpar@verifywd` を定義するとログ出力）:
+  `measured=440.0001pt rebuilt=440.0001pt delta=0.0pt VERDICT=OK`
+  （全行、1sp 以内）。配分実測（hsize=211pt、finite stretch 必要な
+  行）: tier-50 glue 群に delta=+0.06667pt ずつ配分。
+- **ltj 準拠の fil 除外**: parfillskip（無限 order の glue）が
+  ある行は配分をスキップし全 delta=0（ltj aw_step2 の
+  `res.order > 0 → return` と同一意味。parfill の吸収分を有限
+  glue へ配ると過伸長になる——probed: 末行の 130pt 残余）。
+  行内の非再出力 node（whatsit/ins/mark/disc/bare char）は
+  **distskip**（native 行 box のまま）。
+- **BD 表照合（位置非依存 scan に修正）**: 境界グルー記録との照合は
+  表先頭からの位置非依存 first-match に改めた（cursor 消費型は
+  行の head-first 走査と表の tail-first カーソルで整列がずれ、
+  約物 pair が explicit tier(50) に誤分類されていた——実測:
+  」pair が一方の行で −10/−20、別の行で 50/50）。同一 JFM から
+  生成される表では同一 spec は必ず同一 tier を持つため、位置
+  非依存で正しい。さらに **fallback pair グルー（未定義
+  pair@0@0 の漢字-漢字境界=生 kanjiskip）の記録漏れ**を
+  emitglue 入口の wrap で解消（role 2 / tier 0）。実測:
+  漢字-漢字境界は 0/0、」・。pair は −10/−20 と安定分類。
+- **2-tier 差の実証（strict-tierdiff fixture）**: hsize=158pt で
+  stretch 需要 8pt の行について、native 一括比例伸縮なら
+  `\hspace{0pt plus 30pt}` は 8×30/55=4.36pt、各漢字間グルーは
+  0.36pt を受けるところ、tier engine は tier-50 の明示グルーに
+  全量 8.00002pt を配り、kanjiskip(0)/JFM pair(−10) tier は 0
+  （`TIERTOP` ログで検証; runner gate strict-tierdiff-* 4件）。
+- **aw_step1_last 最終行候補再選択（実装・実測）**: 最終行の
+  end_adjust 候補を parfillskip 条件で再選択——slack(e)=残余−e を
+  辞書順 (|slack|, |e|, e) で比較し、native 選択と異なれば
+  F@win として再構成行の末尾 kern に差分 (e_win−e_native) を
+  適用。実測（hsize=70pt、末尾「。」の一行段落）:
+  `FINS: native-e=0.0pt win-e=5.0pt rem=5.0pt slack=0.0pt`
+  ——native は e=0、parfill 条件は e=5pt（0.5zw ぶら下げ）を
+  選ぶ。候補表は生成 .def の endadj（各クラス2フィールド）を
+  直接 unpack して評価（再帰 sentinel walker は tail group を
+  誤飲して \fi を洩らしたため廃棄——probed）。
+- **再構成の内容保全（重大な潜在欠陥の修正）**: PASS-1 のスロット
+  \setbox は測定 \hbox グループ内で実行されるため local——
+  グループ閉鎖で全スロットが void になり、PASS-2 が空行を
+  出力していた。RBWD 幅照合は \hbox to が何もなくても幅を
+  保つためこれを検出できず、日本語グリフが全て消えた行が
+  「検証済み」と見なされていた（実測: distphase=3 で 33 字、
+  =4 で 2 字——global \setbox で解決）。distskip フラグも
+  同一理由で global 化（コピー \hbox グループ内で true に
+  しても外で消えていた）。
+- **skip zone の fil 復元**: role-5 glue は walk 時に
+  `\the\lastskip` の全文（"nat plus X fil..."）を NSf 表に記録し、
+  再構成ではそれを verbatim 再出力する。分割フィールドから
+  "nat plus... fil" を組み立てる方法は単語間空白が失われ
+  mis-parse、リテラル 'fil' グリフが行末に出力されていた
+  （probed; `\advance<skip><glue>` が natural のみ加算する仕様も
+  同根）。
 
 ## 厳密段落の実測メモ（P11 probe 記録）
 

@@ -935,6 +935,15 @@
     \ifnum\lastnodetype=0
       % direct latin adjacency at a paragraph/box head: class 27
       \global\jlreqpdf@lastclass=27
+    \else
+      % P11 (boxglyphs): with every glyph boxed the preceding node is
+      % OUR glyph box, not a char -- the glyphmark distinguishes it
+      % from a user box (boxbdd keeps user boxes neutral).
+      \ifnum\lastnodetype=1
+        \ifnum\jlreqpdf@glyphmark=1
+          \global\jlreqpdf@lastclass=27
+        \fi
+      \fi
     \fi
   \fi
 }

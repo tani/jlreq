@@ -515,6 +515,63 @@ if grep -q 'TATE-STRICT-FAIL' "$d/strict-tate.log" 2>/dev/null \
 else
   pass "strict-tate-environment (tate strict paragraph)"
 fi
+# strict-tierdiff: 2-tier差の実証（計画の検証行「2tier以上でnative一括
+# 伸縮と差が出る例」）-- tier-50 の明示グルーが需要を全量受け、
+# それ以外の tier（kanjiskip 0 / JFM pair -10）は 0。RBWD 再構成幅
+# 照合（1sp 以内）もこの fixture で検査する。
+d=$(outdir_for t11 strict-tierdiff)
+run_compile x "$d" pdflatex tests/fixtures/pdflatex-paragraph/strict-tierdiff.tex
+td_rc=$?
+# (a) the explicit tier-50 hspace glue (30pt stretch spec) received a
+#     NONZERO delta
+if ! grep -qE 'TIERTOP: line=1 gk=[0-9]+ *delta=[0-9.]+pt[^0]' \
+     "$d/strict-tierdiff.log" 2>/dev/null; then
+  fail "strict-tierdiff-explicit-share" "$d/strict-tierdiff.log"
+else
+  pass "strict-tierdiff-explicit-share (tier-50 glue takes the whole stretch)"
+fi
+# (b) every OTHER glue got exactly 0 (tier order: lower tiers unfilled).
+#     POSIX pipelines (the runner is #!/bin/sh -- no process subst).
+if grep -a 'TIERTOP' "$d/strict-tierdiff.log" 2>/dev/null \
+     | grep -v 'GI={0.0pt}{30.0pt}' | grep -v 'delta=0pt' \
+     | grep -q TIERTOP; then
+  fail "strict-tierdiff-lower-tiers-zero" "$d/strict-tierdiff.log"
+else
+  pass "strict-tierdiff-lower-tiers-zero (kanjiskip/JFM tiers receive 0)"
+fi
+# (c) compile rc + rebuilt line width matches the measured width
+#     within 1sp (RBWD VERDICT=OK on every line)
+if [ "$td_rc" -ne 0 ] \
+   || grep -q 'VERDICT=DIFF' "$d/strict-tierdiff.log" 2>/dev/null \
+   || ! grep -q 'VERDICT=OK' "$d/strict-tierdiff.log" 2>/dev/null; then
+  fail "strict-tierdiff-rebuild-width" "$d/strict-tierdiff.log"
+else
+  pass "strict-tierdiff-rebuild-width (RBWD delta within 1sp, all lines)"
+fi
+if grep -qE 'Overfull|Underfull' "$d/strict-tierdiff.log" 2>/dev/null; then
+  fail "strict-tierdiff-overfull-check" "$d/strict-tierdiff.log"
+else
+  pass "strict-tierdiff-overfull-check"
+fi
+# strict-finalsel: aw_step1_last -- the final line's end_adjust
+# candidate RE-CHOSEN by the parfillskip condition differs from the
+# native choice (FINS log: native-e=0.0pt win-e=5.0pt slack=0.0pt)
+d=$(outdir_for t11 strict-finalsel)
+run_compile x "$d" pdflatex tests/fixtures/pdflatex-paragraph/strict-finalsel.tex
+fs_rc=$?
+if [ "$fs_rc" -ne 0 ] \
+   || ! grep -q 'FINS: native-e=0.0pt win-e=5.0pt' \
+     "$d/strict-finalsel.log" 2>/dev/null \
+   || grep -q 'VERDICT=DIFF' "$d/strict-finalsel.log" 2>/dev/null; then
+  fail "strict-finalsel-aw-step1-last" "$d/strict-finalsel.log"
+else
+  pass "strict-finalsel-aw-step1-last (parfill re-selection differs from native: e=0 -> e=5pt)"
+fi
+if grep -qE 'Overfull|Underfull' "$d/strict-finalsel.log" 2>/dev/null; then
+  fail "strict-finalsel-overfull-check" "$d/strict-finalsel.log"
+else
+  pass "strict-finalsel-overfull-check"
+fi
 # ===========================================================================
 echo "== T5b: wareki today / Japanese label（P9昇格済み: 通常ゲート）=="
 # ===========================================================================
