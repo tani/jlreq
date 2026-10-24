@@ -90,16 +90,35 @@
   % \tate
   \tombowdatefalse
   %% ---------------------------------------------------------------
-  %% tate banner substitutes (graphicx rotation)
-  %% \jlreq@trimmarks@pdf@rotatebanner{<text>}: banner text rotated
-  %% 90deg CW so that it reads top-to-bottom, matching the pTeX \tate
-  %% banner.  The natural dims of \rotatebox{-90}{..} are
-  %%   wd = line thickness,  ht = 0pt,  dp = text length (below ref)
-  %% which is exactly the box convention the shared placement tails in
-  %% jlreq-trimmarks.sty expect for the tate-family slots.
+  %% tate banner substitutes (graphicx rotation) -- P8 tate-doc geometry.
+  %% \jlreq@trimmarks@pdf@rotatebanner{<text>}: banner text rotated 90deg
+  %% CW (\rotatebox{-90}) so it reads top-to-bottom, like the pTeX \tate
+  %% banner.  Natural dims of the rotated run: wd = H+D (cross extent of
+  %% the raw text box), ht = 0pt, dp = L (run length, ink descending from
+  %% the reference point).  The wrapper captures the two extents into
+  %% globally-assigned dimens -- cross and runlen -- for the slot
+  %% placement tails in jlreq-trimmarks.sty, which apply the per-family
+  %% stock corrections documented there (pTeX's tate-box ht/dp reads do
+  %% not transfer 1:1: the rotated ink always extends right of and below
+  %% the reference, while the pTeX box's ink-offset convention differs
+  %% per slot family).  Corrections measured against uplatex+dvipdfmx
+  %% ground truth: two bleed configurations, two page parities, run
+  %% lengths 2..11 chars; agreement 0.03pt (glyph bearings cancel
+  %% identically in both engines).
+  \newdimen\jlreq@trimmarks@pdf@cross
+  \newdimen\jlreq@trimmarks@pdf@runlen
+  %% dedicated scratch: the slot placement tails use
+  %% \jlreq@tempboxb for their own pre-shift wrapper, so the measuring
+  %% box here must NOT share that register (a shared register let the
+  %% slot's \dp read race with the move-out here and flipped the
+  %% bottom-slot ink direction).
+  \newbox\jlreq@trimmarks@pdf@rawbox
   \def\jlreq@trimmarks@pdf@rotatebanner#1{%
     \__jlreq_check_rotatebox:n { banner~(tate~slot) }%
-    \rotatebox{-90}{#1}%
+    \setbox\jlreq@trimmarks@pdf@rawbox=\hbox{\rotatebox{-90}{#1}}%
+    \global\jlreq@trimmarks@pdf@cross\wd\jlreq@trimmarks@pdf@rawbox
+    \global\jlreq@trimmarks@pdf@runlen\dp\jlreq@trimmarks@pdf@rawbox
+    \box\jlreq@trimmarks@pdf@rawbox
   }%
   %% Predefine every banner slot to \@empty.  An unassigned slot
   %% (e.g. the before@/after@ center aliases that only exist once the

@@ -682,81 +682,497 @@
     }%
   }}
 
-%. ------------------------------------------------------ tate math (T4)
-% 縦組み中の行内数式．ground truth（uplatex 同一ソース bbox 比較）では
-% uplatex 縦組数式は数式行ごと CW-90° 回転（寝かせ: 頭右・読み下し）で
-% あり，T1 の出荷時 −90° 回転構成はこの向きと一致する（グリフ単位の画素
-% プロファイル一致・トークン縦位置完全一致）。よって向きの補正は不要で，
-% 唯一の実測ズレはベースライン横位置の定数 δ: 我々の式は CJK 列中心基準で
-% 3.43pt@10pt だけ頭側（読冊枠 +x）に寄っていた（行内・\[..\] 表示とも
-% 同一の定数）。行内数式 $...$ と \(...\) をキャプチャして内容を自然幅
-% ボックスに組み，\raise で内側送り（枠 y 負 = 最終枠の内側）する。
-% 表示数式: 自 strip 内の 3.43pt は目立たず現行（GT 一致 strip 配置）の
-% まま。$$ 二連はキャプチャ内で cat3-$ 群に入れ替えて TeX 本来の display
-% を実行するため、センタリング・改ページ等はカーネル互換のまま変わらない．
-% 境界状態: 直前和文→数式の境界は rules の露見ピークのアクティブ$腕が
-% peek@lat に誘導（クラス27 意味論は横組みと同一）．ここでは触らない．
-% yoko 側への影響: 下記の機構定義は無害な常設マクロ（$ のアクティブ化は
-% \if@tate 時の \AtBeginDocument 内のみ）．
-% δ: uplatex 同一ソース bbox 実測による較正（T4 解析ログ）
-\newdimen\jlreqpdf@tate@mathshift
-\newbox\jlreqpdf@tate@mathbox
-% cat3-$ トークンのマクロ保持（キャプチャ内で数式へ復帰するため）
+%. ------------------------------------------------ math capture (P6)
+% 数式の統一キャプチャ（plan §6: active-$ 撤去・全入口を一回実行へ統合）。
+%
+% 【状態と ground truth（2026-10-24 実測・uplatex 同一ソース bbox/showbox）】
+%   * tate 文書: 行内数式は式全体が δ_t 下げ（uplatex: \hbox{$x$} の
+%     ht/dp が raw 数式寸法からちょうど δ_t だけ下がる。δ_t =
+%     plcore.ltx:776-792 \adjustbaseline と同一式）。
+%     δ_t = (h_M+d_M−JH−JD)/2 + JD − d_M
+%     （M=現在の欧文フォントを無補正で測定、JH/JD=現JFM class 0 の
+%      高さ/深さ×zw。縦JFM は対称 h=d=0.5zw なので
+%      δ_t=(h_M+d_M−1zw)/2+0.5zw−d_M）
+%   * yoko 文書: uplatex は行内数式に一切シフトを掛けない
+%     （\ybaselineshift=0 のまま; 実測: \hbox{$x$} が raw 数式寸法と
+%      完全一致。adjustbaseline の \iftdir 分岐が tbaselineshift しか
+%      計算しないため）。→ 横組みではシフト無し・キャプチャ不要。
+%   * 数式内テキスト box（\text/\mbox/\mathmc 等、tate で横組内容）:
+%     uplatex では式全体の δ_t に加え、方向一致部品が
+%     ptex-base.ch [36.720] shift_sub_exp_box により
+%     t_baseline_shift×factor(1000/700/500) だけ逆向きに戻される。
+%     実測（jlreq 既定 \ybaselineshift=0）での部品の静止位置:
+%       net = −δ_yoko_formula（10pt: +0.35562pt 上方、14pt: +0.42934pt）
+%     ここで δ_yoko_formula は横JFM(h=0.88/d=0.12zw)で計算した
+%     adjustbaseline 値（符号は負）。pdfTeX 側の実装:
+%       counter = (δ_t − δ_yoko) × factor/1000 を部品 box に
+%       \raise で与える（式全体 −δ_t との和が静止位置 = −δ_yoko になる）。
+%   * 表示数式: 出荷回転構成のまま y-baseline 0（uplatex strip 配置
+%     一致は T4 で実測済み）。frozen@everydisplay には触れない。
+%
+% 【キャプチャ経路（cat3-$ 維持・frozen everymath 差し替え）】
+%   カーネルは数式開始時にプリミティブ everymath（= \frozen@everymath）を
+%   「1回だけ」実行する。これを {\jlreqpdf@math@entry} に差し替える:
+%     outer entry（guard=0・tate）: 本体を閉じ cat3-$ までトークン歩行
+%       で捕捉し、(a) カーネルの開始時処理（\aftergroup\@ignorefalse・
+%       mathlevel 更新・\check@mathfonts・ユーザー \everymath）を
+%       ちょうど1回だけ外側の空数式で実行、(b) 本体を
+%       \raise−δ_t\hbox{\m@th$<body>$} に載せ替える。
+%       \mathsurround は外側の空数式に1対だけ付く（内側は \m@th）。
+%     inner entry（guard≠0）: 同一式の再入力。素通り（何もしない）。
+%       \text 等の box 内で新しく始まる数式もこの素通り経路になり、
+%       「横組形式の部品内数式 = 無補正」という uplatex 挙動と一致する
+%       （yoko 文書の数式と同一の静止位置）。
+%   \$ は catcode 3 のままなので、moving argument・\mark・aux・bookmark
+%   でアクティブ文字展開の破綻が原理的に起こらない（plan §6.7）。
+%   \(...\) は専用 wrapper（\) は protected で delimiter scan 中に展開
+%   されないため素通りの frozen 経路では捕捉できない; plan §6.1）。
+%   math 環境はカーネル定義 \math=\( / \endmath=\) なので \( の差し替えで
+%   自動的に同経路に載る。\ensuremath の $\relax#1$ も outer entry 経由。
+%
+% 【yoko 文書】 δ=0 かつ uplatex は無補正のため、entry は保存済みの
+%   元 frozen トークンを実行して素通りする（キャプチャなし・ノード構造
+%   も P5 までと byte 互換）。横組みでは raw box 検出も行わない
+%   （捕捉が存在しないため; 保証契約は縦組みの捕捉 body に対するもの）。
+%
+% 【raw primitive box 境界（plan §6.5）】 捕捉した本体のトークン歩行中、
+%   登録済み text-wrapper（\text/\mbox/\makebox/\mathmc/\mathgt/旧字体
+%   コマンド）の引数の外側に明示的な \hbox/\vbox/\vtop/\vcenter が
+%   現れたら実行前に ClassError で停止し \mbox/\text への置換を示す。
+%   wrapper 引数内・通常の {..} グループ内・マクロ展開で生成される
+%   primitive は契約外（docs/pdftex-internals.md に明記）。
+%
+% --------------------------------------------------------------------
+\newdimen\jlreqpdf@math@delta      % δ_t（現方向; yoko では常に 0）
+\newdimen\jlreqpdf@math@delta@yoko % 横JFM で計算した δ（部品 counter 用）
+\newbox\jlreqpdf@math@probebox
+\newbox\jlreqpdf@mathbox
+\newcount\jlreqpdf@math@grab      % one-shot guard: 0=素通り, 1=同一式再入力
+\newtoks\jlreqpdf@math@frozen@saved  % カーネル元 frozen トークンの複製
+\newtoks\jlreqpdf@math@body      % 捕捉した本体
+\newcount\jlreqpdf@math@depth    % 歩行中の wrapper 引数深度（未使用深度は0固定）
 \expandafter\let\expandafter\jlreqpdf@dollar@plain\expandafter=$%
-% 行内数式の組版: 自然幅 \hbox（\textstyle系）を δ 内側に下げる。
-% \mathsurround は jlreq 規定 0pt で、そもそも出荷元の $..$ にも入らない
-% （キャプチャ時落ちるが無影響）。#1 はブレース引数（\( 経路と共有）。
-\long\def\jlreqpdf@tate@imath#1{%
-  % backend-internal box: guard the frame machinery (P3)
+
+% ---- δ 計算（plcore.ltx:776-792 と同一の演算順序/sp整数演算）----
+% plcore: dimen = ht(M)+dp(M); dimen -= cHT; dimen /= 2; dimen += cdp;
+%         dimen -= dp(M)   （cHT=cht+cdp=JH+JD, cdp=JD）
+% M の測定は毎回の数式開始時（fontsize/family 変化に自動追従）。
+% JH/JD は現 JFM (.def) class 0 の h/d × 現在の zw（\jlreq@jareg）。
+\def\jlreqpdf@math@setdelta{%
+  % 欧文フォント M の無補正寸法（backend-internal box: guard）
   \global\advance\jlreqpdf@nest1
-  \setbox\jlreqpdf@tate@mathbox=\hbox{\jlreqpdf@dollar@plain#1\jlreqpdf@dollar@plain}%
+  \setbox\jlreqpdf@math@probebox=\hbox{M}%
   \global\advance\jlreqpdf@nest-1
-  \raise-\jlreqpdf@tate@mathshift\hbox{\box\jlreqpdf@tate@mathbox}%
-  % 数式は欧文境界（クラス27; peek@lat と同じ意味論）——後続和文との
-  % 境界は xkanjiskip になる（tate-math fixture の BOUND-B 実測）。
-  \global\jlreqpdf@lastclass=27
-}
-% $...$ 経路の捕捉: 区切り子=アクティブ$（`$#1$' 署名）本体は上に集約．
-\begingroup
-\catcode`\$=\active
-\long\gdef\jlreqpdf@tate@dollar@grab#1${\jlreqpdf@tate@imath{#1}}%
-\endgroup
-% アクティブ$ 群: catcode 変更はグループ内局所、定義は \gdef で常設化．
-% $$ の区切り子はアクティブ$同士 2 連、cmp は rules.sty 側の露見ピーク腕
-% （アクティブ$トークンとの \ifx 一致用）への意味コピー．
-\begingroup
-\catcode`\$=\active
-\gdef${\futurelet\jlreqpdf@tate@mnext\jlreqpdf@tate@dollar}%
-\global\let\jlreqpdf@tate@dollar@cmp=$%
-% $$ の形式: \jlreqpdf@tate@dollar 経由で呼ばれると入力は
-% <$ 2個目><本文><$ 3個目><$ 4個目> なので、パラメタ `$#1$$' で
-% 2個目捨て・本文捕捉・終端2個消費になる。
-\long\gdef\jlreqpdf@tate@ddollar$#1$${%
-  % 表示数式: 従来どおり。cat3-$ の群に入れ替えて本来の $$ を実行
-  \begingroup
-    \catcode`$=3\relax
-    \jlreqpdf@dollar@plain\jlreqpdf@dollar@plain#1\jlreqpdf@dollar@plain\jlreqpdf@dollar@plain
-  \endgroup
-  \ignorespaces
-}%
-\endgroup
-\def\jlreqpdf@tate@dollar{%
-  \ifx\jlreqpdf@tate@mnext\jlreqpdf@tate@dollar@cmp
-    \expandafter\jlreqpdf@tate@ddollar
-  \else
-    \expandafter\jlreqpdf@tate@dollar@grab
+  % 現JFM class 0 の h/d（zw 小数列を dimexpr で実寸化）
+  \expandafter\jlreqpdf@math@splitcls@i\csname jlreqpdf@jfm@class@0\endcsname
+  \@tempdima=\jlreqpdf@cls@h\jlreq@jareg   % JH
+  \@tempdimb=\jlreqpdf@cls@d\jlreq@jareg   % JD
+  % δ_t（現方向）
+  \jlreqpdf@math@delta=\ht\jlreqpdf@math@probebox
+  \advance\jlreqpdf@math@delta\dp\jlreqpdf@math@probebox
+  \advance\jlreqpdf@math@delta-\@tempdima
+  \advance\jlreqpdf@math@delta-\@tempdimb
+  \divide\jlreqpdf@math@delta\tw@
+  \advance\jlreqpdf@math@delta\@tempdimb
+  \advance\jlreqpdf@math@delta-\dp\jlreqpdf@math@probebox
+  % δ_yoko（横JFM h=0.88/d=0.12zw で同式; 部品 counter 用）
+  \jlreqpdf@math@delta@yoko=\ht\jlreqpdf@math@probebox
+  \advance\jlreqpdf@math@delta@yoko\dp\jlreqpdf@math@probebox
+  \advance\jlreqpdf@math@delta@yoko-\jlreq@jareg
+  \divide\jlreqpdf@math@delta@yoko\tw@
+  \advance\jlreqpdf@math@delta@yoko.12\jlreq@jareg
+  \advance\jlreqpdf@math@delta@yoko-\dp\jlreqpdf@math@probebox
+  % 横組み文書では行内数式シフト無し（uplatex 実測: ybaselineshift=0）
+  \ifnum\jlreqpdf@dir=0
+    \jlreqpdf@math@delta=\z@
+    \jlreqpdf@math@delta@yoko=\z@
   \fi
 }
-% tate 時だけ $ をアクティブ化し、\( \)（カーネル凍結 cat3-$ マクロで
-% アクティブ腕を通らない）をキャプチャ経路に載せ替える。
-% （amsmath は \( を上書きしない。math 環境は対象外。）
-\if@tate\expandafter\@firstofone\else\expandafter\@gobble\fi
-{\AtBeginDocument{%
-  \catcode`\$=\active
-  \jlreqpdf@tate@mathshift=0.343\jlreq@jareg
-  \protected\def\(#1\){\jlreqpdf@tate@imath{#1}}%
-}}
+% δ の再計算点は plcore と同じ「サイズ更新時」（\size@update 内の
+% \adjustbaseline と同一契約; selectfont フックは常にテキストモードで
+% 走るため M プローブが安全）。数式開始時はこのキャッシュ値を読む。
+% （数式内でのフォント変更は selectfont を経由するため同じフックで
+%  再計算される; jlreq既定では行内数式中のサイズ変更は \mathchoice
+%  分岐の hbox 内 = hmode で行われる。）
+\def\jlreqpdf@math@setdelta@font{%
+  % plcore の size@update は「サイズ変化時」のみ \adjustbaseline を
+  % 再実行する（ファミリ切替では tbaselineshift は変わらない:
+  % uplatex 実測 tt/sf でも数式内和文静止位置は同一）。
+  % 同じ契約で (1) JFM データがロード済み（クラスロード中でない）、
+  % かつ (2) サイズが前回と異なる場合のみ再計算する。
+  \@ifundefined{jlreqpdf@jfm@classlist}{}{%
+    \expandafter\ifx\csname jlreqpdf@math@lastsize\endcsname\f@size
+    \else
+      \expandafter\edef\csname jlreqpdf@math@lastsize\endcsname{\f@size}%
+      \jlreqpdf@math@setdelta
+    \fi
+  }%
+}
+\AddToHook{selectfont}{\jlreqpdf@math@setdelta@font}%
+\AtBeginDocument{\jlreqpdf@math@setdelta}%
+% class 0 メトリクス {w}{h}{d}{align}{left} の分割
+\def\jlreqpdf@math@splitcls#1#2#3#4#5{%
+  \def\jlreqpdf@cls@w{#1}\def\jlreqpdf@cls@h{#2}\def\jlreqpdf@cls@d{#3}%
+  \def\jlreqpdf@cls@align{#4}\def\jlreqpdf@cls@left{#5}%
+}
+\def\jlreqpdf@math@splitcls@i#1{\expandafter\jlreqpdf@math@splitcls#1}
 
+% ---- 捕捉入り口（frozen@everymath の中身そのもの）----
+% トークン代入のみ（\edef/\xdef 禁止: \the\everymath 起点の再展開で
+% 条件トークンの対応が崩れる——実測で "Incomplete \iffalse" を起こす。
+% toks 代入は内容を再展開しないため安全）。
+\def\jlreqpdf@math@entry{%
+  \ifnum\jlreqpdf@dir=1
+    \expandafter\jlreqpdf@math@entry@tate
+  \else
+    % yoko: 元 frozen トークンを実行して素通り（byte 互換・キャプチャ無し）
+    \expandafter\the\expandafter\jlreqpdf@math@frozen@saved
+  \fi
+}
+% tate: guard で「生の外側入口」と「同一式の内側再入力」を判別
+% カーネル/クラス内部の数式開始（tabular の $..\halign..$ 構成、
+% 目次ドットリーダーの $\m@th\mkern..$ 等）は素通りさせる:
+% LaTeX の \@tabular は \hbox\bgroup $..\halign..$ の構成で、環境全体を
+% 数式内に組み、\endtabular の $ で閉じる（latex.ltx:16554-16560）。
+% この内部 $ を捕捉すると \halign が mmode で再実行され破綻する
+% （実測: "File ended while scanning use of \jlreqpdf@math@scan"）。
+% 環境の begin/end でカウンタを 1/0 するグループ安全なフラグで
+% 判別する（ネスト対応; tabular/tabular* 両方の入口でインクリメント）。
+\newcount\jlreqpdf@math@in@array
+\def\jlreqpdf@math@array@flag{%
+  \global\advance\jlreqpdf@math@in@array\@ne
+  \aftergroup\jlreqpdf@math@array@unflag
+}
+\def\jlreqpdf@math@array@unflag{%
+  \global\advance\jlreqpdf@math@in@array-\@ne
+}
+% \jlreq@pdftex@math@internal{<body>}: クラス内部の数式（目次のドット
+% リーダー等）をフラグ保護下で実行する。body 内の数式開始は
+% everymath 経路で「内部扱い = 素通り」となる。
+% \aftergroup は使わない: このヘルパは \leaders\hbox{..} の直前でも
+% 呼ばれるため、aftergroup トークンが \leaders とその後続グルーとの
+% 間に落ちて "Leaders not followed by proper glue" になる（実測）。
+% ボディ直後の即時解除で十分（body は1つのグループ）。
+\long\def\jlreq@pdftex@math@internal#1{%
+  \global\advance\jlreqpdf@math@in@array\@ne
+  #1%
+  \global\advance\jlreqpdf@math@in@array-\@ne
+}
+% 表示数式環境の登録（plan §6 の表示入口; ネイティブ処理を維持）
+\def\jlreqpdf@math@reg@disp#1{%
+  \expandafter\def\csname jlreqpdf@math@disp@#1\endcsname{1}}%
+\jlreqpdf@math@reg@disp{equation}%
+\jlreqpdf@math@reg@disp{equation*}%
+\jlreqpdf@math@reg@disp{align}%
+\jlreqpdf@math@reg@disp{align*}%
+\jlreqpdf@math@reg@disp{gather}%
+\jlreqpdf@math@reg@disp{gather*}%
+\jlreqpdf@math@reg@disp{multline}%
+\jlreqpdf@math@reg@disp{multline*}%
+\jlreqpdf@math@reg@disp{flalign}%
+\jlreqpdf@math@reg@disp{flalign*}%
+\jlreqpdf@math@reg@disp{alignat}%
+\jlreqpdf@math@reg@disp{alignat*}%
+\jlreqpdf@math@reg@disp{xalignat}%
+\jlreqpdf@math@reg@disp{xxalignat}%
+\jlreqpdf@math@reg@disp{split}%
+\jlreqpdf@math@reg@disp{aligned}%
+\jlreqpdf@math@reg@disp{gathered}%
+\jlreqpdf@math@reg@disp{cases}%
+\jlreqpdf@math@reg@disp{matrix}%
+\jlreqpdf@math@reg@disp{pmatrix}%
+\jlreqpdf@math@reg@disp{bmatrix}%
+\jlreqpdf@math@reg@disp{Bmatrix}%
+\jlreqpdf@math@reg@disp{vmatrix}%
+\jlreqpdf@math@reg@disp{Vmatrix}%
+\jlreqpdf@math@reg@disp{smallmatrix}%
+\jlreqpdf@math@reg@disp{subarray}%
+\jlreqpdf@math@reg@disp{eqnarray}%
+\jlreqpdf@math@reg@disp{eqnarray*}%
+\jlreqpdf@math@reg@disp{displaymath}%
+% tabular/tabular* の入口でフラグを立てる（\@tabular は latex.ltx:16560
+% の \hbox\bgroup $.. 構成; tabular* は \tabular を経由して同じ
+% \@tabular に入る。array 系パッケージが再定義しても構わないよう
+% begin document で「その時点の \@tabular」をラップする）。
+\AtBeginDocument{%
+  \let\jlreqpdf@math@saved@tabular\@tabular
+  \def\@tabular{\jlreqpdf@math@array@flag\jlreqpdf@math@saved@tabular}%
+}
+% 表示数式環境内の内部 $ は素通り: amsmath の equation/align 系は本体を
+% インライン数式 $..$ として組む（\endequation 内の $ と対応する）。
+% これを捕捉すると環境機構（\refstepcounter・\label・行組み立て）が
+% キャプチャ内で破綻する（実測: "Display math should end with $$" /
+% "File ended while scanning"）。plan §6 の表示入口は「native 処理を
+% 維持」が契約のため、これらの環境では捕捉しない。
+\def\jlreqpdf@math@if@dispenv{%
+  \expandafter\ifx\csname jlreqpdf@math@disp@\@currenvir\endcsname\relax
+    \expandafter\@secondoftwo
+  \else
+    \expandafter\@firstoftwo
+  \fi}
+\def\jlreqpdf@math@entry@tate{%
+  \ifnum\jlreqpdf@math@grab=\z@
+    \jlreqpdf@math@if@dispenv{%
+      % 表示数式環境（equation/align/…）の内部 $ は native 処理を維持
+      \jlreqpdf@math@passthrough
+    }{%
+      \ifinner
+        \ifnum\jlreqpdf@math@in@array=\z@
+          \expandafter\jlreqpdf@math@capture
+        \else
+          \expandafter\jlreqpdf@math@passthrough
+        \fi
+      \else
+        \expandafter\jlreqpdf@math@passthrough
+      \fi
+    }%
+  \fi
+}
+% 素通り: 元 frozen トークン（\aftergroup\@ignorefalse・mathlevel 更新・
+% \check@mathfonts・ユーザー \everymath）をそのまま1回実行する。
+\def\jlreqpdf@math@passthrough{%
+  \the\jlreqpdf@math@frozen@saved
+}
+% ---- 外側入口: 本体の区切り子走査捕捉 ----
+% TeX 自身の区切り付き引数走査 `#1$' を使う（旧 active-$ 実装と \( の
+% 経路で実績のある方式: 括弧対応・アクティブ byte・マクロ展開のすべてが
+% TeX の標準引数取得と同一に扱われる。walk 方式は グループ引数/CJK
+% byte 列/内部ボックス機構との干渉が相次いだため撤去）。
+% wrapper 引数（\text{..} 等）は {..} グループとして #1 内に丸ごと
+% 入るため raw box 検査の対象外（plan の exempt と同一意味論）。
+\def\jlreqpdf@math@capture{%
+  \global\jlreqpdf@math@grab=\@ne
+  \jlreqpdf@math@scan
+}
+\long\def\jlreqpdf@math@scan#1${%
+  % raw box 検出（token level; wrapper 引数 {..} は1引数として不透過）
+  \jlreqpdf@math@rawcheck{#1}%
+  % カーネルの開始時処理（frozen の残り）を外側数式でちょうど1回。
+  % \aftergroup は使わない: 捕捉対象の $..$ が \leaders の直前にある
+  % 移動引数（目次の見出し等）で、aftergroup トークンがリーダーと
+  % 干渉して "Leaders not followed by proper glue" になる（実測:
+  % TOC 2パス目）。外側の空数式は直後に閉じるため、\@ignorefalse は
+  % $ の直後で即時に実行すればカーネルと同一位置・同一意味になる。
+  \advance\@math@level\@ne
+  \check@mathfonts
+  \the\everymath
+  % 外側数式を閉じる（空数式; \mathsurround 1対はここに付く）
+  \jlreqpdf@dollar@plain
+  \@ignorefalse
+  % 本体: 自然幅 hbox を δ 下げ（yoko では δ=0 のため無組版差）
+  \global\advance\jlreqpdf@nest1
+  \setbox\jlreqpdf@mathbox=\hbox{\m@th
+    \jlreqpdf@dollar@plain#1\jlreqpdf@dollar@plain}%
+  \global\advance\jlreqpdf@nest-1
+  \ifdim\jlreqpdf@math@delta=\z@
+    \box\jlreqpdf@mathbox
+  \else
+    \raise-\jlreqpdf@math@delta\box\jlreqpdf@mathbox
+  \fi
+  \global\jlreqpdf@math@grab=\z@
+  % 数式は欧文境界（クラス27; peek@lat と同じ意味論）
+  \global\jlreqpdf@lastclass=27
+}
+
+% ---- \(...\) 専用 wrapper ----
+% カーネルの \) は protected（DeclareRobustCommand）のため delimiter scan
+% 中に展開されず、素通りの frozen 経路では本体の終端が見つからない
+% （plan §6.1 の指摘どおり）。よって \( は \) TOKEN を終端として
+% 本体を直接捕捉する専用 wrapper に差し替える。math 環境
+% （\math=\(, \endmath=\)）もこの経路に自動的に載る。
+% 本体中の raw box 検出は wrapper に限定した簡易走査（歩行と同一契約）。
+\protected\def\jlreqpdf@imath@paren#1\){%
+  \ifnum\jlreqpdf@dir=1
+    % δ は selectfont フックで計算済み（plcore の size@update 契約と同一）
+    \global\jlreqpdf@math@grab=\@ne
+    \jlreqpdf@math@rawcheck{#1}%
+    % 開始時処理1回（raw $ 経路と同じ; ここでは外側数式はまだ無いので
+    % 空数式を1つだけ開いて閉じ、\mathsurround 1対をその中に置く。
+    % \aftergroup は \leaders 干渉のため使用しない（raw 経路の注記参照））
+    \jlreqpdf@dollar@plain
+      \advance\@math@level\@ne
+      \check@mathfonts
+      \the\everymath
+    \jlreqpdf@dollar@plain
+    \@ignorefalse
+    \global\advance\jlreqpdf@nest1
+    \setbox\jlreqpdf@mathbox=\hbox{\m@th
+      \jlreqpdf@dollar@plain#1\jlreqpdf@dollar@plain}%
+    \global\advance\jlreqpdf@nest-1
+    \ifdim\jlreqpdf@math@delta=\z@
+      \box\jlreqpdf@mathbox
+    \else
+      \raise-\jlreqpdf@math@delta\box\jlreqpdf@mathbox
+    \fi
+    \global\jlreqpdf@math@grab=\z@
+    \global\jlreqpdf@lastclass=27
+  \else
+    % yoko: 素通り（元の \( の意味: \relax\ifmmode\@badmath\else$\fi）
+    \begingroup
+      \the\jlreqpdf@math@frozen@saved
+    \endgroup
+    \jlreqpdf@dollar@plain\relax#1\jlreqpdf@dollar@plain
+  \fi
+}
+% 簡易 raw 検査（\( 経路: トークンレベル・wrapper 引数は透過扱い）
+\def\jlreqpdf@math@rawcheck#1{%
+  \def\jlreqpdf@math@raw@ctx{0}%
+  \jlreqpdf@math@raw@loop#1\jlreqpdf@math@raw@stop
+}
+\def\jlreqpdf@math@raw@stop{\jlreqpdf@math@raw@stop}
+\def\jlreqpdf@math@raw@loop#1{%
+  \ifx\jlreqpdf@math@raw@stop#1%
+  \else
+    \jlreqpdf@math@raw@one{#1}%
+    \expandafter\jlreqpdf@math@raw@loop
+  \fi}
+\def\jlreqpdf@math@raw@one#1{%
+  \ifx\text#1\def\jlreqpdf@math@raw@ctx{1}%
+  \else\ifx\mbox#1\def\jlreqpdf@math@raw@ctx{1}%
+  \else\ifx\mathmc#1\def\jlreqpdf@math@raw@ctx{1}%
+  \else\ifx\mathgt#1\def\jlreqpdf@math@raw@ctx{1}%
+  \else\ifx\jlreq@oldfontcommand@mc#1\def\jlreqpdf@math@raw@ctx{1}%
+  \else\ifx\jlreq@oldfontcommand@gt#1\def\jlreqpdf@math@raw@ctx{1}%
+  \else\ifx\makebox#1\def\jlreqpdf@math@raw@ctx{2}%
+  \else
+    \ifnum\jlreqpdf@math@raw@ctx=\z@
+      \ifx\hbox#1\jlreqpdf@math@rawerr{hbox}%
+      \else\ifx\vbox#1\jlreqpdf@math@rawerr{vbox}%
+      \else\ifx\vtop#1\jlreqpdf@math@rawerr{vtop}%
+      \else\ifx\vcenter#1\jlreqpdf@math@rawerr{vcenter}%
+      \fi\fi\fi\fi
+    \fi
+    \def\jlreqpdf@math@raw@ctx{0}%
+  \fi\fi\fi\fi\fi\fi\fi}
+\newcount\jlreqpdf@math@rawerrcnt
+\def\jlreqpdf@math@rawerr#1{%
+  \global\advance\jlreqpdf@math@rawerrcnt\@ne
+  \ClassError{jlreq}{pdfTeX~backend:~raw~primitive~box~\string#1~in~a~captured~math~formula}{%
+  pTeX~applies~its~math~baseline~adjustment~only~to~boxes~it~can~direction-tag.\MessageBreak
+  The~pdfTeX~backend~has~no~box-direction~attribute,~so~an~unmodified~raw\MessageBreak
+  \string#1~in~a~captured~formula~is~outside~the~guaranteed~path.\MessageBreak
+  Replace~it~with~\string\mbox{...}~or~\string\text{...}~(amstext),~or~put~the\MessageBreak
+  content~in~a~registered~text~wrapper.~Macro-expanded~primitive~boxes~are\MessageBreak
+  outside~the~contract~by~design.\MessageBreak
+  \@ehc}%
+}
+
+% ---- frozen@everymath 差し替え（begin document; トークン代入のみ）----
+% \toks 代入は \the を再帰展開しない（\edef は \the\everymath 起点の
+% 二段階展開で条件トークンの対応を壊す——実測: "Incomplete \iffalse"）。
+\AtBeginDocument{%
+  \global\jlreqpdf@math@frozen@saved\expandafter{\the\frozen@everymath}%
+  \global\frozen@everymath{\jlreqpdf@math@entry}%
+  % \( 差し替え（\math/\endmath = \( /\) も同経路化）
+  \protected\def\({\relax\ifmmode\@badmath\else\expandafter\jlreqpdf@imath@paren\fi}%
+}
+
+%. ---------------- text-in-math 2層補正（P6; tate のみ非0）----
+% 方向一致部品の counter = (δ_t − δ_yoko) × factor/1000。
+% factor: display/text=1000, script=700, scriptscript=500
+% （ptex-base.ch shift_sub_exp_box と同一係数）。
+% uplatex 実測との対応: 部品静止位置 = −δ_yoko_formula
+% （10pt: 0.35562pt 上方, 14pt: 0.42934pt 上方; GT10/GT11 実測）。
+\newdimen\jlreqpdf@tim@shift
+\newcount\jlreqpdf@tim@cnt
+\def\jlreqpdf@tim@raise#1{% #1 = factor (1000/700/500)
+  \ifnum\jlreqpdf@dir=1
+    \jlreqpdf@tim@shift=\jlreqpdf@math@delta
+    \advance\jlreqpdf@tim@shift-\jlreqpdf@math@delta@yoko
+    \ifdim\jlreqpdf@tim@shift=\z@\else
+      % sp 整数演算（plan §6: δ×factor÷1000 を sp で丸める）
+      \jlreqpdf@tim@cnt=\jlreqpdf@tim@shift
+      \multiply\jlreqpdf@tim@cnt#1\relax
+      \divide\jlreqpdf@tim@cnt\@m
+      \jlreqpdf@tim@shift=\jlreqpdf@tim@cnt sp\relax
+      \kern\jlreqpdf@tim@shift
+    \fi
+  \fi
+}
+
+%. ---------------- mathja rework（P6: スタイル分岐維持 + counter）----
+% \jlreq@pdftex@mathja{<mc|gt>}{<本文>}:
+%   数式内: \mathchoice の4分岐でサイズ（f@size/sf@size/ssf@size）を
+%     切り替え、対応サイズの \hbox に本文を組む（uplatex の jfam は
+%     スタイルごとに実フォントサイズで和文を組む——10pt→7pt→5pt の
+%     実測互換のため分岐維持。「box once + copy」を取ると script 環境
+%     で実サイズの縮小表現が不可能になるため、分岐ごとの組版とし、
+%     同一サイズ分岐（display/text はともに f@size）は1回の組版結果を
+%     2番目の分岐で \copy 再利用する（組版回数 4→3）。
+%     各分岐には方向一致部品の counter（factor 1000/700/500）を適用。
+%   数式外: {\<fam>family 本文}（従来どおり）。
+\newbox\jlreq@pdftex@mathja@boxa
+\def\jlreq@pdftex@mathja#1#2{%
+  \ifmmode
+    \def\jlreq@pdftex@mathja@fam{#1}%
+    \def\jlreq@pdftex@mathja@body{#2}%
+    \global\setbox\jlreq@pdftex@mathja@boxa=\box\voidb@x
+    \mathchoice
+      {\jlreq@pdftex@mathja@box@save\f@size{1000}}%
+      {\jlreq@pdftex@mathja@box@use\f@size{1000}}%
+      {\jlreq@pdftex@mathja@box@wrap\sf@size{700}}%
+      {\jlreq@pdftex@mathja@box@wrap\ssf@size{500}}%
+  \else
+    {\csname #1family\endcsname #2}%
+  \fi
+}
+% #1 = サイズ（pt数値マクロ）, #2 = counter factor
+% 「組むだけ」: box レジスタに本文を組む（emit は呼び出し側; レジスタの
+% 空き抜きをしないため display/text 分岐間で copy/box 共有が可能）。
+\def\jlreq@pdftex@mathja@box#1#2{%
+  \global\advance\jlreqpdf@nest1
+  \global\setbox\jlreq@pdftex@mathja@boxa=\hbox{%
+    \fontsize{#1}{#1}\selectfont
+    \csname\jlreq@pdftex@mathja@fam family\endcsname
+    \global\jlreqpdf@lastclass=93 \global\jlreqpdf@pend=0
+    \jlreq@pdftex@mathja@body
+  }%
+  \global\advance\jlreqpdf@nest-1
+  \global\jlreqpdf@lastclass=27
+}
+% 方向一致部品の counter（P6 2層目）。数式モードでは \raise は直接使え
+% ないため、部品 box を raise 付きの外側 hbox で包む（mmode でも可）。
+% counter = (δ_t − δ_yoko) × factor/1000（uplatex 実測: 部品静止位置が
+% plain 位置 + (−δ_yoko) になる。raise は cross-frame 方向 = uplatex
+% の box shift_amount と同一方向）。
+\newdimen\jlreqpdf@tim@raise
+\def\jlreqpdf@tim@emit#1#2{%
+  % #1 = factor (1000/700/500), #2 = box register
+  \jlreqpdf@tim@raise=\z@
+  \ifnum\jlreqpdf@dir=1
+    \jlreqpdf@tim@shift=\jlreqpdf@math@delta
+    \advance\jlreqpdf@tim@shift-\jlreqpdf@math@delta@yoko
+    \ifdim\jlreqpdf@tim@shift=\z@\else
+      % sp 整数演算（plan §6: δ×factor÷1000 を sp で丸める）
+      \jlreqpdf@tim@cnt=\jlreqpdf@tim@shift
+      \multiply\jlreqpdf@tim@cnt#1\relax
+      \divide\jlreqpdf@tim@cnt\@m
+      \jlreqpdf@tim@raise=\jlreqpdf@tim@cnt sp\relax
+    \fi
+  \fi
+  \ifdim\jlreqpdf@tim@raise=\z@
+    \copy#2%
+  \else
+    \hbox{\raise\jlreqpdf@tim@raise\copy#2}%
+  \fi
+}
+% emit path: counter raise wraps the branch box（factor は分岐ごと）。
+% display 分岐は \tim@emit が \box で消費し、text 分岐（同サイズ）は
+% \copy で再利用するため、同一サイズの本体組版は1回だけになる
+% （本体副作用 4→3; script/scriptscript は実サイズが必要なため別組版）。
+\def\jlreq@pdftex@mathja@box@save#1#2{%
+  \jlreq@pdftex@mathja@box{#1}{#2}%
+  \jlreqpdf@tim@emit{#2}\jlreq@pdftex@mathja@boxa
+}
+\def\jlreq@pdftex@mathja@box@use#1#2{%
+  \ifvoid\jlreq@pdftex@mathja@boxa
+    \expandafter\jlreq@pdftex@mathja@box\expandafter{#1}{#2}%
+  \fi
+  \jlreqpdf@tim@emit{#2}\jlreq@pdftex@mathja@boxa
+}
+\def\jlreq@pdftex@mathja@box@wrap#1#2{%
+  \jlreq@pdftex@mathja@box{#1}{#2}%
+  \jlreqpdf@tim@emit{#2}\jlreq@pdftex@mathja@boxa}
 
 %. ------------------------------------ text extraction guarantee (P4)
 % profile 読込時に \pdfgentounicode=1 が設定される（補助縦グリフの

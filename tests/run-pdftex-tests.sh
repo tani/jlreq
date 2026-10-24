@@ -395,6 +395,40 @@ if python3 tests/check-banner-slots.py "$d/trimmarks-banner.pdf" \
 else
   fail "trimmarks-banner-geometry" "$d/banner.out"
 fi
+# trimmarks-twoside.tex (P8): 奇偶ページ属性のshipout/beforeフック検証
+#   - 各ページのTrimBox/BleedBoxがページ奇偶に従って分かれていること
+#   - 旧\@outputpageのtl_putパッチで出ていた "Missing number" が無いこと
+#   - dドライバからpapersize specialが出ないこと（"Non-PDF special
+#     ignored!" がログに無いこと）
+d=$(outdir_for t5-coexist trimmarks-twoside 1)
+pdflatex -interaction=nonstopmode -halt-on-error -output-directory="$d" \
+  tests/fixtures/pdflatex-coexist/trimmarks-twoside.tex >"$d/compile.out" 2>&1
+tw_rc=$?
+if grep -q 'Missing number' "$d/trimmarks-twoside.log" 2>/dev/null; then
+  tw_rc=1
+fi
+if grep -q 'Non-PDF special ignored' "$d/trimmarks-twoside.log" 2>/dev/null; then
+  tw_rc=1
+fi
+if [ "$tw_rc" -ne 0 ] \
+   || ! python3 tests/check-trimmarks-pageattr.py "$d/trimmarks-twoside.pdf" \
+        >"$d/pageattr.out" 2>&1; then
+  fail "trimmarks-twoside-pageattr (P8 shipout/before hook)" "$d/pageattr.out"
+else
+  pass "trimmarks-twoside-pageattr (P8 shipout/before hook)"
+fi
+# trimmarks-tate-banner.tex (P8): 縦組文書の回転バナースロットが
+# uplatex ground truth（dvipdfmx経由・同一フィクスチャ実測）と
+# 0.5pt以内で一致すること。20スロット（2ページ×10スロット族）。
+d=$(outdir_for t5-coexist trimmarks-tate-banner 1)
+pdflatex -interaction=nonstopmode -halt-on-error -output-directory="$d" \
+  tests/fixtures/pdflatex-coexist/trimmarks-tate-banner.tex >"$d/compile.out" 2>&1
+if python3 tests/check-banner-tate.py "$d/trimmarks-tate-banner.pdf" \
+     >"$d/tatebanner.out" 2>&1; then
+  pass "trimmarks-tate-banner-geometry (P8, uplatex GT windows)"
+else
+  fail "trimmarks-tate-banner-geometry (P8)" "$d/tatebanner.out"
+fi
 # reference-mark-interlinear.tex: ログ内判定（INTER-PASS x3）
 d=$(outdir_for t5-coexist reference-mark-interlinear 2)
 pdflatex -interaction=nonstopmode -halt-on-error -output-directory="$d" \
@@ -584,10 +618,11 @@ else
   else
     fail "tcy-star-error-log-assertions" "$d/tcy-star-error.log"
   fi
-  # T4: 縦組み数式
-  # pdflatex-tate-math.tex の SHIFT アサーションは実装定数
-  # \jlreqpdf@tate@mathshift をそのまま比較している（自己申告的）。
-  # P6 で定数を計算された δ に置換するまでの暫定である点に注意。
+  # T4→P6: pdflatex-tate-math.tex のアサーションは「測定シフト vs
+  # 独立計算した δ 式（plcore adjustbaseline と同一式を fixture 内で
+  # 再実装）」に改訂済み（旧 0.343zw 実装定数との自己申告比較は撤去）。
+  # everymath 1回・mathsurround 1対・境界グルー・禁則はこのフィクスチャが、
+  # raw box ClassError と one-shot 副作用は math-* フィクスチャ群が担う。
   d=$(outdir_for t8 pdflatex-tate-math)
   run "tate-pdflatex-tate-math" "$d" pdflatex \
     tests/fixtures/pdflatex-tate-math.tex
@@ -597,6 +632,63 @@ else
     echo "PASS: pdflatex-tate-math-log-assertions ($(grep -c 'TATE-PASS' "$d/pdflatex-tate-math.log") assertions)"
   else
     fail "pdflatex-tate-math-log-assertions" "$d/pdflatex-tate-math.log"
+  fi
+  # ---- P6: 一回実行契約（everymath/everydisplay/mathmc/mbox/amstext） ----
+  d=$(outdir_for t8 pdflatex-tate-math-oneshot)
+  run "tate-pdflatex-tate-math-oneshot" "$d" pdflatex \
+    tests/fixtures/pdflatex-tate/pdflatex-tate-math-oneshot.tex
+  if grep -q 'TATE-FAIL' "$d/pdflatex-tate-math-oneshot.log" 2>/dev/null; then
+    fail "pdflatex-tate-math-oneshot-log-assertions" "$d/pdflatex-tate-math-oneshot.log"
+  elif [ "$(grep -c 'TATE-PASS' "$d/pdflatex-tate-math-oneshot.log" 2>/dev/null)" = 6 ]; then
+    pass "pdflatex-tate-math-oneshot-log-assertions (6 assertions)"
+  else
+    fail "pdflatex-tate-math-oneshot-log-assertions" "$d/pdflatex-tate-math-oneshot.log"
+  fi
+  # ---- P6: raw primitive box 境界（ClassError 2件を含むため halt なし） ----
+  d=$(outdir_for t8 pdflatex-tate-math-rawbox)
+  pdflatex -interaction=nonstopmode -output-directory="$d" \
+    tests/fixtures/pdflatex-tate/pdflatex-tate-math-rawbox.tex >"$d/compile.out" 2>&1
+  if grep -q 'TATE-FAIL' "$d/pdflatex-tate-math-rawbox.log" 2>/dev/null; then
+    fail "pdflatex-tate-math-rawbox-log-assertions" "$d/pdflatex-tate-math-rawbox.log"
+  elif grep -q 'TATE-PASS: LEGAL' "$d/pdflatex-tate-math-rawbox.log" 2>/dev/null \
+    && grep -q 'TATE-PASS: RAWERR' "$d/pdflatex-tate-math-rawbox.log" 2>/dev/null \
+    && grep -q 'TATE-PASS: VBOXERR' "$d/pdflatex-tate-math-rawbox.log" 2>/dev/null \
+    && grep -q 'raw~primitive~box.*hbox' "$d/pdflatex-tate-math-rawbox.log" 2>/dev/null \
+    && grep -q 'raw~primitive~box.*vbox' "$d/pdflatex-tate-math-rawbox.log" 2>/dev/null \
+    && grep -q 'Replace~it~with' "$d/pdflatex-tate-math-rawbox.log" 2>/dev/null; then
+    pass "pdflatex-tate-math-rawbox-log-assertions (3 assertions + 2 expected ClassErrors)"
+  else
+    fail "pdflatex-tate-math-rawbox-log-assertions" "$d/pdflatex-tate-math-rawbox.log"
+  fi
+  # ---- P6: moving argument（section/TOC/mark/bookmark/eqref; 2パス） ----
+  mvd=$(outdir_for t8 pdflatex-tate-math-movarg)
+  mv_rc=0
+  for passno in 1 2; do
+    if ! run_compile x "$mvd" pdflatex \
+         tests/fixtures/pdflatex-tate/pdflatex-tate-math-movarg.tex; then
+      mv_rc=1
+    fi
+  done
+  if grep -q 'Label(s) may have changed' "$mvd/pdflatex-tate-math-movarg.log" 2>/dev/null; then
+    mv_rc=1
+  fi
+  if grep -q 'Reference `eq:mv'"'"' on page' "$mvd/pdflatex-tate-math-movarg.log" 2>/dev/null; then
+    mv_rc=1
+  fi
+  # しおり: 数式を含む見出しの PDF 文字列（hyperref math fallback）が
+  # UTF-16BE で .out に残る。数式部分 a+b は \000a\000+\000b として
+  # 現れるため、その存在で検査する（日本語部分の byte 並びは
+  # フォント/normalizer に依存させない）。
+  if ! grep -q '\\000a\\000+\\000b' "$mvd/pdflatex-tate-math-movarg.out" 2>/dev/null; then
+    mv_rc=1
+  fi
+  if ! grep -q 'TATE-PASS: BODY' "$mvd/pdflatex-tate-math-movarg.log" 2>/dev/null; then
+    mv_rc=1
+  fi
+  if [ "$mv_rc" -ne 0 ]; then
+    fail "pdflatex-tate-math-movarg (section/mark/bookmark/eqref)" "$mvd/compile.out"
+  else
+    pass "pdflatex-tate-math-movarg (section/mark/bookmark/eqref, 2 passes, refs resolved)"
   fi
   # boxdump（\showbox の ! OK のため -halt-on-error 不使用; END マーカで成立確認）
   d=$(outdir_for t8 tate-boxdump)

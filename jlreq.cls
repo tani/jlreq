@@ -540,9 +540,11 @@
     \ClassWarning{jlreq}{pdfTeX~tate~support~is~EXPERIMENTAL~(rotation-based).\MessageBreak
       Verified:~columns/kinsoku/punct-placement,~headings,~TOC,~page~furniture,\MessageBreak
       footnote/endnote/sidenote/~\string\marginpar,~basic~floats,~inline/display~math,\MessageBreak
-      local~direction~+~\string\tatechuyoko~(1zw-normalized,~star/non-star).\MessageBreak
+      local~direction~+~\string\tatechuyoko~(1zw-normalized,~star/non-star),\MessageBreak
+      jlreq-trimmarks~banners~in~tate~(P8:~all~slot~families~match~the~uplatex\MessageBreak
+      ground~truth~within~0.01pt;~see~tests/check-banner-tate.py).\MessageBreak
       Still~out-of-scope~(expected~to~render~wrongly~or~error):\MessageBreak
-      jlreq-trimmarks~banner~in~tate,~ruby,~tate-geometry-dependent~jlreqsetup~keys.\MessageBreak
+      ruby,~tate-geometry-dependent~jlreqsetup~keys.\MessageBreak
       See~docs/pdftex-tate-eval.md~and~the~pdflatex-tate~fixtures.}
   \fi
 \fi
@@ -6565,7 +6567,19 @@
     \advance\leftskip \@lnumwidth \hbox{}\hskip -\leftskip
     \advance\leftskip\@tempdima
     {#4}\nobreak
+    % P6: このリーダー箱内の $..$ はクラス内部の数式（pdfTeX バックエンド
+    % の行内数式キャプチャの対象外。キャプチャがこの $ を捉えると
+    % \leaders の box スキャンが再構成された箱列と干渉して
+    % "Leaders not followed by proper glue" になる（実測: TOC 2パス目）。
+    % d-engine 以外は元の構成のまま。
+    \ifx d\jlreq@engine
+      \expandafter\jlreq@pdftex@math@internal
+    \else
+      \expandafter\@firstofone
+    \fi
+    {%
     \leaders\hbox{$\m@th\mkern \@dotsep mu$\null\inhibitglue ・\inhibitglue\null$\m@th\mkern \@dotsep mu$}%
+    }%
     \hfill\nobreak
     \hb@xt@\@pnumwidth{\hss\normalfont\normalcolor \tatechuyoko*{#5}}%
     \par}%

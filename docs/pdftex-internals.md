@@ -112,6 +112,54 @@ jlreq.cls（公開API・版面設計: 共通）
    dir-index-yoko,tcy-digits,tcy-fontchange,tcy-star-error}.tex
    （T8 が TATE-PASS/TATE-FAIL・エラー文言を検査）。
 
+## 数式キャプチャ（P6, 2026-10-24 追記）
+
+active-$ 機構は撤去した。`$` は catcode 3 のままで、カーネルの
+`\frozen@everymath` を差し替えて行内数式を捕捉する:
+```
+\frozen@everymath = {\jlreqpdf@math@entry}
+```
+- **入口**: 保存済みの元 frozen トークン（`\aftergroup\@ignorefalse`
+  `\advance\@math@level\@ne` `\check@mathfonts` `\the\everymath`）は
+  捕捉時に「外側の空数式」でちょうど1回だけ実行する。`\mathsurround`
+  はこの空数式に1対だけ付く（内側は `\m@th`）。
+- **本体の再組版**: `\raise−δ\hbox{\m@th$<body>$}`。同一式の再入力
+  （内側 `$..$`、`\text` 内の数式）は one-shot guard で素通り。
+- **素通りの入口**（捕捉しない——実測で破綻するため）:
+  * `\@currenvir` が表示数式環境（equation/align/gather/multline/
+    split/matrix 族/eqnarray/displaymath。amsmath の本体はインライン
+    `$..$` で組まれるため、これを捕捉すると環境機構が破綻する）。
+  * tabular の内部 `$`（latex.ltx:16560 `\hbox\bgroup $..\halign..$`
+    構成。`\@tabular` をラップしてフラグ化）。
+  * クラス内部の数式（目次ドットリーダーの `$\m@th\mkern..$`。
+    `\jlreq@pdftex@math@internal{..}` で保護）。
+  * yoko 文書全体（uplatex は行内数式に一切シフトを掛けない——
+    `\ybaselineshift=0` のまま。実測: `\hbox{$x$}` が raw 数式寸法
+    と完全一致。P5 までと byte 互換の素通り）。
+- **δ（行内数式の基準線シフト）**: plcore.ltx:776-792 `\adjustbaseline`
+  と同一式・同一演算順:
+  `δ = (h_M+d_M−JH−JD)/2 + JD − d_M`（M=現在の欧文フォントを無補正で
+  測定、JH/JD=現JFM class 0 の高さ/深さ×zw）。計算点は plcore と同じ
+  「サイズ更新時」（selectfont フック; ファミリ切替では再計算しない
+  —— uplatex 実測と同一）。実測: 10pt δ=3.44438pt、14pt δ=4.89066pt
+  （uplatex `\tbaselineshift` と sp 一致）。
+- **text-in-math 2層**: 方向一致部品（`\mathmc/\mathgt`）は
+  `counter = (δ_t−δ_yoko)×factor/1000`（factor 1000/700/500 =
+  ptex-base.ch [36.720] shift_sub_exp_box と同一係数）を box に
+  `\raise` で与える。静止位置 = plain 位置 + (−δ_yoko_formula)
+  （10pt: +0.35562pt 上方 = uplatex GT10 実測と一致）。
+- **mathja**: `\mathchoice` 4分岐は uplatex 互換の実サイズ（f@size/
+  sf@size/ssf@size）を維持しつつ、display/text の同一サイズ分岐は
+  box+copy 共有で組版回数 4→3（本体副作用の削減）。
+- **raw primitive box 境界**: 捕捉本体のトップレベルに明示的な
+  `\hbox/\vbox/\vtop/\vcenter` があると実行前に ClassError（置換提案
+  `\mbox{...}` / `\text{...}` 付き）。wrapper 引数 `{..}` は1引数として
+  不透過（= exempt）。マクロ展開で生成される primitive は契約外。
+- **既知の未解決**: tate + `\tableofcontents` のドットリーダーは数式と
+  関係なく 2 パス目で "Leaders not followed by proper glue" になる
+  （HEAD でも再現・数式なしでも発生。TOC 実測は P7 出力ルーチンでの
+  回収対象）。
+
 ## jlreq-pdftex-jfm*.def（生成データ）
 
 `make_pdftex_jfm.lua`（ビルド時のみ実行，`make pdftex-jfm`）が `jfm-jlreq.lua`

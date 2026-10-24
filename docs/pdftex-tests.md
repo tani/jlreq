@@ -85,6 +85,18 @@ l PDF の正規化バイト）に対して自動で行う。ベースライン�
 - T5: trimmarks-banner は `tests/check-banner-slots.py`（pymupdf）が
   6スロットの実bbox・書き込み方向を固定ジオメトリ窓で機械検証
   （旧 BANNER-PD-PASS typeout grep は2026-10-24廃止）。
+  P8 追加: `trimmarks-twoside-pageattr` は `tests/check-trimmarks-pageattr.py`
+  が3ページ分のページ辞書（TrimBox/BleedBox の奇偶分岐・キー重複なし）
+  を検査し、ログに "Missing number"（旧 \@outputpage tl_put パッチの
+  未解決 \ifodd 残滓）と "Non-PDF special ignored!"（d ドライバからの
+  papersize special）が無いことを条件にする。
+  P8 追加: `trimmarks-tate-banner-geometry` は `tests/check-banner-tate.py`
+  が縦組文書の回転バナー全スロット族（tate/in-tate 上下左右 + in-center、
+  2ページ×10スロット=20箇所）の実bbox を uplatex ground truth
+  （同一フィクスチャを uplatex+jlreq-trimmarks+dvipdfmx で組んだ実測値、
+  0.5pt窓）と照合する。矯正係数はクロス幅=回転箱の wd・ラン長=同 dp の
+  スロット族別公式で、別の bleed 構成（gutter=6/fore=0）と 2〜11文字の
+  ラン長でも 0.01pt 一致を確認済み（単一ケースへの同調ではない）。
 - T7: 3フィクスチャ×3エンジン，正規化後バイト同一（ベースライン照合），
   バックエンド非読込。
 - T8: tate JFM .def 欠損は FAIL（旧SKIP成功 path は廃止）。
