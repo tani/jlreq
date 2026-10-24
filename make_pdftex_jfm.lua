@@ -2,17 +2,17 @@
   make_pdftex_jfm.lua --- build-time generator of the pdfTeX backend's JFM
   data files (PLAN.md §3.3, §5 M3, §10.1).
 
-  Production version of poc/make_pdftex_jfm.lua: the PoC proved the JFM
-  loading pattern and the serialization format (see poc/README-m3.md); this
-  version drops the PoC's 49-pair subset filter and emits the FULL pair
-  table (all defined pairs, 402 for the current jfm-jlreq.lua) plus all
-  four class-option variants as separate files.
+  GEN_VERSION 2.0 (PLAN P2): 12 variants -- 2 directions x 3 bracket modes
+  x burasage on/off.  Yoko input = jfm-jlreq.lua, tate input =
+  jfm-jlreqv.lua (the RUNTIME-equivalent vertical JFM with the same option
+  hooks; the old -pl table dropped the negative-priority stretches and the
+  alchar compensation glue -- see the TATE_JFM comment).
 
   Usage (from the repository root; run with texlua):
     texlua make_pdftex_jfm.lua [options] [output-file]
 
   Options:
-    --jfm=<path|name>     JFM source. Default: <script dir>/jfm-jlreq.lua,
+    --jfm=<path|name>     yoko JFM source. Default: <script dir>/jfm-jlreq.lua,
                           then kpse.find_file("jfm-jlreq.lua").
     --open-bracket-pos=<v>
                           Replicates jlreq.cls's
@@ -24,28 +24,62 @@
     --burasage=true|false Replicates \directlua{jlreq.burasage = ...}
                           (jlreq.cls:494). true appends -0.5 to end_adjust
                           of classes 6 and 7 (jfm-jlreq.lua:1167-1171).
-                          NOTE: the separate pTeX "b" JFM variant
-                          (make_variant_jfm.lua burasage(), which zeroes
-                          .width and shifts glue) is NOT used by LuaTeX-ja
-                          at run time and is therefore NOT emitted here.
-    --variant=<suffix>    Output variant suffix, one of "", "b", "z", "bz"
-                          (default: derived from the two options above, see
-                          variant_suffix()). An explicit suffix is for tools
+    --variant=<suffix>    Output variant suffix, one of "", "b", "z", "bz",
+                          "n", "bn" (yoko) or "tate", "tate-b", "tate-z",
+                          "tate-bz", "tate-n", "tate-bn" (tate).  Default:
+                          derived from the two options above, see
+                          variant_suffix(). An explicit suffix is for tools
                           that need the file name fixed; it must be
                           CONSISTENT with the options (asserted).
-    --all-variants        Ignore [output-file]; write all four variants to
-                          jlreq-pdftex-jfm<suffix>.def in the directory of
-                          --output / the default output path. Used by the
+    --all-variants        Ignore [output-file]; write all twelve variants and
+                          the manifest (see --manifest).  Used by the
                           Makefile's `pdftex-jfm` target.
     --outdir=<dir>        Directory for --all-variants output (default:
                           repository root, i.e. the JFM source's directory).
+    --manifest=<path>     Manifest file written by --all-variants (default:
+                          pdftex-jfm-manifest.lua in the output directory).
+                          The manifest is the SINGLE source of the variant
+                          list: check_jfm_pdftex.lua and the Makefile derive
+                          their file lists from it.
+    --print-manifest     Print the manifest file names (one per line, the
+                          12 .def files then the manifest) and exit.  The
+                          Makefile uses this for its file list.
     --version             print generator version and exit.
 
-  Output (one .def per variant):
-    jlreq-pdftex-jfm.def    zenkaku_tentsuki, burasage=false  (= default)
-    jlreq-pdftex-jfm-b.def  zenkaku_tentsuki, burasage=true
-    jlreq-pdftex-jfm-z.def  zenkakunibu_nibu, burasage=false
-    jlreq-pdftex-jfm-bz.def zenkakunibu_nibu, burasage=true
+  Output (one .def per variant; suffix = (b?)(z?|n?)):
+    jlreq-pdftex-jfm.def         yoko, zenkaku_tentsuki, burasage=false
+    jlreq-pdftex-jfm-b.def       yoko, zenkaku_tentsuki, burasage=true
+    jlreq-pdftex-jfm-z.def       yoko, zenkakunibu_nibu, burasage=false
+    jlreq-pdftex-jfm-bz.def      yoko, zenkakunibu_nibu, burasage=true
+    jlreq-pdftex-jfm-n.def       yoko, nibu_tentsuki,    burasage=false
+    jlreq-pdftex-jfm-bn.def      yoko, nibu_tentsuki,    burasage=true
+    jlreq-pdftex-jfm-tate.def      tate, zenkaku_tentsuki, burasage=false
+    jlreq-pdftex-jfm-tate-b.def    tate, zenkaku_tentsuki, burasage=true
+    jlreq-pdftex-jfm-tate-z.def    tate, zenkakunibu_nibu, burasage=false
+    jlreq-pdftex-jfm-tate-bz.def   tate, zenkakunibu_nibu, burasage=true
+    jlreq-pdftex-jfm-tate-n.def    tate, nibu_tentsuki,    burasage=false
+    jlreq-pdftex-jfm-tate-bn.def   tate, nibu_tentsuki,    burasage=true
+
+  Suffix semantics (jlreq.cls JFM name prefix "b"/"z" for pTeX/upTeX plus
+  the pdfTeX-only "n" and the tate series; see docs/pdftex-jfm-generation.md):
+    b = burasage (end_adjust of 6,7 gains -0.5)
+    z = zenkakunibu_nibu (orikaeshi nibu + danraku zenkakunibu)
+    n = nibu_tentsuki     (danraku nibu + orikaeshi tentsuki)
+
+  NIBU_TENTSUKI DIVERGENCE (documented, by design): under pTeX/upTeX the
+  "n" geometry is NOT a JFM file variant -- jlreq.cls:1138-1143 keeps the
+  plain JFM and inserts \hskip -.5\zw\inhibitglue in \everypar at RUNTIME
+  (openbracket hook).  The pdfTeX backend has no per-paragraph runtime hook
+  for this, so the same geometry is ENCODED IN THE GENERATED .def via the
+  jfm-jlreq.lua option hooks.  Arithmetic (jfm-jlreq.lua parses the option
+  as "<danraku>_<orikaeshi>"): nibu_tentsuki = danraku "nibu" +
+  orikaeshi "tentsuki", so ONLY the paragraph-head branch fires:
+  add_space(90,1,"glue",-0.5,1) -> 90->1 = {-0.5, 0, 0} with ratio
+  (0*0.5 + (-0.5)*1)/(0+1) = -0.5.  The folded-line branch (orikaeshi ==
+  "nibu": class 1 width +0.5, every k->1 glue -0.5) belongs to
+  zenkakunibu_nibu (the "z" variant) and does NOT fire here: class 1
+  width stays 0.5 (yoko) and the k->1 pairs stay at their default
+  naturals.  Verified empirically against the generated table.
 
   Determinism: fixed header, sorted keys everywhere, %.6f fixed-decimal
   serialization of zw-unit numbers, no timestamps, no pairs() order leaking
@@ -53,10 +87,11 @@
   Makefile's `check-pdftex-jfm` target relies on this (cmp against the
   committed files).
 
-  Output format (same as the PoC, see poc/m3-loadtest.tex for the runtime
-  loading contract):
+  Output format (v1 plus the classlist; see poc/m3-loadtest.tex for the
+  runtime loading contract):
     \def\jlreqpdf@jfm@dir{yoko}
     \def\jlreqpdf@jfm@zw{1.000000} ... \def\jlreqpdf@jfm@version{3}
+    \def\jlreqpdf@jfm@classlist{0,1,2,...}   (P2: sorted class numbers)
     \def\jlreqpdf@jfm@kanjiskip{{0.000000}{0.250000}{0.000000}}
     \def\jlreqpdf@jfm@xkanjiskip{{0.250000}{0.250000}{0.125000}}
     \def\jlreqpdf@jfm@class@<n>{{<w>}{<h>}{<d>}{<align>}{<left>}}
@@ -65,8 +100,8 @@
     \def\jlreqpdf@jfm@cls@<hex-n>{<class>}          (single-codepoint dispatch)
     \def\jlreqpdf@jfm@combo@<n>{...}                (multi-codepoint sequences)
     \def\jlreqpdf@jfm@ajone@<n>{{247}...}           (Adobe-Japan1 glyph ids)
-    \def\jlreqpdf@jfm@pseudo@parbdd{90} etc.        (parbdd/boxbdd/alchar)
-    \def\jlreqpdf@jfm@pair@<from>@<to>{{nat}{str}{shr}{ratio}{spri}{shpri}{knat}{kstr}{kshr}}
+    \def\jlreqpdf@jfm@pseudo@parbdd{90} etc.         (parbdd/boxbdd/alchar)
+    \def\jlreqpdf@jfm@pair@<f>@<t>{\jlreqpdf@pairfields{nat}{str}{shr}{ratio}{spri}{shpri}{knat}{kstr}{kshr}}
   Every macro has exactly ONE top-level body group (multi-field data uses
   inner groups): \def\cs{a}{b} would define body {a} and TYPESET {b}.
   The .def uses no expl3 features (plain \def) so it can be \input from
@@ -74,16 +109,17 @@
   (plain \def\foo@0 would make the 0 a parameter-text delimiter).
 -----------------------------------------------------------------------------]]
 
-local GEN_VERSION = "1.0"
+local GEN_VERSION = "2.0"
 
 -- ------------------------- option parsing ----------------------------------
 local opts = {
   jfm = nil,
   open_bracket_pos = "zenkaku_tentsuki",
-  burasage = "false",
   variant = nil,
   all_variants = false,
   outdir = nil,
+  manifest = nil,
+  print_manifest = false,
   output = nil,
 }
 local i = 1
@@ -92,6 +128,8 @@ while i <= #arg do
   if a == "--version" then
     print("make_pdftex_jfm.lua " .. GEN_VERSION)
     os.exit(0)
+  elseif a == "--print-manifest" then
+    opts.print_manifest = true
   elseif a == "--all-variants" then
     opts.all_variants = true
   elseif a:sub(1, 6) == "--jfm=" then
@@ -104,6 +142,8 @@ while i <= #arg do
     opts.variant = a:sub(11)
   elseif a:sub(1, 9) == "--outdir=" then
     opts.outdir = a:sub(10)
+  elseif a:sub(1, 11) == "--manifest=" then
+    opts.manifest = a:sub(12)
   elseif a:sub(1, 2) == "--" then
     io.stderr:write("make_pdftex_jfm.lua: unknown option " .. a .. "\n")
     os.exit(1)
@@ -117,13 +157,17 @@ while i <= #arg do
   i = i + 1
 end
 
-if not (opts.burasage == "true" or opts.burasage == "false") then
+-- Validation applies to the option-driven single-variant mode only:
+-- --all-variants uses the built-in VARIANTS matrix (its own options) and
+-- --print-manifest is a pure list query.
+local opts_mode = opts.all_variants and "all" or (opts.print_manifest and "print" or "single")
+if opts_mode == "single" and not (opts.burasage == "true" or opts.burasage == "false") then
   io.stderr:write("make_pdftex_jfm.lua: --burasage must be true or false\n")
   os.exit(1)
 end
 
 local VALID_OBP = { zenkaku_tentsuki = true, zenkakunibu_nibu = true, nibu_tentsuki = true }
-if not VALID_OBP[opts.open_bracket_pos] then
+if opts_mode == "single" and not VALID_OBP[opts.open_bracket_pos] then
   io.stderr:write("make_pdftex_jfm.lua: --open-bracket-pos must be one of "
     .. "zenkaku_tentsuki, zenkakunibu_nibu, nibu_tentsuki\n")
   os.exit(1)
@@ -166,40 +210,67 @@ local function load_jfm(obp, bura, src)
 end
 
 -- ------------------------- variant model ------------------------------------
--- jlreq.cls builds the pTeX/upTeX JFM name as (b?)(z?)jlreq via
--- \jlreq@jfmname@prefix (jlreq.cls:507-514): "b" if burasage, "z" if
--- open_bracket_pos is zenkakunibu_nibu, "u" first if upTeX.  The pdfTeX
--- backend has no upTeX variant, so the suffixes are "", "b", "z", "bz".
--- nibu_tentsuki is a valid class option but is NOT covered by this
--- prefix system; it differs from zenkaku_tentsuki in the loaded table
--- (90->1 glue -0.5, jfm-jlreq.lua:1161-1162), so it has no variant file
--- here and --variant must not claim it.
+-- GEN_VERSION 2.0 (PLAN P2): the variant list is the option matrix
+--   direction (yoko/tate) x open_bracket_pos
+--     (zenkaku_tentsuki / zenkakunibu_nibu / nibu_tentsuki) x burasage.
+--
+-- Suffix naming follows jlreq.cls's pTeX/upTeX JFM name prefix
+-- (\jlreq@jfmname@prefix, jlreq.cls:570-573): "b" if burasage, "z" if
+-- zenkakunibu_nibu.  nibu_tentsuki gets the pdfTeX-only "n" suffix:
+-- under pTeX/upTeX it has NO JFM prefix (the geometry is applied by the
+-- runtime \everypar openbracket hook, jlreq.cls:1138-1143 -- see the
+-- header comment), but the pdfTeX backend encodes it in the generated
+-- .def, so it needs its own file.  The tate files use the "-tate" prefix
+-- plus the same b/z/n suffix letters (jlreq-pdftex-jfm-tate<suffix>.def,
+-- empty suffix = the plain -tate name, matching the yoko convention).
+--
+-- VARIANTS is the single ordered list; --all-variants and the manifest
+-- are generated from it.  Order: yoko series first (matching the v1
+-- file order), then the tate series.
 local VARIANTS = {
-  { suffix = "",    open_bracket_pos = "zenkaku_tentsuki", burasage = false },
-  { suffix = "b",   open_bracket_pos = "zenkaku_tentsuki", burasage = true },
-  { suffix = "z",   open_bracket_pos = "zenkakunibu_nibu", burasage = false },
-  { suffix = "bz",  open_bracket_pos = "zenkakunibu_nibu", burasage = true },
+  -- yoko (source: jfm-jlreq.lua)
+  { suffix = "",    open_bracket_pos = "zenkaku_tentsuki",  burasage = false },
+  { suffix = "b",   open_bracket_pos = "zenkaku_tentsuki",  burasage = true },
+  { suffix = "z",   open_bracket_pos = "zenkakunibu_nibu",  burasage = false },
+  { suffix = "bz",  open_bracket_pos = "zenkakunibu_nibu",  burasage = true },
+  { suffix = "n",   open_bracket_pos = "nibu_tentsuki",     burasage = false },
+  { suffix = "bn",  open_bracket_pos = "nibu_tentsuki",     burasage = true },
+  -- tate (source: jfm-jlreqv.lua -- the RUNTIME-equivalent vertical JFM)
+  { suffix = "tate",    tate = true, open_bracket_pos = "zenkaku_tentsuki",  burasage = false },
+  { suffix = "tate-b",  tate = true, open_bracket_pos = "zenkaku_tentsuki",  burasage = true },
+  { suffix = "tate-z",  tate = true, open_bracket_pos = "zenkakunibu_nibu",  burasage = false },
+  { suffix = "tate-bz", tate = true, open_bracket_pos = "zenkakunibu_nibu",  burasage = true },
+  { suffix = "tate-n",  tate = true, open_bracket_pos = "nibu_tentsuki",     burasage = false },
+  { suffix = "tate-bn", tate = true, open_bracket_pos = "nibu_tentsuki",     burasage = true },
 }
 
--- T1b (tate JFM data): the vertical variant. Source = jfm-jlreqv-pl.lua
--- (the committed tate PL table produced by make_variant_jfm.lua's tate()
--- transform: dir='tate', height=depth=0.5 per class).  The tate file is a
--- SEPARATE data domain (vertical axis), not a class-option variant, so it
--- is emitted alongside the yoko files by --all-variants and validated by
--- the same check target.  The off@<n>{raise}{shift} table (see the
--- emission site for the derivation formula) is tate-only.  The tate file
--- carries no class-option suffixes: jlreq's vertical JFM prefix system
--- (jlreq.cls:507-514) covers only the plain jlreqv for the backend's
--- current single-direction model.
+-- tate variants load jfm-jlreqv.lua (NOT the -pl table): it is the same
+-- table make_variant_jfm.lua ships for LuaTeX-ja RUNTIME use, i.e.
+-- dir='tate' with height=depth=0.5 per class, WITH the trailing
+-- option-hook block (jfm-jlreqv.lua:2958-2998: the same add_space /
+-- jlreq globals as jfm-jlreq.lua:1141-1172), so the b/z/n option
+-- semantics come from the source itself -- no hand-reimplementation.
+-- Using the runtime table also fixes the two to_pl() losses that the
+-- committed jfm-jlreqv-pl.lua baked in (make_variant_jfm.lua:62-77):
+--   (a) stretch of pairs with priority[1] < 0 was zeroed ("空きの第四
+--       段階は消す" -- pTeX has no priority mechanism; the pdfTeX backend
+--       contract keeps all 9 fields, so the stretch must survive),
+--   (b) jfm[4].glue[0] (the alchar compensation pair) was deleted.
+-- jfm-jlreqv.lua ends with luatexja.jfont.define_jfm(jfm), so load_jfm
+-- (which provides the jlreq/luatexja globals) drives it unchanged.
 local TATE_JFM = {
-  file = "jfm-jlreqv-pl.lua",
-  outfile = "jlreq-pdftex-jfm-tate.def",
+  file = "jfm-jlreqv.lua",
 }
 
-local function variant_suffix(obp, bura)
+-- variant_suffix(obp, bura, tate): the file name suffix for one variant
+-- ("", "b", "z", "bz", "n", "bn"; tate adds the "tate" prefix, see
+-- variant_outfile).  Used by --variant consistency assertions.
+local function variant_suffix(obp, bura, tate)
   local s = ""
   if bura then s = s .. "b" end
-  if obp == "zenkakunibu_nibu" then s = s .. "z" end
+  if obp == "zenkakunibu_nibu" then s = s .. "z"
+  elseif obp == "nibu_tentsuki" then s = s .. "n" end
+  if tate then s = "tate" .. (s ~= "" and ("-" .. s) or "") end
   return s
 end
 
@@ -359,15 +430,15 @@ local function generate_variant(variant, outfile)
 
   -- --------------------- emit ----------------------------------------------
   emit("%% jlreq-pdftex-jfm data (variant: "
-    .. (variant.tate and "tate" or (variant.suffix == "" and "default" or variant.suffix)) .. ")")
+    .. (variant.suffix == "" and "default" or variant.suffix) .. ")")
   emit("%% generated by make_pdftex_jfm.lua " .. GEN_VERSION
     .. " -- DO NOT EDIT; regenerate with `make pdftex-jfm`")
   local srcfile = variant.jfmfile or jfmfile
   local src_sha = variant.jfmfile and sha256_hex(srcfile) or JFM_SHA256
   emit("%% source: " .. srcfile:match("[^/]*$") .. " (sha256 below)")
   emit("%% source sha256: " .. src_sha)
-  emit("%% options: " .. (variant.tate and "dir=tate" or
-    ("open_bracket_pos=" .. obp .. " burasage=" .. tostring(bura))))
+  emit("%% options: dir=" .. (variant.tate and "tate" or "yoko")
+    .. " open_bracket_pos=" .. obp .. " burasage=" .. tostring(bura))
   emit("%% deterministic: sorted keys, %.6f fixed decimals, no timestamps")
   emit("%% loader contract: \\makeatletter (catcode @ = 11) before \\input;")
   emit("%%   standard catcodes otherwise; the file does not restore them.")
@@ -379,11 +450,12 @@ local function generate_variant(variant, outfile)
   emit("\\def\\jlreqpdf@jfm@zw{" .. num(jfm.zw) .. "}")
   emit("\\def\\jlreqpdf@jfm@zh{" .. num(jfm.zh) .. "}")
   emit("\\def\\jlreqpdf@jfm@version{" .. tostring(jfm.version or 1) .. "}")
-  emit("\\def\\jlreqpdf@jfm@variant{" .. (variant.tate and "tate" or variant.suffix) .. "}")
+  emit("\\def\\jlreqpdf@jfm@variant{" .. variant.suffix .. "}")
   emit("\\def\\jlreqpdf@jfm@kanjiskip{{" .. num(jfm.kanjiskip[1]) .. "}{"
     .. num(jfm.kanjiskip[2]) .. "}{" .. num(jfm.kanjiskip[3]) .. "}}")
   emit("\\def\\jlreqpdf@jfm@xkanjiskip{{" .. num(jfm.xkanjiskip[1]) .. "}{"
     .. num(jfm.xkanjiskip[2]) .. "}{" .. num(jfm.xkanjiskip[3]) .. "}}")
+  emit("\\def\\jlreqpdf@jfm@classlist{" .. table.concat(classes, ",") .. "}")
   emit("")
   -- defop(name, body): emit a \def whose macro NAME may contain digits
   -- (class ids, codepoints). Plain \def\foo@0{...} would make the "0" a
@@ -420,37 +492,6 @@ local function generate_variant(variant, outfile)
     end
   end
   emit("")
-  -- T1b: tate-only punctuation offset table.  off@<n>{raise}{shift} carries
-  -- the RAW metric values (pt) for placing rotated punctuation ink at the
-  -- JLREQ target corner; the consumer maps them through its measured
-  -- slopes (dx/draise ~ +1.23, dy/dkern ~ +1.43 against +90 glyph rotation).
-  --
-  -- DERIVATION (automated; computed by poc/tate_off.lua from the IPAex
-  -- Type1 charstring ink bboxes extracted by poc/extbbox3.py — no
-  -- hand-tuned raster values):
-  --   V4 shipout-rotation axes: reading_x (right) = sheet_y (raise moves
-  --   it), reading_y (down) = sheet_x (kern moves it).  For a yoko ink
-  --   bbox (x0,x1,y0,y1) in 1/1000-em units, the CW-rotated ink occupies
-  --   sheet_x in [-y1,-y0], sheet_y in [x0,x1].  With the box normalized
-  --   to wd=1zw, ht=ght(0.88zw), dp=0:
-  --     raise(pt) = (0.88 - ink_x1/1000) * 10   [ink right edge -> cell right]
-  --     shift(pt) = -(ink_y1/1000) * 10         [ink top edge -> cell top]
-  --   using the class's representative glyph (the yoko glyph actually
-  --   shipped in the Type1 subset): 1:「=uni300C, 2:」=uni300D,
-  --   6:。=uni3002, 7:、=uni3001, 11:っ=uni3063, 161:｣=uniFF63 (FF plane).
-  --   Classes outside {1,2,6,7,11,161} are 0/0 (full-width glyphs need no
-  --   corner offset; rotation-correct by construction).
-  if variant.tate and variant.offtable then
-    emit("% ---- tate punctuation offsets: \\off@<n>{raise}{shift}")
-    emit("% ---- (pt; raise = reading-frame vertical, shift = horizontal;")
-    emit("% ---- derivation: see the comment above and poc/tate_off.lua)")
-    for _, c in ipairs(classes) do
-      local o = variant.offtable[c] or { raise = "0.000000", shift = "0.000000" }
-      defop(string.format("jlreqpdf@jfm@off@%d", c),
-        string.format("{%s}{%s}", o.raise, o.shift))
-    end
-    emit("")
-  end
   emit("% ---- full char lists per class (space separated U+XXXX hex, for")
   emit("% ---- debugging/verification; the runtime dispatch is cls@<hex> below)")
   for _, c in ipairs(classes) do
@@ -554,8 +595,7 @@ local function generate_variant(variant, outfile)
 
   emit("")
   emit("%% end of jlreq-pdftex-jfm"
-    .. (variant.tate and "-tate"
-        or (variant.suffix == "" and "" or ("-" .. variant.suffix))))
+    .. (variant.suffix == "" and "" or ("-" .. variant.suffix)))
 
   local text = table.concat(out, "\n") .. "\n"
   local fp, err = io.open(outfile, "wb")
@@ -579,29 +619,51 @@ local function generate_variant(variant, outfile)
   }
 end
 
--- ------------------------- T1b tate off table -------------------------------
--- The off@ table is computed by poc/tate_off.lua (IPAex Type1 charstring
--- bboxes via poc/extbbox3.py).  This loader consumes poc/tate-off.lua;
--- it is generated by `make pdftex-jfm` before the main generator runs
--- (see the Makefile's pdftex-jfm rule).
-local function load_off_table(dir)
-  local f = io.open(dir .. "/tate-off.lua", "r")
-  if not f then
-    io.stderr:write("make_pdftex_jfm.lua: tate off-table missing: run "
-      .. "texlua poc/tate_off.lua in the repository root first (or the "
-      .. "Makefile target does it)\n")
-    os.exit(1)
-  end
-  local data = f:read("*a"); f:close()
-  local t = {}
-  for c, ra, sh in data:gmatch("%[(%d+)%]%s*=%s*%{[^}]*raise%s*=%s*(-?[%d.]+)[^}]*shift%s*=%s*(-?[%d.]+)") do
-    t[tonumber(c)] = { raise = ra, shift = sh }
-  end
-  return t
-end
 
 -- ------------------------- main dispatch ------------------------------------
 local default_outname = "jlreq-pdftex-jfm%s.def"
+
+-- variant_outfile(v): the .def file name of a variant (no directory).
+--   ""   -> jlreq-pdftex-jfm.def
+--   "bz" -> jlreq-pdftex-jfm-bz.def
+--   "tate-bn" -> jlreq-pdftex-jfm-tate-bn.def
+local function variant_outfile(v)
+  return string.format(default_outname,
+    v.suffix == "" and "" or ("-" .. v.suffix))
+end
+
+-- write_manifest(path, outdir): the manifest is the SINGLE source of the
+-- generated file list (PLAN P2): check_jfm_pdftex.lua and the Makefile
+-- derive their lists from it, so the list exists in exactly one place.
+-- Deterministic: fixed header, VARIANTS order, no timestamps.
+local function write_manifest(path)
+  local out = {}
+  local function emit(s) out[#out + 1] = s end
+  emit("-- pdftex-jfm-manifest.lua --- generated by make_pdftex_jfm.lua")
+  emit("-- DO NOT EDIT; regenerate with `make pdftex-jfm`.")
+  emit("-- Single source of the pdfTeX JFM variant list (PLAN P2): the")
+  emit("-- checker (check_jfm_pdftex.lua) and the Makefile read this file")
+  emit("-- instead of keeping their own copies.")
+  emit("return {")
+  emit("  gen_version = " .. string.format("%q", GEN_VERSION) .. ",")
+  emit("  variants = {")
+  for _, v in ipairs(VARIANTS) do
+    emit(string.format("    { suffix = %q, file = %q, dir = %q,",
+      v.suffix, variant_outfile(v), v.tate and "tate" or "yoko"))
+    emit(string.format("      open_bracket_pos = %q, burasage = %s },",
+      v.open_bracket_pos, tostring(v.burasage)))
+  end
+  emit("  },")
+  emit("}")
+  local fp, err = io.open(path, "wb")
+  if not fp then
+    io.stderr:write("make_pdftex_jfm.lua: cannot write manifest " .. path
+      .. ": " .. tostring(err) .. "\n")
+    os.exit(1)
+  end
+  fp:write(table.concat(out, "\n") .. "\n")
+  fp:close()
+end
 
 if opts.all_variants then
   local outdir = opts.outdir
@@ -610,56 +672,48 @@ if opts.all_variants then
     outdir = jfmfile:match("^(.*)/[^/]*$") or "."
   end
   local ok = true
-  -- T1b: the tate off-table must be computed first (poc/tate_off.lua runs
-  -- in the output directory, where extbbox3.py's json snapshots live).
-  local tate_off = load_off_table(outdir == "." and "." or outdir)
-  local tate_variant = {
-    tate = true, jfmfile = scriptdir .. "/" .. TATE_JFM.file,
-    offtable = tate_off,
-  }
-  do
-    local outfile = string.format("%s/%s",
-      (outdir == "." and "" or outdir), TATE_JFM.outfile)
-    if outdir == "." then outfile = TATE_JFM.outfile end
-    local r = generate_variant(tate_variant, outfile)
-    io.stderr:write(string.format(
-      [[make_pdftex_jfm.lua %s: wrote %s
-  classes: %d  chars: %d (%d single + %d combos + %d AJ1 + %d pseudo)
-  pairs: %d  bytes: %d
-  options: dir=tate source=%s]],
-      GEN_VERSION, outfile, r.classes,
-      r.chars + r.combos + r.ajones + r.pseudos,
-      r.chars, r.combos, r.ajones, r.pseudos, r.pairs, r.bytes,
-      TATE_JFM.file))
-    io.stderr:write("\n")
-    if r.pairs == 0 then ok = false end
-  end
+  local tate_jfmfile = scriptdir .. "/" .. TATE_JFM.file
   for _, v in ipairs(VARIANTS) do
-    local outfile = string.format("%s/jlreq-pdftex-jfm%s.def",
-      (outdir == "." and "" or outdir), v.suffix == "" and "" or ("-" .. v.suffix))
-    if outdir == "." then
-      outfile = string.format("jlreq-pdftex-jfm%s.def",
-        v.suffix == "" and "" or ("-" .. v.suffix))
+    if v.tate then
+      v.jfmfile = tate_jfmfile
     end
+    local outfile = (outdir == "." and "" or (outdir .. "/")) .. variant_outfile(v)
     local r = generate_variant(v, outfile)
     io.stderr:write(string.format(
       [[make_pdftex_jfm.lua %s: wrote %s
   classes: %d  chars: %d (%d single + %d combos + %d AJ1 + %d pseudo)
   pairs: %d  bytes: %d
-  options: open_bracket_pos=%s burasage=%s]],
-      GEN_VERSION, outfile, r.classes, r.chars + r.combos + r.ajones + r.pseudos,
+  options: dir=%s open_bracket_pos=%s burasage=%s]],
+      GEN_VERSION, outfile, r.classes,
+      r.chars + r.combos + r.ajones + r.pseudos,
       r.chars, r.combos, r.ajones, r.pseudos, r.pairs, r.bytes,
-      v.open_bracket_pos, tostring(v.burasage)))
+      v.tate and "tate" or "yoko", v.open_bracket_pos, tostring(v.burasage)))
     io.stderr:write("\n")
     if r.pairs == 0 then ok = false end
   end
+  local manifest = opts.manifest
+    or (outdir == "." and "pdftex-jfm-manifest.lua" or (outdir .. "/pdftex-jfm-manifest.lua"))
+  write_manifest(manifest)
+  io.stderr:write("make_pdftex_jfm.lua " .. GEN_VERSION .. ": wrote manifest "
+    .. manifest .. " (" .. #VARIANTS .. " variants)\n")
   if not ok then os.exit(1) end
+  os.exit(0)
+end
+
+-- --print-manifest is a pure list query for the Makefile (no JFM load,
+-- no generation, no option validation): it needs VARIANTS/variant_outfile
+-- only and prints the 12 .def names then the manifest name.
+if opts.print_manifest then
+  for _, v in ipairs(VARIANTS) do
+    print(variant_outfile(v))
+  end
+  print(opts.manifest or "pdftex-jfm-manifest.lua")
   os.exit(0)
 end
 
 -- single-variant mode (default: the two options decide the variant)
 local bura = (opts.burasage == "true")
-local suffix = variant_suffix(opts.open_bracket_pos, bura)
+local suffix = variant_suffix(opts.open_bracket_pos, bura, false)
 if opts.variant then
   if opts.variant ~= suffix then
     io.stderr:write(string.format(
@@ -669,25 +723,15 @@ if opts.variant then
     os.exit(1)
   end
 end
-if opts.open_bracket_pos == "nibu_tentsuki" then
-  io.stderr:write(
-    "make_pdftex_jfm.lua: nibu_tentsuki is a valid jlreq class option but has "
-    .. "no variant file (jlreq.cls's JFM prefix system, jlreq.cls:507-514, "
-    .. "covers only zenkakunibu_nibu for the z prefix; nibu_tentsuki changes "
-    .. "the 90->1 pair and the backend does not load it yet). "
-    .. "Use --open-bracket-pos=zenkaku_tentsuki or zenkakunibu_nibu.\n")
-  os.exit(1)
-end
 local variant = nil
 for _, v in ipairs(VARIANTS) do
-  if v.suffix == suffix then variant = v end
+  if not v.tate and v.suffix == suffix then variant = v end
 end
 if not variant then
   io.stderr:write("make_pdftex_jfm.lua: internal: no variant for suffix " .. suffix .. "\n")
   os.exit(1)
 end
-local outfile = opts.output or string.format(default_outname,
-  suffix == "" and "" or ("-" .. suffix))
+local outfile = opts.output or variant_outfile(variant)
 local r = generate_variant(variant, outfile)
 io.stderr:write(string.format(
   [[make_pdftex_jfm.lua %s: wrote %s

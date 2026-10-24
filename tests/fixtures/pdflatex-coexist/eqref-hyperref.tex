@@ -3,13 +3,11 @@
 %   (a) 和文に挟まれた位置での \eqref/\ref（ASCIIラベル名）の解決
 %   (b) \text{和文} を含む式と、直打ち和文を含む式（backend M1で後者も組める）
 %   (c) 和文見出し（bookmarks 同様 UTF-16BE 経路）と式番号の共存
-% 既知の制限（ワークアラウンドを本コメントで示す）:
-%   * ラベル「名」への和文使用（\label{eq:あ}）は不可。CJKのアクティブ文字が
-%     LaTeXカーネルの \csname r@<name>\endcsname 内で展開され，バイトマクロの
-%     内部で「Missing \endcsname inserted」となる。CJKutf8 共通でbackend非依存。
-%     （(u)pTeX ではバイト非アクティブのため通る。）
-%     ワークアラウンド: ラベル名はASCIIにする（本fixtureのとおり）。本文・式・
-%     見出しの和文はすべて使える。
+% 和文ラベル名（P9で解消済み）:
+%   * \label{eq:あ} 等の和文ラベル名は P9 の対称正規化（\jlreqpdf@labelkey）
+%     で解決する（label-packages.tex が ref/pageref/eqref/autoref/nameref/
+%     cref/refcount の全面行列を実測）。本fixtureはASCIIラベルでの
+%     和文コンテキスト検証として残す。
 \documentclass[pdflatex]{jlreq}
 \usepackage{amsmath}
 \usepackage[unicode]{hyperref}

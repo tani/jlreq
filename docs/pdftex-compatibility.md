@@ -27,6 +27,9 @@
 | `uplatex` / `platex` / `lualatex` | jlreq.cls:106–108 | エンジン明示指定 | **implemented**（既存） | M1 | pdfTeX で指定すると実エンジンとの不一致エラー（jlreq.cls:458–477） |
 | `pdflatex` | jlreq.cls:109 | pdfTeX 明示指定 | **implemented** | M1 | 指定・自動判定ともに pdfTeX 経路で完走（全フィクスチャ rc=0） |
 | `article` / `report` / `book` / `article_type=…` | jlreq.cls:110–113 | 文書タイプ | **implemented** | M6 | `book`（\chapterが「第1章」出力）・`report` 実測 rc=0 |
+| `pdftex_fontset=`（`ipaex-type1`/`ipa`/`custom`） | jlreq.cls:114–115 | pdfTeXバックエンドのフォント設定（P4） | **implemented** | P4 | 既定 `ipaex-type1`（従来どおりType1平面 ipxm/ipxg＋補助縦TTFプロファイル `jlreq-pdftex-fonts-ipaex.def`）。`ipa` は bxcjkjatype の `ipa` プリセット（zhmetrics TFMチェーン）＋`jlreq-pdftex-fonts-ipa.def`（実測: 縦組 doc が IPAMincho TrueType 埋込＋縦字形抽出で完走）。`custom` は `pdftex_fontprofile=<file>` 必須（未指定・ファイル不在は生成手順つきの明示エラー; 横組みのみの文書は縦データ不要で通る） |
+| `pdftex_fontprofile=<file>` | jlreq.cls:116–117 | custom プロファイル指定（P4） | **implemented** | P4 | `make_pdftex_fonts.py --fontset custom --mincho <TTF> --gothic <TTF> --profile <file>` が生成。tate で縦グリフ表の無いプロファイルは生成方法つきエラー（回転への黙ったフォールバックはしない） |
+
 
 ### 2.2 紙・版面
 
@@ -54,7 +57,7 @@
 | `narrow_kanjiskip` | jlreq.cls:350 | jsarticle 互換の詰め字間 | **implemented** | M4 | 実測: `\jlreqkanjiskip` = `0pt plus .1zw minus .01zw` に変化。未定義ペアのフォールバックグルーとして実行時に適用 |
 | `use_reverse_pagination` | jlreq.cls:362 | 逆ノンブル | **implemented** | M6 | 実測 rc=0（auxラベル機構はエンジン非依存） |
 | `disablejfam` | jlreq.cls:402 | 数式内和文の無効化 | **implemented** | M6 | jfam 相当は enablejfam（既定）で実装済み: `\mathmc`/`\mathgt` は `\mathchoice` ボックス経由で和文を供給（jlreq.cls:1329–1335）。数式中の直接和文入力・行列セル内和文も動作（math-jfm.tex、math-matrix.tex）。disablejfam 指定時は `\mathmc`/`\mathgt` 未定義のまま（(u)pTeX と同一パリティ、math-jfm-disablejfam.tex） |
-| `tate` | jlreq.cls:376 | 縦組み | **implemented**（実験的、T1–T4） | M7 | shipout rotation 構成で実現（内枠横組 galley＋和文グリフ+90°回転＋`\@outputpage` で −90°回転、bxcjkvert/bxcjkjatype 不使用）。縦データ `jlreq-pdftex-jfm-tate.def` は jfm-jlreqv-pl.lua から自動生成、約物の縦用位置は `off@` オフセット（IPAex Type1 ink bbox から導出）で規格方位へ配置。実測: 上→下・右→左・禁則ゼロ違反、見出し・目次・ページ家具（柱・ノンブル、`\hb@xt@ \textheight` 他出力段の横幅補正込み）は uplatex と bbox/cm 行列で一致（fixtures/pdflatex-tate-{basic,pairs,boxdump,furniture,notes,float,math}.tex、T8）。脚注・後注・傍注・`\marginpar`・基本 float・行内/別行数式は T1 コアのまま uplatex 参照と一致（数式は uplatex の実物挙動=式全体を90°倒す「寝かせ」に正確に合わせ、δ=0.343zw の位置補正で左右縁ビット一致）。**対象外（ClassWarning で列挙）**: jlreq-trimmarks banner in tate、`\tatechuyoko`（従来どおり明示 ClassError）、ルビ、jlreqsetup の tate 連動キー。bxcjkvert 自体は提供範囲外確認済み（docs/pdftex-tate-eval.md 2026-10-23 再調査版） |
+| `tate` | jlreq.cls:376 | 縦組み | **implemented**（実験的、T1–T4） | M7 | shipout rotation 構成で実現（内枠横組 galley＋和文グリフ+90°回転＋`\@outputpage` で −90°回転、bxcjkvert/bxcjkjatype 不使用）。縦データ `jlreq-pdftex-jfm-tate.def` は jfm-jlreqv-pl.lua から自動生成、縦字形はフォントプロファイル（`jlreq-pdftex-fonts-*.def`＋補助縦TTF/TFM/enc, P4）で供給: vert/vrt2 置換グリフは直立のまま補助縦フォントから出力し、それ以外は回転、進行幅はJFMクラス幅×現在zw（旧 `off@` 固定pt表は廃止）。実測: 上→下・右→左・禁則ゼロ違反、見出し・目次・ページ家具（柱・ノンブル、`\hb@xt@ \textheight` 他出力段の横幅補正込み）は uplatex と bbox/cm 行列で一致（fixtures/pdflatex-tate-{basic,pairs,boxdump,furniture,notes,float,math}.tex、T8）。脚注・後注・傍注・`\marginpar`・基本 float・行内/別行数式は T1 コアのまま uplatex 参照と一致（数式は uplatex の実物挙動=式全体を90°倒す「寝かせ」に正確に合わせ、δ=0.343zw の位置補正で左右縁ビット一致）。**対象外（ClassWarning で列挙）**: jlreq-trimmarks banner in tate、`\tatechuyoko`（従来どおり明示 ClassError）、ルビ、jlreqsetup の tate 連動キー。bxcjkvert 自体は提供範囲外確認済み（docs/pdftex-tate-eval.md 2026-10-23 再調査版） |
 | `landscape` | jlreq.cls:372 | 横置き | **implemented** | M2 | `landscape,a4paper` 実測: 841.89×595.28pt（縦横交換） |
 | `tombo` / `tombow` / `mentuke` | jlreq.cls:373–375 | トンボ（jlreq-trimmarks.sty へ案内） | **implemented** | M6 | jlreq-trimmarks は pdfTeX でトンボ描画・TrimBox/BleedBox・回転バナー（`\rotatebox{-90}` 代替）に対応（trimmarks.tex、trimmarks-banner.tex）。クラスオプション経由の案内は従来どおり警告で trimmarks.sty へ |
 | `oneside` / `twoside` / `onecolumn` / `twocolumn` / `titlepage` / `notitlepage` | jlreq.cls:382–387 | ページ構成 | **implemented** | M6 | `twoside`+`titlepage`（book）実測 rc=0、`twocolumn` 実測（microtype-twocolumn）、`notitlepage`+`onecolumn`+`oneside`（report）実測 rc=0 |
@@ -95,13 +98,13 @@
 | 区切り約物（`！？`）直後の空き | jlreq.cls:1223–1230 | 区切り約物（4.2.8）直後の空き | **implemented**（JFMデータ） | M4 | jlreq APIは文字入力ベースで、直後の空きはJFMクラスペアグルー（クラス5の pair 5→c グルー）で処理。`\！`なる単独命令はjlreq APIではなくpTeXカーネル由来（pdfTeXでは未定義=非API） |
 | `\jidori` | jlreq.cls:6433, 6450 | 字取り（2.2.2） | **implemented** | M4 | 自前グルー規則のjidorimode=2（文字間 0pt+1fil、\hbox to Lで均等分散）。実測: \jidori{60pt}{字取} で文字間13.2ptに分散 |
 | `\akigumi` | jlreq.cls:6462 | 空き組み | **implemented** | M4 | jidorimode=1（文字間に固定空き）。実測: \akigumi{3pt}{空き組} で文字間13.0pt（10pt字面+3pt空き） |
-| `\tatechuyoko` | jlreq.cls:6336 | 縦中横 | **blocked** | M7 | **G4**。縦組み専用。pdfTeX で縦組の縦中横は M7 の実証対象 |
+| `\tatechuyoko` | jlreq.cls:6336 | 縦中横 | **implemented**（縦組） | P5 | 局所方向エンジン（frame-tuple 方向 `\jlreqpdf@dir`）+ 箱工場 `\jlreqpdf@yokobox@strut` で正規化埋込み。uplatex 同一ソース showbox・PDF bbox 実測契約: advance=1zw（1〜4桁で固定、はみ出し対称）・cross=体幅半分ずつ・digit baseline=進行起点・star 形は tate で同一構造/yoko で透過・yoko 非 star 形は ClassError。ゲート: tcy-basic（PDF 幾何、XFAIL から昇格）+ tcy-digits/tcy-fontchange/tcy-star-error（tests/fixtures/pdflatex-tate/） |
 | `\warichu` / `\inlinenote` | jlreq.cls:4020, 4026 | 割注（3.4） | **implemented** | M6 | \warichu 自動位置計算2行折返し実測（footnotes-warichu.tex、3パス安定）。括弧測定はJFMデータ、\inhibitglueはno-opシム |
 | `\footnote` / `\footnotemark` / `\footnotext` | jlreq.cls:3532–3555（フック適用） | 脚注（4.2.5） | **implemented** | M6 | footnotes-rules.tex で3種すべて実測 rc=0（脚注内の禁則・ペアグルーもbbox走査で確認）。注記フックの`\lastnodechar`依存は-1固定で無害化 |
 | `\endnote` / `\endnotemark` / `\endnotext` / `\theendnotes` | jlreq.cls:3746, 3751, 3798 | 後注（4.2.4） | **implemented** | M6 | キー実測（表3.1）＋脚注と同一の注記経路 |
 | `\sidenote` / `\sidenotemark` / `\sidenotetext` | jlreq.cls:3929–3931, 3974–3976 | 傍注（4.2.7） | **implemented** | M6 | 両型とも動作（sidenote.tex、sidenote-symbol.tex、rc=0）。旧障害の根因は2件とも修正済み: (1) `\marginpar` ボックス調整の `\jlreq@jareg` 桁連結（`Dimension too large`、jlreq.cls:1468–1477 修正）、(2) 既定＊マークの素 `\edef` がアクティブ CJK 文字を潰す問題（`\protected@edef` 化、jlreq.cls:4204–4217）。縦組時の傍注は M7 |
-| `\西暦` / `\和暦` / `\today` / `\kansuji` | jlreq.cls:6471–6473, 6496 | 日付表記・漢数字 | **implemented**（横組） | M6 | year_style=wareki 実測。\todayは横組`\number`版固定。`\kansuji` は pTeX と同一仕様の桁置換展開可能マクロ `\jlreq@pdf@kansuji` として実装（jlreq-pdftex.sty:162–209）、`\jlreq@Kanji` の使用時 ClassError は撤去（jlreq.cls:1631–1636）。13値を uplatex と突合して全一致（kanji-numbers.tex、KANSUJI-PASS 13アサーション）。`\thechapter` 再定義経由の横組利用もフィクスチャ実証済み |
-| `\　`（`U+3000`）の後続空白無視 | jlreq.cls:1180–1203 | 全角空白の後の空白処理 | **blocked**（綴不可） | M4 | `\　`綴自体がpdfTeXで成立しない（上記）。U+3000リテラルは空白単体を直接含むため後続空白無視は不要 |
+| `\西暦` / `\和暦` / `\today` / `\kansuji` | jlreq.cls:6918–6960, 1485–1620 | 日付表記・漢数字 | **implemented** | P9 | `\today` は `\ifjlreq@seireki` を反映（wareki→`\jlreq@wareki` 元号表、tate→`\jlreq@pdf@kansuji`、yoko→`\number`）。和暦5境界日（1989-01-07 昭和64年/1989-01-08 平成元年/2019-04-30 平成31年/2019-05-01 令和元年/1926-12-24 昭和元年）を date-boundaries.tex で実測。`\西暦true`/`\西暦false`/`\和暦` は P9 ディスパッチャ（control symbol `\<先頭byte>` + 残りbyte列の完全一致消費 → protected ASCII 命令）で利用可能。lualatex 参照との抽出比較一致（today-wareki ゲート、XFAIL から昇格）。`\kansuji` は pTeX 同一仕様の桁置換展開可能マクロ `\jlreq@pdf@kansuji`（kanji-numbers.tex、KANSUJI-PASS 13） |
+| `\　`（`U+3000`）命令形 | jlreq.cls:1485–1620（d分岐ディスパッチャ + zenkaku main） | 全角空白の後の空白処理 | **implemented** | P9 | `\　` 綴は P9 ディスパッチャで成立する: control symbol `\<e3>` + 残りbyte列（80 80）の完全一致消費 → `\jlreq@pdf@zenkakuspace`（1zw skip + 後続ASCII空白の無視 + 区切り約物直後の JFM 追い込みは live `\jlreq@lastnodechar`/`\jlreq@fixjfm` で判定）。literal U+3000 と `\jaspace{zenkaku}` は従来どおり別経路で動作（space-dispatcher.tex で3経路の同一描画を実測） |
 
 ### 4.2 見出し
 
@@ -148,12 +151,27 @@
 
 ## 6. 既知の制約（現時点で確定しているもの）
 
-1. **~~縦組み（`tate` オプション）~~ → 実験的コア実装済み（2026-10-23、T1）**： 「`\tate`/`\yoko` プリミティブが無い＝縦組み不可能」との初回判定は、shipout rotation 構成（内枠横組 galley＋和文グリフ+90°回転＋出力箱 −90°回転）によって覆された。縦組み JFM データ・約物配置・禁則・2ページ継起まで実測済み（T8）。**残件（個別スライス、いずれも構造ブロックではない）**： 縦組み見出し・柱等のページ家具、`\tatechuyoko`（従来どおり明示 ClassError）、縦組み `\kansuji`/`\today` 縦組表示、脚注・傍注・float の縦組み調整、数式隣接、ルビ、tate 連動 jlreqsetup キー。回転バナーは従来の `\rotatebox{-90}` 版（4.4参照）。初期評価（bxcjkvert 再評価の経緯）は `docs/pdftex-tate-eval.md` 参照。
+1. **~~縦組み（`tate` オプション）~~ → 実験的コア実装済み（2026-10-23、T1）**： 「`\tate`/`\yoko` プリミティブが無い＝縦組み不可能」との初回判定は、shipout rotation 構成（内枠横組 galley＋和文グリフ+90°回転＋出力箱 −90°回転）によって覆された。縦組み JFM データ・約物配置・禁則・2ページ継起まで実測済み（T8）。**残件（個別スライス、いずれも構造ブロックではない）**： 縦組み見出し・柱等のページ家具、~~`\tatechuyoko`~~（**P5 で実装済み**: 局所方向エンジン+箱工場、tcy-*/dir-* ゲート、docs/pdftex-tate-eval.md 参照）、縦組み `\kansuji`/`\today` 縦組表示、脚注・傍注・float の縦組み調整、数式隣接、ルビ、tate 連動 jlreqsetup キー。回転バナーは従来の `\rotatebox{-90}` 版（4.4参照）。初期評価（bxcjkvert 再評価の経緯）は `docs/pdftex-tate-eval.md` 参照。
 2. **~~`mag` オプション相当（`\mag` 可変運用）~~ → 解決（2026-10-23）**： jlreq.cls:1677–1690 の d 分岐で `\pdfhorigin`=`\pdfvorigin`=`1truein` を再代入し `\pdfpagewidth`/`\pdfpageheight` を 1000/`\mag` 倍に再スケールする相殺を実装。実測: `\mag=1200` の版面寸法が uplatex 参照とビット等価（94.152bp）、`\mag=1000` では出力が導入前後でバイト一致。**トンボ描画も `\mag=1200` で一致**： jlreq-trimmarks-pdftex.def:58–77 の `\put` 原点補正（`\mag≠1000` 時に描画 stored 座標へ混入する `\hoffset`/`\voffset` 成分を相殺； uplatex は stored 座標が mag 不変＝全描画がストック隅から単純 mag 倍であることの実測・コンテントストリーム照合に基づく）により、描画 HiRes ink-bbox が uplatex と完全一致（`42.048 42.174 845.082 1140.894`）。`\mag=1000` では描画ストリームが導入前後で一致（HiRes `35.041 35.136 704.234 950.742`）。検証 fixture: `tests/fixtures/pdflatex-coexist/mag-tombow.tex` ＋ `tests/check-tombow-mag.py`（トンボ罫線の stored 座標が mag 不変で (35.05, 922.444) かつページ CTM が ×1.2 であることを機械判定、runner 登録済み）。テキストブロックの +1truein 再センタリングは jlreq-trimmarks-pdftex.def:79–89 で実装済み（uplatex 比較で y 誤差 ≤0.065bp、x ビット一致）。
 3. **~~`hanging_punctuation`（ぶら下げ）の完全再現~~ → 実装済み（2026-10-23）**： 先行の「pdfTeX は行末突出し機構を持たない」は誤りと判明。`\pdfprotrudechars=2`＋`\rpcode` で `-b`/`-bz` 変種の句読点突出しを実装（2.3表・poc/README-g3b.md 参照）。LuaTeX-ja の `ltjenableadjust[lineend=extended,priority=true]`（jlreq.cls:502）相当の**優先順位付き伸縮**の厳密な意味論は、引き続き近似（shrink 畳み込み、実害非計測——poc/README-m5-numeric.md）として残る。
-4. **~~数式内和文（jfam）~~ → 実装済み（2026-10-23）**： enablejfam（既定）で `\mathmc`/`\mathgt` を `\mathchoice` ボックス経由で提供（jlreq.cls:1329–1335）。数式中の直接和文入力・行列セル内和文も動作（math-jfm.tex / math-matrix.tex）。`\eqref`＋hyperref の和文文脈は当初から非破壊（eqref-hyperref.tex）。残る制限は**和文 `\label` 名**のみ（アクティブバイトが `\csname r@…\endcsname` 内で展開される素因で、しおり機構の兼ね合いから修正不能と合意。ASCII ラベルの回避策を eqref-hyperref.tex コメントに記録）。
+4. **~~和文 `\label` 名~~ → 実装済み（2026-10-24、P9）**： label key の対称正規化 `\jlreqpdf@labelkey`（`\protected@edef` で通常マクロ展開・UTF8 byte は CJK byte マクロの保護分岐で凍結 → `\detokenize` で catcode 12 化、byte 不変）を write（`\label`）・read（aux の `\newlabel`、begindocument/before フック）・query（`\ref`/`\pageref` star 両形）に接続。パッケージ面も対応: nameref（`\NR@setref`）、hyperref（`\label@hyperref`/`\HyRef@autoref`/`\hyperref[..]`）、refcount（`\refused`/`\rc@set`/`\getrefnumber` — edef 内完全展開を維持）、cleveref（`\@cref` 入口の key 事前正規化 + `\cref@getref`/`\cpageref@getref`）。ASCII ラベルの aux は byte 不変（HEAD tree との cmp 一致を実測）。eqref-hyperref.tex の「日本語label不可」コメントは解消済み（label-packages.tex が全面行列を実測）。
 
 ## 7. 依存関係・ライセンス・動作環境
+
+### P4: フォントプロファイルと文字抽出契約
+
+- 補助縦フォントはソースフォント（IPAexMincho/IPAexGothic; IPA Font License
+  v1.0）の vert/vrt2 グリフを再パッケージした派生物。`fonts/pdftex/LICENSE-aux-*.txt`
+  に出典・ライセンス文を複製し、プロファイル .def のヘッダにも同じ出典を記録する。
+- 縦字形の文字抽出: プロファイル読込時に各補助グリフ名 `jlreqvXXXX` の
+  `\pdfglyphtounicode{jlreqvXXXX}{<UTF-16BE hex>}` を登録し
+  `\pdfgentounicode=1` を設定する（非BMPはサロゲートペア）。
+  文書が `\pdfgentounicode` を 0 に戻した場合、\AtEndDocument で
+  「文字抽出保証を満たさない設定」として明示エラーにする。
+- `…`（U+2026）の抽出が `. . .`（002E×3）になるのは横組の ipaex-type1
+  既定経路でも同一の挙動（配布 ipaex-type1 の ToUnicode 由来）であり、
+  P4 の縦経路の退化ではない。
+
 
 `docs/pdftex-dependencies.md` を参照（ライセンス境界の記録＝GPL依存と
 コード流用の区別，TeX Live 2025検証実績，最低版は上流協議事項）。

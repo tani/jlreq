@@ -1,16 +1,16 @@
 TEXMF:=$(shell kpsewhich -var-value=TEXMFHOME)
 MAKEJVFCNF:=$(shell ls -R $(shell kpsewhich --var-value=TEXMFDIST)/fonts/source | awk '/:$$/{sub(/:$$/,"");f=$$0} tolower($$0) ~ /makejvf-upjpn\.cnf$$/{print f"/"$$0}' | head -n 1)
 
-# pdfTeX backend JFM data (PLAN.md §3.3, §5 M3).
+# pdfTeX backend JFM data (PLAN.md §3.3, §5 M3; P2: 12 variants).
 # The .def files ARE committed (unlike .tfm/.vf, which are built at install
 # time): the pdfTeX backend needs them at run time and users may not have
 # texlua.  Regeneration-diff-zero is checked by `make check-pdftex-jfm`
 # (run it in CI / after touching jfm-jlreq.lua or make_pdftex_jfm.lua).
-PDFTEX_JFM_DEFS = jlreq-pdftex-jfm.def jlreq-pdftex-jfm-b.def \
-	jlreq-pdftex-jfm-z.def jlreq-pdftex-jfm-bz.def jlreq-pdftex-jfm-tate.def
-
-# IPAex Type1 平面フォント（tate off@ 表の ink bbox 算出に使用）。
-IPAEX_TYPE1_DIR:=$(shell kpsewhich ipxm-r-u30.pfb | xargs dirname)
+# The file list comes from the GENERATOR'S MANIFEST (single source, PLAN
+# P2): make_pdftex_jfm.lua --print-manifest lists the 12 .def files plus
+# the manifest itself.
+PDFTEX_JFM_MANIFEST := pdftex-jfm-manifest.lua
+PDFTEX_JFM_DEFS := $(filter-out $(PDFTEX_JFM_MANIFEST),$(shell texlua make_pdftex_jfm.lua --print-manifest))
 
 TFMS = jlreq.tfm bjlreq.tfm zjlreq.tfm bzjlreq.tfm \
 	ujlreq.tfm ubjlreq.tfm uzjlreq.tfm ubzjlreq.tfm \
@@ -40,8 +40,7 @@ VFS = jlreq.vf bjlreq.vf zjlreq.vf bzjlreq.vf \
 	ujlreq-jidori.vf ujlreqg-jidori.vf ujlreq-v-jidori.vf ujlreqg-v-jidori.vf \
 	ujlreq-jidori-q.vf ujlreqg-jidori-q.vf
 
-
-.PHONY: all jfm doc latexdoc pdfdoc htmldoc jfm-install cls-install sty-install install tds uninstall jfmclean docclean clean pdftex-jfm check-pdftex-jfm check-pdftex-jfm-static
+.PHONY: all jfm doc latexdoc pdfdoc htmldoc jfm-install cls-install sty-install install tds uninstall jfmclean docclean clean pdftex-jfm check-pdftex-jfm check-pdftex-jfm-static pdftex-fonts check-pdftex-fonts
 
 all: jfm
 
@@ -49,46 +48,62 @@ jfm: jfm-jlreqv.lua jfm-jlreqv-jidori.lua $(VFS) $(TFMS)
 	
 	rm -f rml.tfm rmlv.tfm gbm.tfm gbmv.tfm uprml-h.tfm uprml-hq.tfm upgbm-h.tfm upgbm-hq.tfm uprml-v.tfm uprml-vq.tfm upgbm-v.tfm upgbm-vq.tfm
 
-# pdfTeXバックエンド用JFMデータの生成（PLAN.md §3.3，§5 M3）
-# 全4バリアントを生成する。出力は決定的（タイムスタンプなし・ソート済み）。
-pdftex-jfm: $(PDFTEX_JFM_DEFS)
+# pdfTeXバックエンド用JFMデータの生成（PLAN.md §3.3，§5 M3，P2: 12組）
+# 出力は決定的（タイムスタンプなし・ソート済み）。manifest
+# （pdftex-jfm-manifest.lua）がバリアント一覧の唯一のソース。
+pdftex-jfm: $(PDFTEX_JFM_DEFS) $(PDFTEX_JFM_MANIFEST)
 
-# tate variant: the off@ punctuation-offset table is derived from the
-# IPAex Type1 charstring ink bboxes (poc/extbbox3.py + poc/tate_off.lua).
-# Inputs u30/uff plane disassemblies are build artifacts and removed after
-# the off-table is written.
-tate-off.lua: poc/extbbox3.py poc/tate_off.lua
-	t1disasm $(IPAEX_TYPE1_DIR)/ipxm-r-u30.pfb > u30.dis
-	t1disasm $(IPAEX_TYPE1_DIR)/ipxm-r-uff.pfb > uff.dis
-	python3 poc/extbbox3.py u30.dis > /dev/null && cp bboxes.json bboxes-30.json
-	python3 poc/extbbox3.py uff.dis > /dev/null && cp bboxes.json bboxes-ff.json
-	texlua poc/tate_off.lua
-	rm -f u30.dis uff.dis bboxes.json bboxes-30.json bboxes-ff.json
-
-$(PDFTEX_JFM_DEFS): make_pdftex_jfm.lua jfm-jlreq.lua jfm-jlreqv-pl.lua tate-off.lua
+$(PDFTEX_JFM_DEFS) $(PDFTEX_JFM_MANIFEST)&: make_pdftex_jfm.lua jfm-jlreq.lua jfm-jlreqv.lua
 	texlua make_pdftex_jfm.lua --all-variants
 
 # 再生成してコミット済みファイルとの差分ゼロを検査する（CI 用）。
 # このターゲットは `all` には含めない: 通常のビルド（make jfm）は
 # pTeX/upTeX/LuaTeX 用であり、pdfTeX 用データの検査は独立に実行する。
-check-pdftex-jfm: tate-off.lua
+check-pdftex-jfm:
 	rm -rf pdftex-jfm-check
 	mkdir -p pdftex-jfm-check
-	cp tate-off.lua pdftex-jfm-check/
-	texlua make_pdftex_jfm.lua --all-variants --outdir=pdftex-jfm-check
-	cmp pdftex-jfm-check/jlreq-pdftex-jfm.def jlreq-pdftex-jfm.def
-	cmp pdftex-jfm-check/jlreq-pdftex-jfm-b.def jlreq-pdftex-jfm-b.def
-	cmp pdftex-jfm-check/jlreq-pdftex-jfm-z.def jlreq-pdftex-jfm-z.def
-	cmp pdftex-jfm-check/jlreq-pdftex-jfm-bz.def jlreq-pdftex-jfm-bz.def
-	cmp pdftex-jfm-check/jlreq-pdftex-jfm-tate.def jlreq-pdftex-jfm-tate.def
+	texlua make_pdftex_jfm.lua --all-variants --outdir=pdftex-jfm-check --manifest=pdftex-jfm-check/$(PDFTEX_JFM_MANIFEST)
+	for f in $(PDFTEX_JFM_DEFS) $(PDFTEX_JFM_MANIFEST); do cmp pdftex-jfm-check/$$f $$f || exit 1; done
 	texlua check_jfm_pdftex.lua
 	rm -rf pdftex-jfm-check
-	@echo "check-pdftex-jfm: regeneration diff zero, all variants validated"
+	@echo "check-pdftex-jfm: regeneration diff zero, all 12 variants validated"
 
-# 静的検査のみ（再生成なし）。check_jfm_pdftex.lua は既定でコミット
-# 済みの4ファイルを全検証する。
+# ---------------------------------------------------------------------------
+# 補助縦フォント・フォントプロファイル（P4; PLAN §3.3/§10.1/§12）。
+# make_pdftex_fonts.py が ipaex / ipa 両組の aux TTF/enc/TFM と profile .def
+# を fonts/pdftex/ へ生成する。生成は決定的（固定日時・ソート済み）。
+# 通常の文書コンパイルは生成済み資源だけを使い python/fontTools/ttf2tfm
+# は実行しない（ビルド/利用分離, PLAN §12）。この manifest は JFM 生成器
+# （pdftex-jfm-manifest.lua）とは独立で、中間物を共有しない。
+PDFTEX_FONTS_DIR := fonts/pdftex
+PDFTEX_FONTSETS := ipaex ipa
+PDFTEX_FONT_PROFILES := jlreq-pdftex-fonts-ipaex.def jlreq-pdftex-fonts-ipa.def
+
+pdftex-fonts:
+	@for fs in $(PDFTEX_FONTSETS); do \
+	  python3 make_pdftex_fonts.py --fontset $$fs --outdir $(PDFTEX_FONTS_DIR) || exit 1; \
+	done
+	@echo "pdftex-fonts: built aux vertical fonts + profiles into $(PDFTEX_FONTS_DIR)"
+
+# 決定性（2回生成のバイト一致）+ 構造検査（tests/check-pdftex-fonts.py）。
+# pdftex-fonts は丸ごと再生成するので「チェックディレクトリに一度退避→
+# 再生成→差分ゼロ」で決定性を検証する。
+check-pdftex-fonts: pdftex-fonts
+	rm -rf pdftex-fonts-check
+	cp -r $(PDFTEX_FONTS_DIR) pdftex-fonts-check
+	$(MAKE) pdftex-fonts
+	diff -r pdftex-fonts-check $(PDFTEX_FONTS_DIR) \
+	  || { echo "FAIL: regeneration is not byte-identical"; exit 1; }
+	rm -rf pdftex-fonts-check
+	python3 tests/check-pdftex-fonts.py $(PDFTEX_FONTS_DIR) $(PDFTEX_FONT_PROFILES)
+	@echo "check-pdftex-fonts: deterministic regeneration + structural checks OK"
+
+
+# 静的検査のみ（再生成なし）。check_jfm_pdftex.lua は既定で manifest に
+# 記載の12ファイルを全検証する。
 check-pdftex-jfm-static:
 	texlua check_jfm_pdftex.lua
+
 
 # .pl
 ujlreq-v.pl ubjlreq-v.pl uzjlreq-v.pl ubzjlreq-v.pl: u%-v.pl: jfm-%v-pl.lua luajfm2pl.lua
@@ -270,7 +285,14 @@ cls-install:
 	install jlreq.cls ${TEXMF}/tex/latex/jlreq
 	install jlreq-pdftex.sty ${TEXMF}/tex/latex/jlreq
 	install jlreq-pdftex-rules.sty ${TEXMF}/tex/latex/jlreq
-	install ${PDFTEX_JFM_DEFS} ${TEXMF}/tex/latex/jlreq
+	install $(addprefix ${PDFTEX_FONTS_DIR}/,${PDFTEX_FONT_PROFILES}) ${TEXMF}/tex/latex/jlreq
+	mkdir -p ${TEXMF}/fonts/truetype/jlreq-pdftex
+	install ${PDFTEX_FONTS_DIR}/jlreqv-*.ttf ${TEXMF}/fonts/truetype/jlreq-pdftex
+	mkdir -p ${TEXMF}/fonts/tfm/jlreq-pdftex
+	install ${PDFTEX_FONTS_DIR}/jlreqv-*.tfm ${TEXMF}/fonts/tfm/jlreq-pdftex
+	mkdir -p ${TEXMF}/fonts/enc/jlreq-pdftex
+	install ${PDFTEX_FONTS_DIR}/jlreqv-*.enc ${TEXMF}/fonts/enc/jlreq-pdftex
+	install ${PDFTEX_JFM_DEFS} ${PDFTEX_JFM_MANIFEST} ${TEXMF}/tex/latex/jlreq
 
 sty-install:
 	mkdir -p ${TEXMF}/tex/latex/jlreq
@@ -297,7 +319,14 @@ tds: jfm pdftex-jfm jlreq.cls README.md README-ja.md LICENSE jlreq.html jlreq-ja
 	cp jlreq-trimmarks-pdftex.def ./tds/tex/latex/jlreq
 	cp jlreq-pdftex.sty ./tds/tex/latex/jlreq
 	cp jlreq-pdftex-rules.sty ./tds/tex/latex/jlreq
-	cp ${PDFTEX_JFM_DEFS} ./tds/tex/latex/jlreq
+	cp $(addprefix ${PDFTEX_FONTS_DIR}/,${PDFTEX_FONT_PROFILES}) ./tds/tex/latex/jlreq
+
+	mkdir -p ./tds/fonts/truetype/jlreq-pdftex
+	cp ${PDFTEX_FONTS_DIR}/jlreqv-*.ttf ./tds/fonts/truetype/jlreq-pdftex
+	mkdir -p ./tds/fonts/tfm/jlreq-pdftex
+	cp ${PDFTEX_FONTS_DIR}/jlreqv-*.tfm ./tds/fonts/tfm/jlreq-pdftex
+	mkdir -p ./tds/fonts/enc/jlreq-pdftex
+	cp ${PDFTEX_FONTS_DIR}/jlreqv-*.enc ./tds/fonts/enc/jlreq-pdftex
 	mkdir -p ./tds/doc/latex/jlreq
 	cp README.md ./tds/doc/latex/jlreq
 	cp README-ja.md ./tds/doc/latex/jlreq
@@ -324,18 +353,24 @@ tds: jfm pdftex-jfm jlreq.cls README.md README-ja.md LICENSE jlreq.html jlreq-ja
 	cp luajfm2pl.lua ./tds/source/latex/jlreq
 	cp make_pdftex_jfm.lua ./tds/source/latex/jlreq
 	cp check_jfm_pdftex.lua ./tds/source/latex/jlreq
+	cp make_pdftex_fonts.py ./tds/source/latex/jlreq
+	cp tests/check-pdftex-fonts.py ./tds/source/latex/jlreq
 
 uninstall:
 	rm -rf ${TEXMF}/fonts/tfm/public/jlreq
 	rm -rf ${TEXMF}/fonts/vf/public/jlreq
 	rm -rf ${TEXMF}/tex/luatex/jlreq
 	rm -rf ${TEXMF}/tex/latex/jlreq
+	rm -rf ${TEXMF}/fonts/truetype/jlreq-pdftex
+	rm -rf ${TEXMF}/fonts/tfm/jlreq-pdftex
+	rm -rf ${TEXMF}/fonts/enc/jlreq-pdftex
 
 jfmclean:
 	rm -f *jlreq*.pl ${VFS} ${TFMS}
 	rm -f jfm-jlreqv.lua
 	rm -f jfm-*jlreq*-pl.lua
 	rm -f jfm-jlreqv-jidori.lua
+	rm -rf pdftex-jfm-check pdftex-fonts-check
 
 docclean:
 	rm -f jlreq.tex jlreq.pdf jlreq.html jlreq-ja.tex jlreq-ja.pdf jlreq-ja.html jlreq-trimmarks.html jlreq-trimmarks-ja.html

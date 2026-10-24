@@ -12,8 +12,9 @@
 %   bottom-right   : x[581.4..588.9] y[738.2..766.5]
 %   in@center-left : x[70.0..77.5]   y[416.9..435.7]
 %   in@center-right: x[563.4..570.9] y[416.9..435.7]
-% The fixture only asserts rc=0 + banner font rendering (log check in
-% tests/run-pdftex-tests.sh greps BANNER-PD-PASS).
+% 独立検証: tests/check-banner-slots.py が本PDFの各バナースロットの
+% bbox・書き込み方向を固定ジオメトリ窓で機械判定する（自己申告
+% typeout は Phase 1 で削除済み）。
 \documentclass[pdflatex,paper=b5]{jlreq}
 \usepackage{graphicx}
 \usepackage[show={trimmarks,banner}]{jlreq-trimmarks}
@@ -26,10 +27,6 @@
     center-left  = { in = { CLIN } },
     center-right = { in = { CRIN } }
   }
-}
-\makeatletter
-\AtBeginDocument{%
-  \typeout{BANNER-PD-PASS: banner slots wired for pdfTeX rotation}%
 }
 \begin{document}
 トンボと回転バナーのテスト。左上に縦読みの日付バナーが出る。

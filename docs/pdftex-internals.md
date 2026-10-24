@@ -53,15 +53,64 @@ jlreq.cls（公開API・版面設計: 共通）
    `\jlreqpdf@pairfields{nat}{str}{shr}{ratio}{spri}{shpri}{knat}{kstr}{kshr}`
    で格納（`{{...}}`二重括弧形式は引数再括弧化で分割不能のため，この形式になった。
    TeXの引数取得は外括弧を剥がし置換時に再括弧化する）。
-   - 定義ペア: nat/str/shr をzw倍して `\hskip`。
-   - 未定義ペア: `\jlreqkanjiskip`/`\jlreqxkanjiskip`（かな連続の伸縮）。
-   - **行末調整近似（M5）**: 直前クラスの end_adjust（.defの `endadj@<n>`）の
-     詰め量をグルーのshrinkに加算。優先順位・「行末限定」の意味論はpdfTeX改行器に
-     表現不可能（G3分析）。
-4. **禁則**: クラス番号テーブルで行頭/行末禁則ペナルティ10000をグルー前後に挿入
-   （jlreq.cls の pre/postbreakpenalty 設定と同一の対象クラス）。
+   - 定義ペア: **9フィールド全評価（P3）**。nat/str/shr は左右zwの
+     two_paverage ブレンド（`b = zw_prev + r*(zw_cur - zw_prev)`，
+     ltj-jfmglue.lua:812-857 と同一式，単一JFMなので両側同一のb）で
+     実寸化。ratio/spri/shpri は評価して spri/shpri を
+     `\jlreqpdf@pairspri/@pairshpri` へ記録（P11 jlreqparagraph の
+     前提データ）。kanjiskip付随成分 knat/kstr/kshr はフラグ付きで
+     現行 `\jlreqkanjiskip` から別glueノードとして発行
+     （`\jlreqpdf@emitkcomp`）。
+   - 未定義ペア: **現行値フォールバック（P3）**——固定 0/.25zw 定数を廃止し，
+     現行 `\jlreqkanjiskip`/`\jlreqxkanjiskip` のグルー指定をそのまま
+     （fil order も保持）。
+   - **行末調整（P3 で近似を置換）**: 直前クラスの end_adjust は
+     行中のshrink畳み込みを行わず，**候補列** `kern(e1) penalty(p)
+     kern(e2-e1) penalty(p) ... kern(-em) penalty(10000)` + ペアグルー
+     として発行（`\jlreqpdf@eawalk`，ltj-adjust.lua insert_lineend_kern
+     と同一構造。0候補は列内に保持，行中は正味0，行末breakだけが選択
+     候補eを行に残す）。境界penaltyは p=post(prev)+pre(next) を
+     全候補へ一括適用（`\jlreqpdf@boundaryp`）。禁則(p>=10000)時も
+     グルーの伸縮成分はkern化で捨てない（kernmode 固定カーン処理は廃止）。
+4. **禁則**: クラス番号テーブルで行頭/行末禁則ペナルティ10000を境界penalty
+   p に合成（jlreq.cls の setpre/postbreakpenalty aux は P3 以降この表へ
+   実書き込みし，`\jlreqsetup` の禁則キーが実効する）。
 5. **和欧文間**: 境界で `\jlreqxkanjiskip`（0.25zw + 0.25zw - 0.125zw）。
    xsp規則（かな側のみ許容等）もクラスフラグで再現。
+   **段落先頭のLA→JA境界（P3）**: lastclass=90 かつ `\lastnodetype=0`
+   （char ノード＝先行欧文走行）のとき先行をクラス27として扱う
+   （判定は CJK@X helper head の `\jlreqpdf@latadj` で実行——
+   デコーダ内の font whatsit により `\pre` 内では lastnodetype が
+   常に -1 になるため。latin-adjacency.tex 7アサーション）。
+6. **局所方向（P5, 2026-10-24）**: 方向状態 `\jlreqpdf@dir`（count, 0=yoko/1=tate）
+   は frame tuple の一要素（`\jlreqpdf@frame@push/@pop` が
+   lastclass/lastnodechar/pend/inhibit/lastzw とともに保存復帰;
+   jlreq-pdftex-rules.sty:199-213）。主文書方向は `\if@tate` から
+   begin document で播種（`jlreqpdf@setmaindir`）。判定:
+   `\jlreqpdftex@ifydir/@iftdir`（バックエンド内部）と
+   `\jlreq@ifydir/@iftdir`（jlreq.cls d 分岐, `\ifnum1=\jlreqpdf@dir\fi`
+   形式——expl3構文下で空白が食われるため被比較数を末尾に置く）。
+   **箱工場** `jlreq-pdftex.sty`:
+   `\jlreqpdf@yokobox{body}` / `\jlreqpdf@tatebox{body}`（同方向なら恒等）
+   および `\jlreqpdf@yokobox@strut{ht}{dp}{body}`（body の ht/dp を指定値に
+   固定してから埋める。縦中横の 1zw 正規化用）。交叉埋め込み
+   `\jlreqpdf@embed@yoko@in@tate`（`\rotatebox{90}` 依存の明示算術:
+   寸法事前退避→回転→`\kern-ht`→`\lower w/2`→`\wd=ht+dp`・`\ht=\dp=w/2`）は
+   pTeX の yoko-in-tate 自動埋め込みと同一契約（uplatex showbox・PDF bbox
+   実測: advance=ht+dp, cross=体幅半分ずつ, baseline=進行起点）。
+   **安全契約**: 未知 box の方向照会 `\jlreqpdf@boxdir` は ClassError
+   （無告知 yoko fallback なし。工場製 box の再利用は「現 frame の方向」が
+   契約——pdfTeX に box 属性は存在しない）。
+   **ページ方向** `\jlreqpdf@pagedir@count` + `\jlreqpdf@pagedir{0|1}`:
+   出荷回転は `\if@tate && pagedir=1` のときのみ掛かる（theindex 等の
+   横組み論理ページは回転なしで出荷）。フラグは P7（出力ルーチン薄層化）
+   のインターフェース。cls theindex d 分岐は
+   `clearpage → pagedir=0 → dir=0 → \hsize=\textheight`（pTeX の \yoko ページ
+   の寸法役割交換, uplatex 実測: 2段幅=(textheight-colsep)/2）を行い、
+   終端で `pagedir=1 → dir=1 → \hsize=\textwidth` を復帰。
+   ゲート: tests/fixtures/pdflatex-tate/{dir-roundtrip,dir-callers,
+   dir-index-yoko,tcy-digits,tcy-fontchange,tcy-star-error}.tex
+   （T8 が TATE-PASS/TATE-FAIL・エラー文言を検査）。
 
 ## jlreq-pdftex-jfm*.def（生成データ）
 
@@ -79,13 +128,15 @@ jlreq.cls（公開API・版面設計: 共通）
 
 ## 既知の制限（詳細は各実装報告書を参照）
 
-- 段落先頭のLA→JA境界にxkanjiskipが入らない——limitation agreed（構造的）。
-  段落状態リセット自体は para/begin フック（jlreq.cls:1090）で `lastclass=90`
-  に正しく行われるが，「直前が欧文」という知識だけが取得不能:
-  pdfTeXでは欧文文字にフックを掛けられないためフラグの立て下ろしが健全に
-  行えず，`\everypar` のマーカーカーン署名は CJK.sty 自身の ±1sp/±2sp
-  マーカー機構と干渉して読めず，字下げボックスやゼログルーの署名は
-  曖昧（F3プローブで検証）。代替の見込みが立たないため制限として合意。
+- ~~段落先頭のLA→JA境界にxkanjiskipが入らない~~ → **解決（2026-10-24、P3）**。
+  判定は `\lastnodetype`——「直前ノードが char（欧文走行）」だけを条件とし，
+  `\jlreqpdf@latadj`（CJK@X ヘルパheadで実行; デコーダ内の font whatsit
+  により `\pre` 内では lastnodetype は常に -1 になる，実測）が
+  lastclass=90 && lastnodetype=0 のとき先行欧文をクラス27に昇格させる。
+  字下げボックス（hlist=1）・明示空白（glue=11）・カーン（12）・直前box・
+  空段落は欧文と誤判定されない（latin-adjacency.tex 7アサーション）。
+  歴史的経緯: かつては「構造的に取得不能」と合意していた制限で，
+  `\everypar` マーカーカーン署名（CJKの±1sp/±2sp機構と干渉）は不採用。
 - ~~IPAexの約物グリフは全幅（JFM半幅は空き規則にのみ反映）~~ → **実装済み**
   （2026-10-23）。JFMクラスメトリクスの `class@<n>{w}{h}{d}{align}` に従い，
   w<1zw の約物はグリフを `\hbox to <w>\jlreq@zw` に align（left/middle/right
@@ -93,22 +144,33 @@ jlreq.cls（公開API・版面設計: 共通）
   （`\jlreqpdf@placeglyph`。箱はグリフ自然の高さ・深さを保持，`\hss` スペーサで
   収縮）。w=1zw は箱なし素出しでノード列も不変。インク幾何は platex 参照と
   一致（punct-width.tex、13アサーション）。
-- ~~ぶら下げ組み: pdfTeXに行末突出し機構がないため不可能~~ → **実装済み**
-  （2026-10-23、H1機構）。「行末突出し機構なし」は誤りと判明: 
-  `\pdfprotrudechars=2` とグリフごとの `\rpcode=1000`（突出し量1em）で実現
-  （jlreq-pdftex-rules.sty:357–378）。-b/-bz 変種選択時のみ有効化し，
-  クラス6/7（句読点）は箱に包まず裸 char で出力後に `\kern -0.5zw` を出す
-  （行中はF2の箱と同じ0.5zw詰め，行末のカーンブレイクではパック時に
-  0化される）。実測: 右マージンカーン −10.0pt，インクが名目行端から
-  0.5zw 外へ出る（hanging-punct.tex、5アサーション）。構造的なノード条件
-  （箱詰め不可・補正カーンとペアグルー間にwhatsitを置かない等）は
-  poc/README-g3b.md に記録。whatsit が介在する配置では突出しが静かに
-  効かなくなる（行は正しく組め、破綻しない）ことも制限として記録。
-- 優先順位付き伸縮: shrinkへの畳み込み近似のみ（pdfTeXの改行器に
-  厳密な意味論は表現不能）。ただし実文コーパス比較でブレークポイント選択への
-  実害は非計測（poc/README-m5-numeric.md）。なお end_adjust 畳み込みは
-  csname直後の `\fi` を引数として食い詰め量が常に 1zw になるバグがあったが，
-  ブレース群駆動の走査に修正済み（2026-10-23）。
+- ~~ぶら下げ組み: pdfTeXに行末突出し機構がないため不可能~~ →
+  **実装履歴（H1機構，2026-10-23）→ P3 で置換（2026-10-24）**。
+  H1 は `\pdfprotrudechars=2` + `\rpcode=1000` で実現していたが，マージン
+  カーンが二重計上され，名目 0.5zw の突出しが実測 9.6pt（約1zw）に
+  なっていた。**P3 の現行機構**: ぶら下げは -b 変種 JFM のクラス6/7
+  end_adjust 負候補 {-0.5, 0, 0.5} として候補列（kern/penalty 列）で
+  表現され，`\pdfprotrudechars`/`\rpcode`/裸字形分岐/負 hangkern は
+  すべて撤去。視覚突出しは F2 の JFM 幅付き字形box（0.5zw box + 全幅
+  グリフ, align=left）の本来のインクはみ出しで，負候補は行詰めの
+  選択肢を与える。実測（IPAex, hsize=95pt）: 行1 、終端のインク xMax が
+  名目行端から +4.63pt（uplatex HaranoAji 参照 +4.43pt と同程度，差は
+  フォントのインク形状による）。通常段落末尾は para/end フックが最終和文字の
+  負最小候補を tail kern として parfillskip の前に挿入する
+  （`\jlreqpdf@para@endhook`，ltj insert_lineend_kern_tail 相当;
+  実測: 最終行ノード列に `kern -5.0` を確認）。microtype との二重調整は
+  生じない: 本バックエンドは `\rpcode` を一切設定せず，欧文 protrusion
+  設定には触れない。歴史的構造メモ（H1時代の箱詰め不可・whatsit介在の
+  突出し不発火条件）は poc/README-g3b.md に記録。
+- 優先順位付き伸縮（通常段落）: 行末調整の shrink畳み込み近似は
+  **P3 で撤去（2026-10-24）**——end_adjust は行中0・行末のみ有効な
+  候補列で表現（前述）。ペアグルーの優先順位（spri/shpri）は評価の上
+  `\jlreqpdf@pairspri/@pairshpri` に記録され，厳密な優先順位付き配分は
+  第11段階の `jlreqparagraph` 環境がこのデータを消費する。通常段落の
+  伸縮は native TeX 改行器の一括伸縮のまま（利用者承認の二層設計）。
+  歴史的バグ記録（保持）: 畳み込み実装は csname直後の `\fi` を引数として
+  食い詰め量が常に 1zw になるバグがあった（2026-10-23 修正，f665eba;
+  現行は畳み込み自体が存在しない）。
 
 ### 解決済み既知問題: グリフ後peekがCJKデコーダ末尾の `\fi` を拾う欠陥（2026-10-23修正）
 
@@ -138,3 +200,49 @@ TeXの制御綴名に数字は使えない。**名前に数字を含む定義は
 （JFMペアデータは csname 形式だったのに手書きテーブルは失念）。
 呼び出し側の `\csname jlreqpdf@kin@pre@\number\jlreqpdf@curclass\endcsname`
 は、定義側と同じ csname 形式でのみ一致する。
+
+## label key 正規化（P9, 2026-10-24 追記）
+
+常時-on CJK 下では日本語ラベル key（UTF8 byte 列）が
+`\csname r@<key>\endcsname` 内で裸展開され、byte マクロ内部の
+`\global`/`\futurelet` が `\csname` 構成を壊す（Missing \endcsname）。
+対称正規化 `\jlreqpdf@labelkey`（jlreq-pdftex.sty）で解決する:
+
+  * **二段階 edef**: 段階1 `\protected@edef`（`\let\protect\@unexpandable@protect`）で通常マクロ・カウンタを kernel の
+    `\label` 書込経路と同一条件で展開し、UTF8 byte は CJK byte マクロの
+    保護分岐（`\else \noexpand<byte> \fi`）で凍結。段階2 で
+    `\detokenize` を結果に適用し catcode 12 の同一 byte 列にする
+    （`\detokenize` は引数を展開しないため段階1を必ず先に行う）。
+  * **接続点（対称性）**: write=`\label`（begindocument フック）、
+    read=aux の `\newlabel`（**begindocument/before** フック — kernel は
+    aux を `begindocument` フックより前に `\@input` するため、
+    `\AtBeginDocument` では間に合わない。これが本実装の唯一の非自明な
+    フック位置）、query=`\ref`/`\pageref`（kernel `\@setref` と同一の
+    二段構成 `\jlreq@pdf@setref` — `\expandafter#2#1\@empty..` 形。
+    一段 `#2\csname..` では selector が cs トークン自体を掴み全fieldが
+    出力される罠あり）。
+  * **パッケージ面**: nameref `\NR@setref`、hyperref `\label@hyperref`/
+    `\HyRef@autoref`、refcount `\refused`/`\rc@set`（`@cref` 接尾辞の
+    csname 融合「`\jlreqpdf@labelkey@out@cref`」に注意 — 接尾辞は
+    マクロ経由で連結する）、cleveref `\@cref` 入口の key list 事前正規化
+    （cleveref 内部の `\edef\@tempa{#2}` がアクティブ byte を暴発させる
+    ため）+ `\cref@getref`/`\cpageref@getref`。`\getrefnumber` は
+    `\romannumeral` + `\detokenize` で完全展開性を維持（kernel の
+    展開型照合も書込側と元々非対称のためマクロ入り key は従来同等）。
+  * **ASCII 不変**: ASCII key は byte 不変（HEAD tree との aux cmp 一致）。
+
+## 漢字綴りディスパッチャ（P9, 2026-10-24 追記）
+
+`\西暦true`/`\西暦false`/`\和暦`/`\　` は「\ + 先頭byte 1文字」の
+**control symbol**（8-bit エンジンは複数byteを綴名に取れない）として
+捕捉する。`\csname\string<byte>\endcsname` で綴名 byte の control symbol
+を定義し（アクティブ byte を `\csname` 内で直接使うと CJK デコーダが
+暴発するため `\string` で catcode 12 化が必須）、本体は残り byte 列を
+1 token ずつ消費照合（`\futurelet`+`\ifx` は chardef とアクティブ文字の
+意味が異なり一致しないため消費先行型 `\ifx` 直接比較）して
+protected ASCII 命令へ置き換える。`\西暦true/false` は共通接頭辞
+（西・暦の残りbyte）消費後に ASCII 単語を読み分ける（引数grabは空白を
+飛ばすため `\futurelet` で先読み; `\futurelet<cs><handler>{arg}` の
+peek は handler 引数の `{` を見るため handler は引数なしにする）。
+候補列は登録ごとに `\unexpanded\expandafter{\the\toks0}` で実体化する
+（共有 toks 参照だと最終登録が全 control symbol を上書きする）。

@@ -4,12 +4,16 @@
 
 | 層 | 内容 | 実装 | 実行方法 |
 |---|---|---|---|
+| T0 プリフライト | 必須資源の存在（欠損=FAIL） | tests/run-pdftex-tests.sh T0 | スイート冒頭（JFM .def×5・.sty×2・trimmarks .def・ipxm/ipxg・cmtt9） |
 | T1 静的 | JFM生成データの同等性 | `check_jfm_pdftex.lua` + `make check-pdftex-jfm` | `texlua check_jfm_pdftex.lua`（rc=0で全項目合格） |
 | T2 マクロ | エンジン検出・寸法・フォント選択 | tests/fixtures/ + 3エンジン回帰 | 下記「回帰テスト」 |
 | T3 文字組版 | ペアグルー・禁則・和欧文間隔 | tests/fixtures/pdflatex-rules/pairs.tex, kinsoku.tex | `pdflatex ... pairs.tex` → ログの PASS/FAIL |
+| T3b parity | 行末追込みの4エンジン一致 | endadjust-lineend.tex + tests/check-endadjust-parity.py | 1行目 xMax を参照と0.1ptで比較 |
 | T4 段落 | 行末調整 | tests/fixtures/pdflatex-rules/endadjust.tex | Overfull件数で判定 |
-| T5 文書 | 混植文書の全体動作 | tests/fixtures/pdflatex-mixed.tex | pdftotext で抽出照合 |
-| T7 回帰 | p/u/l の既存動作 | tests/fixtures/{basic-mixed,math-japanese,tate-vertical}.tex | 下記「回帰テスト」 |
+| T5 文書 | 混植文書の全体動作・バナー幾何 | tests/fixtures/pdflatex-mixed.tex, trimmarks-banner.tex | pdftotext 抽出・tests/check-banner-slots.py |
+| T5b P9ゲート | wareki \today・日本語label（昇格済み）+ パッケージ行列・境界日・綴り | today-wareki.tex, label-japanese.tex, label-packages.tex, date-boundaries.tex, space-dispatcher.tex | lualatex 参照抽出比較 + check-{today-wareki,label-japanese,label-packages,date-boundaries,space-dispatcher}.py |
+| T7 回帰 | p/u/l の既存動作（ベースライン照合） | tests/fixtures/{basic-mixed,math-japanese,tate-vertical}.tex | tests/reference/baselines/ とのバイト比較 |
+| T8 縦組み | tate shipout 回転・縦中横・局所方向 | tests/fixtures/pdflatex-tate-*.tex, pdflatex-tate/{tcy-*,dir-*}.tex | ログ判定 + tests/check-tatechuyoko.py（縦中横は P5 で通常ゲート昇格済み） |
 
 ## 実行方法（リポジトリ直下から）
 
@@ -44,10 +48,13 @@ for f in basic-mixed math-japanese tate-vertical; do
   lualatex -interaction=nonstopmode -halt-on-error \
     -output-directory=/tmp/reg tests/fixtures/$f.tex
 done
-# 比較はDVIはタイムスタップ正規化後バイト同一，lualatexのPDFは
-# 日付/ID正規化後バイト同一:
-LC_ALL=C sed -E 's/[0-9]{4}\.[0-9]{2}\.[0-9]{2}:[0-9]{4}/DATE/' a.dvi > a.n.dvi
-LC_ALL=C sed -E 's/(D:[0-9]{14}[+0-9'\'']*)/(DATE)/g; s|/ID \[[^]]*\]|/ID XXX|g' a.pdf > a.n.pdf
+# 比較はDVIはタイムスタンプ正規化後バイト同一，lualatexのPDFは
+# 日付/ID正規化後バイト同一（スイート内蔵の正規化器:
+# python3 tests/normalize-output.py <dvi|pdf> <file> — sed は DVI/PDF の
+# 非UTF-8バイト列で不正エンコードエラーを起こす環境があるため
+# バイト列処理をPythonで行う）:
+python3 tests/normalize-output.py dvi a.dvi > a.n.dvi
+python3 tests/normalize-output.py pdf a.pdf > a.n.pdf
 ```
 
 ## 基準点（変更前後で同じコマンド・同じ正規化を用いること）
@@ -55,14 +62,82 @@ LC_ALL=C sed -E 's/(D:[0-9]{14}[+0-9'\'']*)/(DATE)/g; s|/ID \[[^]]*\]|/ID XXX|g'
 DVI/PDFは埋込タイムスタンプを持つため，**正規化してからバイト比較**する。
 両側を同一パイプライン（同じdvipdfmx等）で処理すること。
 lualatexは直接PDF出力のため日付/ID正規化のみでよい。
+スイートの T7 セクションはこの比較を**コミット済みベースライン**
+（tests/reference/baselines/、実装前の2026-10-24に固定条件
+`SOURCE_DATE_EPOCH=1735689600` で記録した3フィクスチャ×p/u DVI・
+l PDF の正規化バイト）に対して自動で行う。ベースラインは回帰判定の
+オラクルであり、出力都合で機械的に再記録してはならない。再記録手順
+と承認要件は tests/reference/baselines/README.md に記載している。
 
 ## 判定基準（PLAN.md §6.3）
 
+- T0: 必須資源（JFM .def 5種・バックエンド .sty・trimmarks .def・
+  ipxm/ipxg フォント・cmtt9）が全て存在すること。欠損は **SKIPではなく
+  FAIL**（欠損ファイル名を明示）。
 - T1: `ALL CHECKS PASSED`（差分0・全ペア照合）
 - T3: pairs.tex 7/7 PASS，禁則は `tests/check-kinsoku.py`（実PDF bbox機械
-  検証，閉じ約物の行頭0件）で確認 — スイート内 `kinsoku-bbox-line-head-scan`
+  検証，閉じ約物の行頭0件）で確認 — スイート内 `kinsoku-bbox-line-head-scan`。
+  行末追込みは `endadjust-lineend.tex` を4エンジンでコンパイルし
+  `tests/check-endadjust-parity.py` が pdflatex の1行目 xMax を参照最大値と
+  0.1pt以内で検査（f665eba 修正後の parity を固定検査する通常ゲート。
+  経緯は tests/reference/kinsoku-lines.md 訂正節参照）。
 - T4: 対象フィクスチャでOverfull 0件
-- T7: 3フィクスチャ×3エンジン，正規化後バイト同一
+- T5: trimmarks-banner は `tests/check-banner-slots.py`（pymupdf）が
+  6スロットの実bbox・書き込み方向を固定ジオメトリ窓で機械検証
+  （旧 BANNER-PD-PASS typeout grep は2026-10-24廃止）。
+- T7: 3フィクスチャ×3エンジン，正規化後バイト同一（ベースライン照合），
+  バックエンド非読込。
+- T8: tate JFM .def 欠損は FAIL（旧SKIP成功 path は廃止）。
+
+## 既知不良ゲート（XFAIL/XPASS）と昇格
+
+実装修正キャンペーン中、現時点で出力不良が既知の検査はランナー先頭の
+`KNOWN_DEFECTS`（単一の真実源）に列挙する:
+
+- **失敗 → XFAIL**: `XFAIL: <name>` と出力し、全体 rc には影響しない。
+  **スイートは「XFAIL 残りのみの green」を常態とする。** XFAIL は
+  「実装済み」を意味しない。各 XFAIL は対応フェーズの実装が着地した時点で
+  解消する。
+- **成功 → XPASS**: 実装が不良を解消した兆候。`XPASS: <name>` と昇格手順
+  （KNOWN_DEFECTS から削除し通常セクションへ移動、docs を更新）を出力し、
+  **全体 rc は非0**。昇格が完了するまでスイートは green にならない。
+- `KNOWN_DEFECT_EXPECT=<name>` 環境変数で特定ゲートの期待値を反転できる
+  （「そのゲートは今は成功するはず」として検証する昇格前確認・
+  メカニズムの動作確認用）。
+
+現在の既知不良（2026-10-24 時点）: **なし**（KNOWN_DEFECTS 空）。
+
+**昇格記録（P9, 2026-10-24）**: `today-wareki` と `label-japanese` を
+KNOWN_DEFECTS から削除し通常ゲートへ移した。
+`today-wareki`: d-engine 分岐の `\today` が `\ifjlreq@seireki` を反映
+（wareki→`\jlreq@wareki` の元号表、tate→`\jlreq@pdf@kansuji`、
+yoko→`\number`）。lualatex 参照との抽出比較が一致。
+`label-japanese`: label key の対称正規化
+（`\jlreqpdf@labelkey`: `\protected@edef` でマクロ展開+UTF8 byte凍結 →
+`\detokenize` で catcode 12 化）を write（`\label`）・read（aux の
+`\newlabel`、begindocument/before フック）・query（`\ref`/`\pageref`）と
+パッケージ面（nameref `\NR@setref`、hyperref `\label@hyperref`/
+`\HyRef@autoref`、refcount `\refused`/`\rc@set`/`\getrefnumber`、
+cleveref `\@cref` 入口 + `\cref@getref`/`\cpageref@getref`）に接続。
+ASCII ラベルの aux は byte 不変（HEAD との cmp 一致を確認済み）。
+P9 の追加ゲート: `label-packages-3pass`（3パス収束）・
+`label-packages-matrix`（ref/pageref*/eqref/autoref/nameref/cref/
+hyperref/refcount の全面解決 + getrefnumber の edef 内展開）・
+`date-boundaries`（和暦5境界日+元年+`\西暦true`/`\和暦` 切替）・
+`space-dispatcher`（`\　` 命令/literal U+3000/`\jaspace` の共存）も
+T5 の通常検査として登録。
+
+**昇格記録（P5, 2026-10-24）**: `tatechuyoko-basic` は KNOWN_DEFECTS から
+削除し通常ゲートへ移した（局所方向エンジン + 箱工場で `\jlreq@iftdir` が
+live 化し、縦中横が正規化組版される。P5 の追加ゲート:
+`dir-roundtrip`・`dir-callers`・`dir-index-yoko`・`tcy-digits`・
+`tcy-fontchange`・`tcy-star-error` も T8 の通常検査として登録）。
+
+`tests/fixtures/pdflatex-rules/endadjust-lineend.tex` はこのリストには
+**入っていない**: 記録されていた行末追込み不良（kinsoku-lines.md の
+pdflatex 143.2pt）は f665eba の `\jlreqpdf@addendadj` 修正で解消済みで、
+2026-10-24 の再実測では4エンジン parity が成立するため、通常の回帰
+ゲートとして 0.1pt 許容で固定検査している。
 
 ## 一括テスト実行
 
@@ -70,10 +145,16 @@ lualatexは直接PDF出力のため日付/ID正規化のみでよい。
 sh tests/run-pdftex-tests.sh
 ```
 
-T1（JFMデータ検証），T3/T4（組版規則の実測+ログ内判定），T5（文書・共存
-フィクスチャ），T7（3エンジン回帰+バックエンド分離），T2（tate明示エラー）
-を順に実行し，全体の PASS/FAIL を出力する。失敗時は詳細が
-`/tmp/jlreq-tests/<name>.out` にある。
+実行ごとに `mktemp -d` で隔離された作業ディレクトリ（先頭行にパス表示）
+を作り、各セクション・フィクスチャ・エンジン・パスに個別サブディレクトリ
+を割り当てる（T0/T1/T3/T3b/T5/T5b/T7/T8/T8b の順）。全コンパイルは
+`-output-directory=<そのdir>` で実行し、ログ・PDF は全てそこに残る。
+失敗行は必ず該当ログのパスを示す。最終サマリは FAILED/XFAIL/XPASS 件数
+と XFAIL/XPASS 名の一覧を出力する: XFAIL のみ残っている場合は rc=0
+（green-with-xfails）、FAIL または XPASS がある場合は rc≠0。
+
+作業ディレクトリは実行ごとに新規作成のため蓄積に注意
+（`/tmp/jlreq-tests.*` を適宜削除）。
 
 ## 性能測定（T8）
 
@@ -138,7 +219,7 @@ PLAN.md §11 の各項目に対する機械的確認結果:
 | 自動検出+明示指定 | `\documentclass{jlreq}` / `[pdflatex]` 両方 rc=0 | PASS |
 | JFM単一ソース+差分ゼロ | `make check-pdftex-jfm` | PASS（全4変種） |
 | 禁則・字間の重大な規則違反 | `tests/check-kinsoku.py`（実PDF bbox走査）+ pairs.tex 7計測 | 0件 |
-| p/u/l 非意図的回帰 | DVI（タイムスタンプ正規化）とPDF（日付/ID正規化）のバイト比較＋`\jidori`/`\akigumi` 4エンジン回帰ガード（suite内 reg-jidori-*） | 全同一 |
+| p/u/l 非意図的回帰 | DVI（タイムスタンプ正規化）とPDF（日付/ID正規化）の、コミット済みベースライン（tests/reference/baselines/、2026-10-24実装前に固定条件で記録）とのバイト比較＋`\jidori`/`\akigumi` 4エンジン回帰ガード（suite内 reg-* baseline / reg-jidori-*） | 全同一 |
 | 文字抽出 | 全21 PDF（20フィクスチャ+エラーケース1） `pdftotext` → 置換文字(U+FFFD) 0件 | PASS |
 | 文字化け | 同上 | 0件 |
 | フォント埋め込み | 全21 PDF `pdffonts` → 未埋込 0件（IPAex Type1, LM, CM すべて subset埋込） | PASS |

@@ -1,0 +1,19 @@
+% today-wareki.tex -- P9: \today の和暦出力（昇格済みの通常ゲート）。
+% 契約: \jlreqsetup{year_style=wareki} を指定した場合、\today は
+% 令和N年M月D日 の形（uplatex/platex/lualatex + jlreq と同一契約）を
+% 出力する。現在 pdfTeX バックエンドは jlreq.cls の d-engine分岐で
+% \jlreq@seirekitrue を強制し wareki 設定を無視するため、常に
+% 西暦数字 (例: 2026年10月24日) を出力する。
+% ランナーは本fixtureを pdflatex と lualatex でコンパイルし
+% （両者に固定日時 SOURCE_DATE_EPOCH=1735689600 を与える）、
+% pdftotext 抽出で pdflatex の日付行が lualatex の日付行（令和N年…）
+% と一致することを要求する。今日は不一致 → XFAIL: today-wareki。
+\documentclass{jlreq}
+\jlreqsetup{year_style=wareki}
+\pagestyle{empty}
+% 日付の数字はエンジン間で揃えるため \year/\month/\day を明示固定する
+% （pdfTeX は SOURCE_DATE_EPOCH を \year 等へ反映しない）。
+\year=2019\relax\month=5\relax\day=1\relax
+\begin{document}
+本日の日付: \today
+\end{document}

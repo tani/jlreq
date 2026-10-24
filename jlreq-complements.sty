@@ -49,8 +49,19 @@
   }
 }{
   \str_if_eq:VnTF \g__jlreq_complements_engine_str { pdflatex } {
-    % pdfTeXは横組のみ（jlreq M7ゲート）．\iftdir相当は常に偽．
-    \prg_new_conditional:Nnn \__jlreq_complements_iftdir: { T, F, TF} { \prg_return_false: }
+    % P5: 局所方向（live）。jlreq-pdftex バックエンドの frame 方向
+    % \jlreqpdf@dir（0=yoko/1=tate、group-local・frame tuple で保存復帰）
+    % を読む。クラス経由でロードされた場合は主文書方向が begin document
+    % で播種済み。バックエンド不在（complements 単独ロード）の場合は
+    % \if@tate 相当の情報もないため従来どおり常に偽。
+    \cs_if_exist:cTF { jlreqpdf@dir } {
+      \prg_new_conditional:Nnn \__jlreq_complements_iftdir: { T, F, TF} {
+        \int_compare:nTF { \csname jlreqpdf@dir\endcsname = 1 }
+          { \prg_return_true: } { \prg_return_false: }
+      }
+    }{
+      \prg_new_conditional:Nnn \__jlreq_complements_iftdir: { T, F, TF} { \prg_return_false: }
+    }
   }{
     \prg_new_conditional:Nnn \__jlreq_complements_iftdir: { T, F, TF} { \iftdir \prg_return_true: \else \prg_return_false: \fi }
   }
@@ -188,7 +199,26 @@
   \prop_item:Nn \g__jlreq_complements_theindex_prop { precode }
   \bool_set_false:N \l__jlreq_complements_resttate_bool
   \bool_if:NT \g__jlreq_complements_theindex_yoko_bool {
-    \__jlreq_complements_iftdir:T { \clearpage \yoko \bool_set_true:N \l__jlreq_complements_resttate_bool }
+    \__jlreq_complements_iftdir:T {
+      \clearpage
+      \cs_if_exist:cTF { jlreqpdf@pagedir } {
+        % P5: pdfTeX バックエンド。ページ方向フラグと版面寸法の役割交換
+        % で本当の横組みページを組む（jlreq.cls の theindex d 分岐と
+        % 同一契約; pTeX の \yoko 相当。uplatex 実測: 行長=\textheight）。
+        % NOTE: expl3 では @ は catcode 12 のため制御綴名に含められ
+        % ない。\cs_if_exist:c / \use:c で csname 経由で参照する。
+        \use:c { jlreqpdf@pagedir } {0}%
+        % 局所 frame 方向も横組みへ（pTeX \yoko 相当; cls theindex と
+        % 同じく環境全体で切替え、終端で戻す）
+        \global\jlreqpdf@dir=0
+        \hsize=\textheight
+        \linewidth\hsize
+        \columnwidth\hsize
+      }{
+        \yoko
+      }
+      \bool_set_true:N \l__jlreq_complements_resttate_bool
+    }
   }
   \bool_set:Nn \l__jlreq_complements_theindex_maincolumn_bool { \legacy_if_p:n { @twocolumn } }
   \bool_if:NTF \g__jlreq_complements_theindex_twocolumn_bool {
@@ -216,7 +246,19 @@
     \bool_if:NT \l__jlreq_complements_theindex_maincolumn_bool { \twocolumn }
   }
   \clearpage
-  \bool_if:NT \l__jlreq_complements_resttate_bool { \tate }
+  \bool_if:NT \l__jlreq_complements_resttate_bool {
+    \cs_if_exist:cTF { jlreqpdf@pagedir@restore } {
+      % P5: pdfTeX: フラグ・局所方向・寸法を縦組みへ戻す（csname 経由;
+      % 上記NOTE参照）
+      \use:c { jlreqpdf@pagedir@restore }%
+      \global\jlreqpdf@dir=1
+      \hsize=\textwidth
+      \linewidth\textwidth
+      \columnwidth\textwidth
+    }{
+      \tate
+    }
+  }
   \prop_item:Nn \g__jlreq_complements_theindex_prop { postcode }
   \prop_item:Nn \g__jlreq_complements_theindex_prop { postsystemcode }
 }

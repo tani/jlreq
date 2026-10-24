@@ -41,3 +41,40 @@ pdflatex --version | head -1        # pdfTeX
 kpsewhich bxcjkjatype.sty           # 依存の所在確認
 kpsewhich ipxm-r-u30.pfb            # フォント資産確認
 ```
+
+## フォント（P4: 縦字形・フォントプロファイル）
+
+縦組みの実際の縦字形（vert/vrt2 GSUB）は補助縦フォントとして配布する
+（PLAN §10.1 P4）。実行時とビルド時の依存は分離：
+
+### 実行時（文書コンパイル; python/fontTools/ttf2tfm 不要）
+- `fonts/pdftex/jlreq-pdftex-fonts-ipaex.def` / `-ipa.def`
+  （フォントプロファイル。インストール先は `tex/latex/jlreq`）
+- `fonts/pdftex/jlreqv-<fontset>-<mc|gt>-<NN>.ttf` / `.tfm` / `.enc`
+  （補助縦フォント。インストール先は
+  `fonts/truetype/jlreq-pdftex`, `fonts/tfm/jlreq-pdftex`,
+  `fonts/enc/jlreq-pdftex`）
+- クラスオプション `pdftex_fontset=ipa|custom` 利用時の横書きTTF経路:
+  **zhmetrics** の動的TFM（`unisong@Unicode@` 等）と **`Unicode.sfd`**
+  （`kpsewhich Unicode.sfd`）。欠損時は当該リソース名を添えて停止する。
+
+### ビルド時（`make pdftex-fonts` / custom 生成; 通常の文書では実行しない）
+- **python3 + fontTools**（cmap/GSUB vert・vrt2/hmtx/vmtx/VORG/輪郭bbox読取）
+- **ttf2tfm**（TL2025検証済みの起動形式:
+  `ttf2tfm <ttf> -N -u -p <enc> <outbase>`。この版のパーサは
+  オプションを位置引数の後ろに置かないと「Need at most two non-option
+  arguments」で失敗する——生成器のヘッダに実測値を文書化済み）
+- ソースTTF: ipaex の `ipaexm.ttf`/`ipaexg.ttf`（既定）、
+  ipa の `ipam.ttf`/`ipag.ttf`、custom は `--mincho/--gothic` のTTF
+
+### 依存確認コマンド（P4）
+
+```sh
+kpsewhich ipaexm.ttf                    # ipaex-type1 の縦字形ソース
+kpsewhich ipam.ttf                      # ipa プリセットTTF
+kpsewhich Unicode.sfd                   # zhmetrics SFD（ipa プリセット横書き）
+kpsewhich unisong30.tfm                 # zhmetrics 動的TFM確認
+ls fonts/pdftex/jlreq-pdftex-fonts-ipaex.def   # プロファイル（repo）
+ttf2tfm --version                       # 補助TFM生成器（ビルド時のみ）
+python3 -c "import fontTools"           # ビルド時のみ
+```

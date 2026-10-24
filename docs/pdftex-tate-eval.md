@@ -18,8 +18,10 @@
 | 脚注/後注/傍注/`\marginpar` | **implemented** | 検証の結果、**T1 コアのまま uplatex ground truth と一致**（変更不要: notes-fixture で bbox を明示照合） |
 | float (figure/table/caption) | **implemented** | これも検証により ground truth 一致を確認（傾けず回転のまま=正規動作） |
 | 数式隣接 | **implemented** | uplatex 実物挙動=式全体を自動的に90°倒す「寝かせ」を発見・そのまま採用。行内数式は δ=0.343zw の補正のみ（10pt実測）、別行数式は従来構造のまま |
+| 縦中横 (`\tatechuyoko`) | **implemented (P5)** | 局所方向エンジン（下記）+ バックエンド箱工場で正規化埋込み。uplatex 同一ソース showbox・PDF bbox 実測契約: advance=1zw・cross=体幅半分ずつ・digit baseline=進行起点・1〜4桁で1zw固定、star 形は tate では同一構造・yoko では透過、yoko での非star形は ClassError。ゲート: `tcy-basic`（PDF 幾何; XFAIL から昇格）+ `tcy-digits`/`tcy-fontchange`/`tcy-star-error` |
+| 局所方向 (`\jlreq@iftdir`/`\jlreq@ifydir`/方向切替呼出し) | **implemented (P5)** | frame-tuple 方向フィールド `\jlreqpdf@dir`（0=yoko/1=tate、group-local・保存復帰）+ 箱工場 `\jlreqpdf@yokobox`/`\jlreqpdf@tatebox`。主方向は `\if@tate` から播種。移行済み caller: 脚注合印（`\rlap`+工場）、maketitle 著者表組み（`\ialign` shim は d で skip: 内枠は既に正しい向き）、theindex（ページ方向フラグ `\jlreqpdf@pagedir` + `\hsize=\textheight` 役割交換 + 局所方向切替で本当の横組みページ、終端で tate 復帰）、complements iftdir/theindex_yoko。uplatex `theindex_yoko=true` 実測と幾何一致（見出し x=125.58 一致・2段幅 147.4pt・復帰列位置一致）。ゲート: `dir-roundtrip`/`dir-callers`/`dir-index-yoko` |
 
-残（WARN 継続): jlreq-trimmarks banner in tate、`\tatechuyoko`（明示 ClassError）、ルビ、jlreqsetup の tate 連動キー。
+残（WARN 継続): jlreq-trimmarks banner in tate（P8）、ルビ（P10）、jlreqsetup の tate 連動キー。`\tatechuyoko` は P5 で解消済み（上表）。
 
 ## 1. bxcjkvert の調達(初回報告の誤りを訂正)
 
