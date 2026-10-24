@@ -3,7 +3,19 @@
 - **対象リポジトリ**： [abenori/jlreq](https://github.com/abenori/jlreq)（基準コミット `ac06fd0`、2025-07-17 版 + M1 エンジン検出パッチ適用後の作業ツリー）
 - **作成日**： 2026-10-23
 - **位置づけ**： `PLAN.md` §2.2 が定義する監査成果物のひとつ。公開機能・オプションごとの pdfTeX 対応状況を `implemented / pending / blocked` で追跡する（PLAN.md §6.3「文書API互換表：全項目を `pass / limitation agreed / blocked` で追跡」）。
-- **現時点の状態（2026-10-23、M1–M6・M8 実装完了、横組みスコープ全完了）**： pdfTeX で `\documentclass{jlreq}` は横組文書として動作する（実験的サポート）。バックエンド `jlreq-pdftex.sty`（フォント・単位・メトリック・`\kansuji`）＋ `jlreq-pdftex-rules.sty`（JFMペアグルー・禁則・和欧文間隔・end_adjust近似・約物JFM幅・ぶら下げ突出し）＋ 生成済みJFMデータ4変種（`jlreq-pdftex-jfm*.def`）。Q/H単位（全長さ系オプション＋`\jlreqsetup`）、`\sidenote`両型、数式内和文（`\mathmc`/`\mathgt`）、`\kansuji`、jlreq-trimmarks（トンボ＋回転バナー）、`reference_mark=interlinear`、`\mag` 可変運用まで実装・検証済み。縦組み（`tate`）は明示エラー（G4判定: structurally blocked——判定記録は `docs/pdftex-tate-eval.md`）。既知の制限・残作業は本文のマトリクスと `docs/pdftex-audit.md` を参照。
+- **現時点の状態（2026-10-24、P1–P12 実装完了・横組/縦組とも検証済み）**： pdfTeX で
+  `\documentclass{jlreq}` は横組・縦組（`tate`）いずれの文書としても動作する。バックエンドは
+  `jlreq-pdftex.sty`（フォント/単位/メトリック/数式キャプチャ/`\kansuji`/出力ラッパ）＋
+  `jlreq-pdftex-rules.sty`（JFMペアグルー・禁則・行末候補列・状態機構・縦グリフ）＋
+  `jlreq-pdftex-ruby.sty`（ruby.sty provider 適合）＋ `jlreq-pdftex-paragraph.sty`
+  （`jlreqparagraph` 厳密段落環境）＋ 生成済みJFMデータ **12変種**（`jlreq-pdftex-jfm*.def`
+  + manifest: 横/縦 × ぶら下げ/開き括弧位置の全組合せ）＋ フォントプロファイル
+  （`jlreq-pdftex-fonts-{ipaex,ipa}.def` + 補助縦TTF/TFM/enc）。行末調整は4エンジン
+  0.000pt parity、縦組みは縦中横・局所方向・全家具・trimmarks縦バナー・ルビまで
+  uplatex/lualatex ground truth と数値対照済み。日本語label・和暦`\today`・`\　`綴りも
+  実装（P9）。検証は `sh tests/run-pdftex-tests.sh`（150+ ゲート、0 skip・0 XFAIL）が
+  管理。歴史的実験（bxcjkvert 経由の縦組み判定など）は `docs/pdftex-tate-eval.md` の
+  履歴節として区別して残す。
 
 ## 1. ステータス定義
 
@@ -57,7 +69,7 @@
 | `narrow_kanjiskip` | jlreq.cls:350 | jsarticle 互換の詰め字間 | **implemented** | M4 | 実測: `\jlreqkanjiskip` = `0pt plus .1zw minus .01zw` に変化。未定義ペアのフォールバックグルーとして実行時に適用 |
 | `use_reverse_pagination` | jlreq.cls:362 | 逆ノンブル | **implemented** | M6 | 実測 rc=0（auxラベル機構はエンジン非依存） |
 | `disablejfam` | jlreq.cls:402 | 数式内和文の無効化 | **implemented** | M6/P6 | jfam 相当は enablejfam（既定）で実装済み: `\mathmc`/`\mathgt` は `\mathchoice` ボックス経由で和文を供給。P6 で4分岐の組版回数を 4→3 に削減（display/text 同一サイズ分岐は box+copy 共有）し、縦組みでは方向一致部品の counter-shift（δ×1000/700/500÷1000）を適用（uplatex GT10 実測と一致: 部品静止位置 = plain−δ_yoko）。数式中の直接和文入力・行列セル内和文も動作（math-jfm.tex、math-matrix.tex）。disablejfam 指定時は `\mathmc`/`\mathgt` 未定義のまま（(u)pTeX と同一パリティ、math-jfm-disablejfam.tex） |
-| `tate` | jlreq.cls:376 | 縦組み | **implemented**（実験的、T1–T4） | M7 | shipout rotation 構成で実現（内枠横組 galley＋和文グリフ+90°回転＋`\@outputpage` で −90°回転、bxcjkvert/bxcjkjatype 不使用）。縦データ `jlreq-pdftex-jfm-tate.def` は jfm-jlreqv-pl.lua から自動生成、縦字形はフォントプロファイル（`jlreq-pdftex-fonts-*.def`＋補助縦TTF/TFM/enc, P4）で供給: vert/vrt2 置換グリフは直立のまま補助縦フォントから出力し、それ以外は回転、進行幅はJFMクラス幅×現在zw（旧 `off@` 固定pt表は廃止）。実測: 上→下・右→左・禁則ゼロ違反、見出し・目次・ページ家具（柱・ノンブル、`\hb@xt@ \textheight` 他出力段の横幅補正込み）は uplatex と bbox/cm 行列で一致（fixtures/pdflatex-tate-{basic,pairs,boxdump,furniture,notes,float,math}.tex、T8）。脚注・後注・傍注・`\marginpar`・基本 float・行内/別行数式は T1 コアのまま uplatex 参照と一致（数式は uplatex の実物挙動=式全体を90°倒す「寝かせ」に正確に合わせ、δ=plcore adjustbaseline 同一式の δ による位置補正で左右縁ビット一致、P6 で改修）。**対象外（ClassWarning で列挙）**: jlreq-trimmarks banner in tate、`\tatechuyoko`（従来どおり明示 ClassError）、ルビ、jlreqsetup の tate 連動キー。bxcjkvert 自体は提供範囲外確認済み（docs/pdftex-tate-eval.md 2026-10-23 再調査版） |
+| `tate` | jlreq.cls:376 | 縦組み | **implemented**（P5–P8・P10 で全面検証済み） | M7+P5-P10 | shipout rotation 構成で実現（内枠横組 galley＋和文グリフ+90°回転＋**P7 の薄い出力ラッパ** — kernel `\@outputpage` 本体丸写しは撤去、begindocument 保存の元実装を回転＋`textwidth↔textheight` の一点だけの寸法差し替えで呼ぶ; build/page フックと hook 付き shipout は素通りを機械検証）。縦データ `jlreq-pdftex-jfm-tate*.def` 6変種は **jfm-jlreqv.lua**（オプションフック付き・負優先度stretch保持）から自動生成（旧 `jfm-jlreqv-pl.lua` のPL落ち込みは解消）、縦字形はフォントプロファイル（`jlreq-pdftex-fonts-*.def`＋補助縦TTF/TFM/enc, P4）で供給: vert/vrt2 置換グリフは直立のまま補助縦フォントから出力し、それ以外は回転、進行幅はJFMクラス幅×現在zw（旧 `off@` 固定pt表は廃止）。実測: 上→下・右→左・禁則ゼロ違反、見出し・目次・ページ家具（柱・ノンブル）は uplatex と bbox/cm 行列で一致。**縦中横**（`\tatechuyoko`: 1zw進行・uplatex showbox/PDF一致、star透過・yoko非starはClassError、P5）、**局所方向**（`ifydir/iftdir` 実方向・箱工場・theindex横組ページ復帰、P5）、**縦バナー**（全スロット族 uplatex GT と 0.01pt 一致、P8）、**ルビ**（ruby.sty provider 適合・読み枠右、P10）、**割注・保存位置**（savepos 論理行方向ビット一致・mag≠1000 同一値、P7）、**`\today`縦組み漢数字**（P9）まで検証済み。数式は δ=plcore adjustbaseline 同一式（P6）。**対象外は空**（旧 ClassWarning の対象外列挙は P5/P7/P8/P10 で全件解消、警告は ClassInfo に縮小）。bxcjkvert 自体は提供範囲外確認済み（docs/pdftex-tate-eval.md 履歴節） |
 | `landscape` | jlreq.cls:372 | 横置き | **implemented** | M2 | `landscape,a4paper` 実測: 841.89×595.28pt（縦横交換） |
 | `tombo` / `tombow` / `mentuke` | jlreq.cls:373–375 | トンボ（jlreq-trimmarks.sty へ案内） | **implemented** | M6 | jlreq-trimmarks は pdfTeX でトンボ描画・TrimBox/BleedBox・回転バナー（`\rotatebox{-90}` 代替）に対応（trimmarks.tex、trimmarks-banner.tex）。クラスオプション経由の案内は従来どおり警告で trimmarks.sty へ |
 | `oneside` / `twoside` / `onecolumn` / `twocolumn` / `titlepage` / `notitlepage` | jlreq.cls:382–387 | ページ構成 | **implemented** | M6 | `twoside`+`titlepage`（book）実測 rc=0、`twocolumn` 実測（microtype-twocolumn）、`notitlepage`+`onecolumn`+`oneside`（report）実測 rc=0 |

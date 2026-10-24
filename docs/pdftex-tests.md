@@ -4,7 +4,7 @@
 
 | 層 | 内容 | 実装 | 実行方法 |
 |---|---|---|---|
-| T0 プリフライト | 必須資源の存在（欠損=FAIL） | tests/run-pdftex-tests.sh T0 | スイート冒頭（JFM .def×5・.sty×2・trimmarks .def・ipxm/ipxg・cmtt9） |
+| T0 プリフライト | 必須資源の存在（欠損=FAIL） | tests/run-pdftex-tests.sh T0 | スイート冒頭（JFM .def×12+manifest・backend .sty×4・trimmarks .def・aux縦font資源・ipxm/ipxg・cmtt9） |
 | T1 静的 | JFM生成データの同等性 | `check_jfm_pdftex.lua` + `make check-pdftex-jfm` | `texlua check_jfm_pdftex.lua`（rc=0で全項目合格） |
 | T2 マクロ | エンジン検出・寸法・フォント選択 | tests/fixtures/ + 3エンジン回帰 | 下記「回帰テスト」 |
 | T3 文字組版 | ペアグルー・禁則・和欧文間隔 | tests/fixtures/pdflatex-rules/pairs.tex, kinsoku.tex | `pdflatex ... pairs.tex` → ログの PASS/FAIL |
@@ -73,7 +73,7 @@ l PDF の正規化バイト）に対して自動で行う。ベースライン�
 
 ## 判定基準（PLAN.md §6.3）
 
-- T0: 必須資源（JFM .def 5種・バックエンド .sty・trimmarks .def・
+- T0: 必須資源（JFM .def 12種+manifest・バックエンド .sty×4・aux縦font・trimmarks .def・
   ipxm/ipxg フォント・cmtt9）が全て存在すること。欠損は **SKIPではなく
   FAIL**（欠損ファイル名を明示）。
 - T1: `ALL CHECKS PASSED`（差分0・全ペア照合）
@@ -279,7 +279,7 @@ PLAN.md §11 の各項目に対する機械的確認結果:
 | DoD項目 | 確認方法 | 結果 |
 |---|---|---|
 | 自動検出+明示指定 | `\documentclass{jlreq}` / `[pdflatex]` 両方 rc=0 | PASS |
-| JFM単一ソース+差分ゼロ | `make check-pdftex-jfm` | PASS（全4変種） |
+| JFM単一ソース+差分ゼロ | `make check-pdftex-jfm` | PASS（全12変種） |
 | 禁則・字間の重大な規則違反 | `tests/check-kinsoku.py`（実PDF bbox走査）+ pairs.tex 7計測 | 0件 |
 | p/u/l 非意図的回帰 | DVI（タイムスタンプ正規化）とPDF（日付/ID正規化）の、コミット済みベースライン（tests/reference/baselines/、2026-10-24実装前に固定条件で記録）とのバイト比較＋`\jidori`/`\akigumi` 4エンジン回帰ガード（suite内 reg-* baseline / reg-jidori-*） | 全同一 |
 | 文字抽出 | 全21 PDF（20フィクスチャ+エラーケース1） `pdftotext` → 置換文字(U+FFFD) 0件 | PASS |

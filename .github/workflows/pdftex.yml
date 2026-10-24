@@ -59,7 +59,9 @@ jobs:
       - name: Python test dependencies (FontTools + PyMuPDF + poppler tools)
         run: |
           sudo apt-get update
-          sudo apt-get install -y python3-pip python3-pipx poppler-utils
+          # pandoc: make tds が README の PDF/HTML 生成に使う（scheme-full
+          # には含まれないシステムツール）。
+          sudo apt-get install -y python3-pip python3-pipx poppler-utils pandoc
           pip install --break-system-packages fonttools pymupdf
 
       - name: Required resource probe (missing = FAIL, never SKIP)
