@@ -945,6 +945,11 @@
     % interior state (see \jlreqpdf@boxbdd).
     \jlreqpdf@boxbdd
     \jlreqpdf@setclassof{#1}%
+    % P10 (ruby adapter): while a ruby base pass is armed, record the
+    % FIRST observed glyph's class/zw for the ruby's left boundary
+    % (no-op unless \jlreqpdf@ruby@rec is armed; defined in
+    % jlreq-pdftex-ruby.sty -- never re-run the base for this)
+    \jlreqpdf@ruby@recordfirst
     \ifnum\jlreqpdf@inhibit=1
       \global\jlreqpdf@inhibit=0
     \else

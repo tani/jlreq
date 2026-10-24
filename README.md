@@ -73,7 +73,7 @@ Specifies the Japanese font size, similar to `\fontsize`. If `jafontscale=0.9` i
 A macro consisting of a single full-width space (U+3000). It inserts a Japanese character space. In LuaLaTeX, you can also input a Japanese character space with `　` alone.
 
 ### Others
-* Ruby and encircled points are not provided. It is recommended to use [PXrubrica](https://github.com/zr-tex8r/PXrubrica) or `luatexja-ruby` (for LuaLaTeX, included in the LuaTeX-ja package).
+* Ruby and encircled points are not provided by the class itself. It is recommended to use [PXrubrica](https://github.com/zr-tex8r/PXrubrica) or `luatexja-ruby` (for LuaLaTeX, included in the LuaTeX-ja package). Under pdfLaTeX, use the CJK package's `ruby` (`\usepackage{ruby}`, options `overlap`/`nooverlap`/`CJK`/`latin`, parameters `\rubysize`/`\rubysep`): the experimental pdfTeX backend ships a provider adapter (`jlreq-pdftex-ruby.sty`, loaded automatically) that connects the provider's `\ruby{base}{ruby}` to the backend's boundary/state machinery — annotation above the base in horizontal typesetting and on the reading-frame right in vertical typesetting, boundary glue equal to the plain-text class table, provider overlap logic preserved (see `docs/pdftex-compatibility.md`).
 
 * When using pLaTeX / upLaTeX, macros `\zw` and `\zh` that expand to `zw` and `zh`, respectively, are defined. In LuaLaTeX, macros of the same name are defined within LuaTeX-ja.
 

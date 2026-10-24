@@ -546,9 +546,11 @@
       P7:~output~routine~is~a~thin~wrapper~over~the~kernel~original;~asymmetric\MessageBreak
       gutter/fore_edge/head_space/foot_space~+~twoside~+~twocolumn~+~deferred\MessageBreak
       footnotes~+~\string\marginpar~match~uplatex~bit-for-bit,~savepos~line-extents\MessageBreak
-      (warichu)~match~bit-for-bit,~tate~TOC~ships~both~passes.\MessageBreak
-      Still~out-of-scope~(expected~to~render~wrongly~or~error):\MessageBreak
-      ruby.\MessageBreak
+      (warichu)~match~bit-for-bit,~tate~TOC~ships~both~passes,\MessageBreak
+      P10:~ruby~via~the~ruby.sty~provider~and~the~jlreq-pdftex-ruby~adapter\MessageBreak
+      (annotation~above~in~yoko,~reading-frame~right~in~tate;~consecutive/\MessageBreak
+      overlap/nooverlap,~boundary~glue~=~the~class~table,~lualatex+ruby.sty\MessageBreak
+      placement~parity;~see~tests/fixtures/pdflatex-rules/ruby-*.tex).\MessageBreak
       See~docs/pdftex-tate-eval.md~and~the~pdflatex-tate~fixtures.}
   \fi
 \fi

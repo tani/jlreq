@@ -21,7 +21,25 @@
 | 縦中横 (`\tatechuyoko`) | **implemented (P5)** | 局所方向エンジン（下記）+ バックエンド箱工場で正規化埋込み。uplatex 同一ソース showbox・PDF bbox 実測契約: advance=1zw・cross=体幅半分ずつ・digit baseline=進行起点・1〜4桁で1zw固定、star 形は tate では同一構造・yoko では透過、yoko での非star形は ClassError。ゲート: `tcy-basic`（PDF 幾何; XFAIL から昇格）+ `tcy-digits`/`tcy-fontchange`/`tcy-star-error` |
 | 局所方向 (`\jlreq@iftdir`/`\jlreq@ifydir`/方向切替呼出し) | **implemented (P5)** | frame-tuple 方向フィールド `\jlreqpdf@dir`（0=yoko/1=tate、group-local・保存復帰）+ 箱工場 `\jlreqpdf@yokobox`/`\jlreqpdf@tatebox`。主方向は `\if@tate` から播種。移行済み caller: 脚注合印（`\rlap`+工場）、maketitle 著者表組み（`\ialign` shim は d で skip: 内枠は既に正しい向き）、theindex（ページ方向フラグ `\jlreqpdf@pagedir` + `\hsize=\textheight` 役割交換 + 局所方向切替で本当の横組みページ、終端で tate 復帰）、complements iftdir/theindex_yoko。uplatex `theindex_yoko=true` 実測と幾何一致（見出し x=125.58 一致・2段幅 147.4pt・復帰列位置一致）。ゲート: `dir-roundtrip`/`dir-callers`/`dir-index-yoko` |
 
-残（WARN 継続): ルビ（P10）。~~jlreqsetup の tate 連動キー~~ は **P7（2026-10-24）で解消**: 縦家具オプション（head_space/foot_space/gutter/fore_edge 非対称 + twoside + 段組 + 遅延注 + marginpar）が uplatex 同一ソースとビット一致（`furniture-options` ゲート）、savepos の論理行方向測定（割注）もビット一致（`savepos-warichu`）、mag≠1000 でも同一値（`savepos-warichu-mag`）、marginpar 列/側と遅延注位置は行方向相対距離で一致（`savepos-marginpar`）、本文の PDF インクレベル対照は worst 0.0010pt（`savepos-anchor-pdf` + `check-anchor-parity.py`。合印・脚注領域のマイクロレイアウト残差は同表に数値固定）、tate TOC 2パス不良を解消（`toc-twopass`）——いずれも docs/pdftex-internals.md「出力ルーチンと semantic frames（P7）」節参照。`\tatechuyoko` は P5、jlreq-trimmarks 縦組バナー（全スロット族が uplatex ground truth と 0.01pt 一致; tests/check-banner-tate.py）は P8 で解消済み（上表）。
+~~残（WARN 継続): ルビ（P10）~~ → **P10（2026-10-24）で解消**: ruby.sty provider 適合
+（`jlreq-pdftex-ruby.sty`; jlreq 独自 `\ruby` は定義しない、GPL コード不使用）。
+横組みは上付き・縦組みは読み枠右側（両方向とも lualatex+ruby.sty 同一ソースと
+対照: yoko ベースライン オフセット −11.14pt 完全一致、tate 中央 0.20/0.32pt）、
+連続/overlap/nooverlap・本文より長いルビ・段落先頭末尾・句読点隣接・書体/サイズ変更・
+hyperref 共存・状態隔離（次境界の pair が正しく復帰）まで実測済み。ゲート:
+`ruby-basic`/`ruby-tate`（17+10 ログ内表明）+ `ruby-adapter-noop-without-provider`
+（provider 無しでは何も定義しない機械検証）+ parity 2件。~~jlreqsetup の tate 連動キー~~
+は **P7（2026-10-24）で解消**: 縦家具オプション（head_space/foot_space/gutter/fore_edge
+非対称 + twoside + 段組 + 遅延注 + marginpar）が uplatex 同一ソースとビット一致
+（`furniture-options` ゲート）、savepos の論理行方向測定（割注）もビット一致
+（`savepos-warichu`）、mag≠1000 でも同一値（`savepos-warichu-mag`）、marginpar 列/側と
+遅延注位置は行方向相対距離で一致（`savepos-marginpar`）、本文の PDF インクレベル対照は
+worst 0.0010pt（`savepos-anchor-pdf` + `check-anchor-parity.py`。合印・脚注領域の
+マイクロレイアウト残差は同表に数値固定）、tate TOC 2パス不良を解消（`toc-twopass`）
+——いずれも docs/pdftex-internals.md「出力ルーチンと semantic frames（P7）」節参照。
+`\tatechuyoko` は P5、jlreq-trimmarks 縦組バナー（全スロット族が uplatex ground truth と
+0.01pt 一致; tests/check-banner-tate.py）は P8 で解消済み（上表）。
+**out-of-scope は残っていない**（jlreq.cls 警告リストも空）。
 
 ## 1. bxcjkvert の調達(初回報告の誤りを訂正)
 

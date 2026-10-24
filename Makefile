@@ -285,6 +285,7 @@ cls-install:
 	install jlreq.cls ${TEXMF}/tex/latex/jlreq
 	install jlreq-pdftex.sty ${TEXMF}/tex/latex/jlreq
 	install jlreq-pdftex-rules.sty ${TEXMF}/tex/latex/jlreq
+	install jlreq-pdftex-ruby.sty ${TEXMF}/tex/latex/jlreq
 	install $(addprefix ${PDFTEX_FONTS_DIR}/,${PDFTEX_FONT_PROFILES}) ${TEXMF}/tex/latex/jlreq
 	mkdir -p ${TEXMF}/fonts/truetype/jlreq-pdftex
 	install ${PDFTEX_FONTS_DIR}/jlreqv-*.ttf ${TEXMF}/fonts/truetype/jlreq-pdftex
@@ -319,6 +320,7 @@ tds: jfm pdftex-jfm jlreq.cls README.md README-ja.md LICENSE jlreq.html jlreq-ja
 	cp jlreq-trimmarks-pdftex.def ./tds/tex/latex/jlreq
 	cp jlreq-pdftex.sty ./tds/tex/latex/jlreq
 	cp jlreq-pdftex-rules.sty ./tds/tex/latex/jlreq
+	cp jlreq-pdftex-ruby.sty ./tds/tex/latex/jlreq
 	cp $(addprefix ${PDFTEX_FONTS_DIR}/,${PDFTEX_FONT_PROFILES}) ./tds/tex/latex/jlreq
 
 	mkdir -p ./tds/fonts/truetype/jlreq-pdftex

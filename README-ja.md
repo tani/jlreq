@@ -102,7 +102,7 @@ pdfLaTeXでも横書き文書がコンパイルできます（実験的なサポ
 全角空白（U+3000）一文字からなるマクロです．和字間隔を挿入します．LuaLaTeXでは`　`のみでも和字間隔を入力できます．
 
 ### その他
-* ルビや圏点は提供されません．[PXrubrica](https://github.com/zr-tex8r/PXrubrica)または`luatexja-ruby`（LuaLaTeX，LuaTeX-jaパッケージに付属）を使うと良いかと思います．
+* ルビや圏点はクラス自身では提供されません．[PXrubrica](https://github.com/zr-tex8r/PXrubrica)または`luatexja-ruby`（LuaLaTeX，LuaTeX-jaパッケージに付属）を使うと良いかと思います．pdfLaTeX利用時はCJKパッケージの`ruby`（`\usepackage{ruby}`、オプション`overlap`/`nooverlap`/`CJK`/`latin`、パラメータ`\rubysize`/`\rubysep`）が使えます: 実験的なpdfTeXバックエンドにはプロバイダ適合ファイル（`jlreq-pdftex-ruby.sty`、自動読み込み）が同梱され、プロバイダの`\ruby{本文}{ルビ}`をバックエンドの境界・状態機構に接続します——横組みではルビは本文の上、縦組みでは読み-frame右に付き、境界グルーは通常本文と同一のクラス表値、プロバイダ自身のoverlap判定も保存されます（詳細は`docs/pdftex-compatibility.md`）．
 * pLaTeX / upLaTeX利用時はそれぞれ`zw`および`zh`に展開されるマクロ`\zw`と`\zh`が定義されます．LuaLaTeX利用時はLuaTeX-ja内で同名のマクロが定義されます．
 * 日本語組版処理の要件2.3.2.dによれば，横組みにおける二段組の最後のページの各段の行数は揃えることが望ましいとされていますが，この処理は行われません．`nidanfloat`パッケージを使い，
 

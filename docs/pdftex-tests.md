@@ -14,6 +14,7 @@
 | T5b P9ゲート | wareki \today・日本語label（昇格済み）+ パッケージ行列・境界日・綴り | today-wareki.tex, label-japanese.tex, label-packages.tex, date-boundaries.tex, space-dispatcher.tex | lualatex 参照抽出比較 + check-{today-wareki,label-japanese,label-packages,date-boundaries,space-dispatcher}.py |
 | T7 回帰 | p/u/l の既存動作（ベースライン照合） | tests/fixtures/{basic-mixed,math-japanese,tate-vertical}.tex | tests/reference/baselines/ とのバイト比較 |
 | T8 縦組み | tate shipout 回転・縦中横・局所方向 | tests/fixtures/pdflatex-tate-*.tex, pdflatex-tate/{tcy-*,dir-*}.tex | ログ判定 + tests/check-tatechuyoko.py（縦中横は P5 で通常ゲート昇格済み） |
+| T9 ruby | ruby.sty provider 適合（P10） | tests/fixtures/pdflatex-tate/ruby-{basic,tate}.tex + ruby-adapter-noop | ログ内自己表明（17+10件）+ lualatex+ruby.sty 同一ソース対照（yoko ベースライン完全一致）+ noop ゲート |
 
 ## 実行方法（リポジトリ直下から）
 

@@ -160,7 +160,7 @@ for f in jlreq-pdftex-jfm.def jlreq-pdftex-jfm-b.def jlreq-pdftex-jfm-z.def \
          jlreq-pdftex-jfm-tate-z.def jlreq-pdftex-jfm-tate-bz.def \
          jlreq-pdftex-jfm-tate-n.def jlreq-pdftex-jfm-tate-bn.def \
          pdftex-jfm-manifest.lua \
-         jlreq-pdftex.sty jlreq-pdftex-rules.sty \
+         jlreq-pdftex.sty jlreq-pdftex-rules.sty jlreq-pdftex-ruby.sty \
          jlreq-trimmarks-pdftex.def jlreq.cls; do
   [ -f "$f" ] || T0_MISSING="$T0_MISSING $f"
 done
@@ -190,7 +190,7 @@ if [ -n "$T0_MISSING" ]; then
   echo "FAIL: T0-preflight missing required files:$T0_MISSING"
   FAILED=$((FAILED+1))
 else
-  pass "T0-preflight (JFM .def x12 + manifest, backend .sty x2, trimmarks .def, ipxm/ipxg fonts, cmtt9, font profiles + aux vert fonts x2 fontsets)"
+  pass "T0-preflight (JFM .def x12 + manifest, backend .sty x3, trimmarks .def, ipxm/ipxg fonts, cmtt9, font profiles + aux vert fonts x2 fontsets)"
 fi
 
 # ===========================================================================
@@ -970,6 +970,143 @@ else
   else
     fail "furniture-options" "$fo/compile.out"
   fi
+fi
+
+# ===========================================================================
+echo "== T9: ruby（P10: ruby.sty provider 適合）=="
+# ===========================================================================
+# T0 追加資源: アダプタ jlreq-pdftex-ruby.sty（バックエンド .sty 3本目）
+for f in jlreq-pdftex-ruby.sty; do
+  [ -f "$f" ] || { echo "FAIL: T9-ruby missing required file: $f"; FAILED=$((FAILED+1)); }
+done
+
+# ---- 9.1 ruby-basic（横組み: 上付き・境界グルー・連続/overlap/nooverlap/
+#      本文より長いルビ・状態隔離・rubylatin; ログ内自己表明 17件） ----
+rb=$(outdir_for t9 ruby-basic)
+if pdflatex -interaction=nonstopmode -halt-on-error -output-directory="$rb" \
+     tests/fixtures/pdflatex-rules/ruby-basic.tex >"$rb/compile.out" 2>&1 \
+   && grep -q "RUBY-DONE" "$rb/ruby-basic.log" 2>/dev/null; then
+  if grep -q "RUBY-FAIL" "$rb/ruby-basic.log" 2>/dev/null; then
+    fail "ruby-basic-log-assertions" "$rb/ruby-basic.log"
+  else
+    echo "PASS: ruby-basic-log-assertions ($(grep -c 'RUBY-PASS' "$rb/ruby-basic.log") assertions)"
+  fi
+else
+  fail "ruby-basic-compile" "$rb/compile.out"
+fi
+
+# ---- 9.2 ruby-tate（縦組み: reading-frame 右・縦字形・境界グルー;
+#      ログ内自己表明 10件） ----
+rt=$(outdir_for t9 ruby-tate)
+if pdflatex -interaction=nonstopmode -halt-on-error -output-directory="$rt" \
+     tests/fixtures/pdflatex-tate/ruby-tate.tex >"$rt/compile.out" 2>&1 \
+   && grep -q "RUBY-DONE-TATE" "$rt/ruby-tate.log" 2>/dev/null; then
+  if grep -q "RUBY-FAIL" "$rt/ruby-tate.log" 2>/dev/null; then
+    fail "ruby-tate-log-assertions" "$rt/ruby-tate.log"
+  else
+    echo "PASS: ruby-tate-log-assertions ($(grep -c 'RUBY-PASS' "$rt/ruby-tate.log") assertions)"
+  fi
+else
+  fail "ruby-tate-compile" "$rt/compile.out"
+fi
+
+# ---- 9.3 ruby-coexist（hyperref 共存・段落先頭末尾・句読点・抽出;
+#      2パス（目次/ラベル安定後の抽出検査） ----
+rc=$(outdir_for t9 ruby-coexist 2pass)
+rc_rc=0
+for passno in 1 2; do
+  if ! run_compile x "$rc" pdflatex \
+       tests/fixtures/pdflatex-coexist/ruby-coexist.tex; then
+    rc_rc=1
+  fi
+done
+grep -q "RUBY-FAIL" "$rc/ruby-coexist.log" 2>/dev/null && rc_rc=1
+[ "$(grep -c 'RUBY-PASS' "$rc/ruby-coexist.log" 2>/dev/null)" -ge 4 ] || rc_rc=1
+# 文字抽出: base・annotation 両テキストが PDF に残る
+pdftotext "$rc/ruby-coexist.pdf" "$rc/extract.txt" >/dev/null 2>&1
+grep -q "依存" "$rc/extract.txt" 2>/dev/null || rc_rc=1
+grep -q "いぞん" "$rc/extract.txt" 2>/dev/null || rc_rc=1
+# しおり: ルビ付き見出しの base 文字列が PDF 文字列に含まれる
+# （ルビ本体の vrule 引数が PDF 文字列に漏れるのは provider 自身の
+#  既知挙動 — lualatex+ruby.sty 同一ソースでも同一。base 部分の存在を検査）
+python3 - "$rc/ruby-coexist.out" >"$rc/bookmark.out" 2>&1 <<'PYEOF' || rc_rc=1
+import re
+import sys
+
+# The .out bookmark title is a TeX string of \NNN octal escapes holding
+# UTF-16BE bytes. The ruby provider's box arithmetic leaks raw tokens
+# into the PDF string (identically under lualatex+ruby.sty -- provider
+# limitation, both engines); the heading's BASE text must still be
+# present. Decode the escapes and look for the base fragments.
+data = open(sys.argv[1], "rb").read().decode("utf-8", "replace")
+m = re.search(r"\\BOOKMARK \[1\]\[-\]\{section\*\.1\}\{(.*)\}\{\}%", data)
+if m is None:
+    print("bookmark-contains-base-text: no section bookmark found")
+    sys.exit(1)
+bs = bytes(int(x, 8) for x in re.findall(r"\\([0-7]{3})", m.group(1)))
+txt = bs[2:].decode("utf-16-be", "replace")
+ok = ("見出しと" in txt) and ("漢字" in txt) and ("かんじ" in txt)
+print("bookmark-contains-base-text:", ok, repr(txt[:24]))
+sys.exit(0 if ok else 1)
+PYEOF
+if [ "$rc_rc" -eq 0 ]; then
+  pass "ruby-coexist (hyperref link/heading + paragraph head/tail + punctuation + extraction + bookmark base text)"
+else
+  fail "ruby-coexist" "$rc/compile.out"
+fi
+
+# ---- 9.4 lualatex+ruby.sty 位置 parity（縦横; 同一 provider による
+#      位置 oracle。横: annotation 基線オフセット・中央寄せ exact;
+#      縦: reading-frame 右・縦字形・中央寄せ structural exact） ----
+py_src=$(outdir_for t9 ruby-parity src)
+sed -e 's/\\documentclass\[paper=a5\]/\\documentclass[pdflatex,paper=a5]/' \
+     tests/fixtures/pdflatex-rules/ruby-parity.tex >"$py_src/pd.tex"
+cp tests/fixtures/pdflatex-rules/ruby-parity.tex "$py_src/lu.tex"
+py_rc=0
+if ! run_compile x "$py_src" pdflatex "$py_src/pd.tex"; then py_rc=1; fi
+if ! run_compile x "$py_src" lualatex "$py_src/lu.tex"; then py_rc=1; fi
+if [ "$py_rc" -eq 0 ]; then
+  if python3 tests/check-ruby-parity.py "$py_src/pd.pdf" "$py_src/lu.pdf" \
+       >"$py_src/parity-yoko.out" 2>&1; then
+    echo "PASS: ruby-parity-yoko (vs lualatex+ruby.sty, ann baseline offset/centering/size exact)"
+  else
+    fail "ruby-parity-yoko" "$py_src/parity-yoko.out"
+  fi
+else
+  fail "ruby-parity-yoko" "$py_src/compile.out"
+fi
+# tate 変種（同一ソースの tate 版: [paper=a5] → [tate,paper=a5] /
+# [pdflatex,tate,paper=a5]）
+pyt=$(outdir_for t9 ruby-parity tate)
+sed -e 's/\\documentclass\[paper=a5\]/\\documentclass[pdflatex,tate,paper=a5]/' \
+     tests/fixtures/pdflatex-rules/ruby-parity.tex >"$pyt/pd.tex"
+sed -e 's/\\documentclass\[paper=a5\]/\\documentclass[tate,paper=a5]/' \
+     tests/fixtures/pdflatex-rules/ruby-parity.tex >"$pyt/lu.tex"
+pt_rc=0
+if ! run_compile x "$pyt" pdflatex "$pyt/pd.tex"; then pt_rc=1; fi
+if ! run_compile x "$pyt" lualatex "$pyt/lu.tex"; then pt_rc=1; fi
+if [ "$pt_rc" -eq 0 ]; then
+  if python3 tests/check-ruby-parity.py "$pyt/pd.pdf" "$pyt/lu.pdf" tate \
+       >"$pyt/parity-tate.out" 2>&1; then
+    echo "PASS: ruby-parity-tate (ann reading-frame right + vertical glyphs + centering vs lualatex+ruby.sty)"
+  else
+    fail "ruby-parity-tate" "$pyt/parity-tate.out"
+  fi
+else
+  fail "ruby-parity-tate" "$pyt/compile.out"
+fi
+
+# ---- 9.5 ruby アダプタ非汚染（provider 未読み込み文書に影響しない） ----
+# ruby.sty を読まない文書でアダプタのインストールが no-op であること:
+# \ruby は定義されず、コンパイルは通常どおり。
+nr=$(outdir_for t9 ruby-absent)
+printf '\\documentclass[pdflatex]{jlreq}\n\\begin{document}\n\\makeatletter\n\\ifdefined\\ruby ERR\\else OK\\fi\n\\message{RUBY-UNDEF: \\ifdefined\\ruby defined\\else undefined\\fi}\n漢\n\\makeatother\n\\end{document}\n' >"$nr/src.tex"
+if pdflatex -interaction=nonstopmode -halt-on-error -output-directory="$nr" \
+     "$nr/src.tex" >"$nr/compile.out" 2>&1 \
+   && grep -q "RUBY-UNDEF: undefined" "$nr/src.log" 2>/dev/null; then
+  pass "ruby-adapter-noop-without-provider (no jlreq-native ruby defined)"
+else
+  fail "ruby-adapter-noop-without-provider" "$nr/compile.out"
 fi
 
 # ===========================================================================
