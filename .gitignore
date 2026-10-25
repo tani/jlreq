@@ -1,3 +1,10 @@
 .envrc
 texlive/
 tds/
+# Generated doc artifacts (make doc; pandoc + lualatex from README*.md)
+jlreq.pdf
+jlreq-ja.pdf
+jlreq.html
+jlreq-ja.html
+jlreq-trimmarks.html
+jlreq-trimmarks-ja.html

@@ -341,7 +341,7 @@ sty-install:
 
 install: jfm-install cls-install sty-install
 
-tds: jfm pdftex-jfm pdftex-fonts jlreq.cls README.md README-ja.md LICENSE jlreq.html jlreq-ja.html jlreq-trimmarks.html jlreq-trimmarks-ja.html jlreq.pdf jlreq-ja.pdf
+tds: jfm pdftex-jfm pdftex-fonts pdfdoc htmldoc jlreq.cls README.md README-ja.md LICENSE
 	mkdir -p ./tds/fonts/tfm/public/jlreq
 	cp -f ${TFMS} ./tds/fonts/tfm/public/jlreq
 	mkdir -p ./tds/fonts/vf/public/jlreq

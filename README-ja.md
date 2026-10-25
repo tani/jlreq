@@ -31,14 +31,17 @@ pdfLaTeXでも横書き文書がコンパイルできます（実験的なサポ
 `pdflatex`を渡すか，エンジンを自動判定させてください．内部でbxcjkjatype
 （CJKutf8・IPAex明朝/ゴシックType 1フォント）と実験的なバックエンド
 （jlreq-pdftex.sty）を読み込み，JFMに基づく文字間グルー・禁則・和欧文間隔を
-適用します．既知の制限:
+適用します．
 
-* 縦書き（`tate`）は実験的コア実装（shipout rotation 構成）。読み・段方向・禁則・約物配置は検証済み。ページ家具・脚注・浮動体・縦中横・数式など一部機能は対象外で、ロード時警告に列挙されます（詳細は `docs/pdftex-tate-eval.md`）
-* ぶら下げ組み（`-b`系変種のみ）と数式内和文（`\mathmc`/`\mathgt`、数式中の直接和文）は対応済み
+* **縦書き（`tate`）**: shipout rotation 構成（内枠横組 galley＋グリフ+90°予備回転＋`\@outputpage` で −90°回転）で対応。検証済み範囲: 読み・段方向・禁則・約物配置（生成した補助縦フォントによる本物の縦字形）、ページ家具（head_space/foot_space/gutter/fore_edge 非対称＋両面＋段組＋遅延脚注＋傍注 — upLaTeX 同一ソースとビット一致）、縦中横（`\tatechuyoko`、1zw進行で upLaTeX と一致）、行内・別行数式（pLaTeX `adjustbaseline` 同一式の δ で upLaTeX と sp 一致）、脚注・浮動体、jlreq-trimmarks（縦バナー含む全スロット族が 0.01pt 一致）、ルビ（ruby.sty プロバイダ適合）、割注・savepos 系合印。検証済み範囲はテストスイート（`tests/run-pdftex-tests.sh`）が管理し、計測表は `docs/pdftex-tate-eval.md`。登録済みの定量残差は2件（複数段落時の先頭脚注列 +4.95pt、合印オープナー先頭列 (+3.49, −1.42)pt — いずれも単一脚注の通常利用では発生しない; `docs/pdftex-internals.md`）。
+* ぶら下げ組み（`hanging_punctuation`、`-b` 系 JFM 変種）: 行末限定の kern/penalty 候補列の負 end_adjust 候補として表現（行中は正味0）。突出し量は upLaTeX と一致。
+* 数式内和文（`\mathmc`/`\mathgt`、数式中の直接和文）は対応済み。数式内テキスト箱（`\text`/`\mbox`/`\makebox`）は pTeX の方向一致則に従いスタイル別に counter-shift。行内数式のトップレベルに明示的な raw `\hbox`/`\vbox`/`\vcenter` があると `\mbox`/`\text` への置換を示す ClassError になります（pdfTeX に任意の primitive 箱の方向を後から取得する API がないため）。
 * 約物はJFMのクラス幅（半角など）で組まれ、グリフはJFMの配置指定に従って納まります（インク形状はplatex参照と一致）
+* 日本語ラベル（`\label{日本語}`/`\ref`/`\pageref`）、和暦 `\today`（`year_style=wareki`・元号境界日・縦組み漢数字）、`\西暦`/`\和暦`/`\　` 綴りに対応（展開可能な正規化。ASCII ラベルの aux はバイト互換）。
 * **厳密段落（優先順位付き伸縮）**: `jlreqparagraph` 環境（`\begin{jlreqparagraph}...\end{jlreqparagraph}`、引数なし・一環境一段落。pdfLaTeX バックエンドと一緒に自動読込）は段落パラメータを全件 snapshot し、native 改行器で一度だけ改行した上で行ごとに回復・再構成し、JFM ペアグルーの優先順位付き伸縮を厳密に扱います。入力モデルは明示（和文連続・欧文単語・空白・`\inhibitglue`・`\hspace`/`\kern`/`\penalty`/`\allowbreak`・インライン数式・`\mbox`/`\makebox`・`\label`/ハイパーリンク）。環境内の別行立て数式・脚注・傍注は具体的エラーになります。詳細は `docs/pdftex-internals.md`（P11 節）。
+* フォント: 既定は ipaex-type1（IPAex Type 1 サブフォント）。`pdftex_fontset=ipa`（zhmetrics TrueType 経路）と `pdftex_fontset=custom`＋`pdftex_fontprofile=<file>`（`make_pdftex_fonts.py` で生成）も使用可。縦字形データはビルド時に生成して配布済み（`fonts/pdftex/`）。通常の文書コンパイルは Lua/Python を実行しません（実行するのは `make pdftex-jfm` / `make pdftex-fonts` / `make check-pdftex-jfm` / `make check-pdftex-fonts` の再生成・検査のみ）。
 
-詳細は `docs/pdftex-compatibility.md` を参照してください．
+詳細は `docs/pdftex-compatibility.md`（状態マトリクス全表）と `docs/pdftex-tests.md`（検証方法）を参照してください．
 
 リリース時点での最新版での動作を確認しています．
 

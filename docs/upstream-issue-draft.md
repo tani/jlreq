@@ -1,170 +1,196 @@
-# Upstream Issue draft (PLAN.md §12-5): pdfLaTeX backend for jlreq
+# Upstream Issue draft: pdfLaTeX backend for jlreq
 
 This is a **draft** for the upstream issue to abenori/jlreq. It reflects the
-current implementation state (M1–M8 horizontal scope complete; vertical
-explicitly gated out).
+current implementation state of the `pdflatex` branch: **horizontal and
+vertical (`tate`) typesetting are both complete and verified** (P1–P12; two
+quantified residuals registered). The former "M1–M8 horizontal scope, vertical
+gated out" scope of this draft is obsolete.
 
 ---
 
 ## Title (proposal)
 
-Add a pdfLaTeX (pdfTeX) backend to jlreq — engine detection, horizontal
-typesetting rules, and audited compatibility
+Add a pdfLaTeX backend to jlreq — full Japanese typesetting incl. vertical writing
 
 ## Body (proposal)
 
 ### 目的 / Goal
 
-Make `\documentclass{jlreq}` usable with `pdflatex` for **horizontal**
-documents while keeping the existing public API and Japanese typesetting
-rules, and keeping pLaTeX/upLaTeX/LuaLaTeX behavior untouched. Vertical
-writing (`tate`) stays unsupported under pdfTeX with an explicit error (an
-engine-API gate; see below).
+`\documentclass{jlreq}` を**標準の pdfLaTeX（pdfTeX）**で使えるようにする。
+横組みに加えて**縦組み（`tate` オプション）も含めて**、jlreq の公開 API
+（クラスオプション・`\jlreqsetup`・命令・環境）と日本語組版規則
+（JFM ペアグルー・禁則・和欧文間空き・行末調整・ぶら下げ）を維持する。
+pLaTeX / upLaTeX / LuaLaTeX の既存動作は変更しない（回帰は生成済み
+ベースラインとのバイト比較で保証）。改造エンジン・コンパイル時の
+Lua/Python・shell-escape は不要。実験的（experimental）サポートとして
+の提供を想定する。
 
-### 実績 / What exists
+### 対応範囲 / What works now
 
-1. **M1 — engine detection** (smallest possible diff, mergeable alone)
-   - `jlreq-helpers.sty`: pdfTeX detected via `\pdftexversion` (engine letter
-     `d`); `\directlua` → l, `\pdftexversion` → d, `\ucs` → u. No misdetection.
-   - `jlreq.cls`: `pdflatex` class option; explicit-option vs actual-engine
-     mismatch error; pdfTeX path separated before any pTeX primitive.
-2. **M2 — glyph & unit foundation**: `jlreq-pdftex.sty` (internal) loads
-   `bxcjkjatype[ipaex-type1,noCJKpunct]`, establishes an always-on CJK state
-   at class load (so `\hbox{阿}` measurement works), emulates `\zw`/`\zh` as
-   size-tracking dimen macros, declares `\Cht`..`\Chs`. Measured at load:
-   Cwd=10.0/Cht=8.8/Cdp=1.2/Cvs=17/Chs=10pt @10pt.
-3. **M3 — JFM data from the single source**: `make_pdftex_jfm.lua` generates
-   `jlreq-pdftex-jfm{,-b,-z,-bz}.def` (402 pair rules, 25 classes, 403 chars
-   each) from `jfm-jlreq.lua`. `make check-pdftex-jfm` proves regeneration
-   diff = 0; `check_jfm_pdftex.lua` byte-checks every pair against the source.
-   Runtime needs **no Lua** (static `.def` files are committed).
-4. **M4/M5 — horizontal rules**: pair glue (exact JFM values incl. 二分アキ
-   before opening brackets), kinsoku (行頭/行末 penalties per jlreq's own
-   class lists), JA↔LA spacing (xkanjiskip), punctuation JFM widths (glyph
-   boxed at class width w<1zw with tentsuki overhang — identical ink
-   geometry vs platex reference), hanging punctuation (`hanging_punctuation`
-   via `\pdfprotrudechars=2` + `\rpcode`, `-b`/`-bz` variants), and an
-   end_adjust approximation (squeeze folded into glue shrink — line-end-only
-   semantics and priority order are documented as pdfTeX-inexpressible;
-   priority loss measured harmless: poc/README-m5-numeric.md). Measured:
-   pair fixtures PASS at exact pt values; kinsoku verified by bbox (no
-   line-head closing brackets); hanging verified (right margin kern −10pt,
-   ink ends 0.5zw past the nominal edge); squeeze verified (0 Overfull).
-5. **M6 — class integration**: `jlreq-complements.sty` gained a `pdflatex`
-   option (thebibliography/theindex/theorems work; the class loads it under
-   d); `jlreq-trimmarks.sty` gained pdfTeX tombow + TrimBox/BleedBox +
-   rotated banner (`\rotatebox{-90}`); `\sidenote` (both `sidenote_type`
-   variants) works; `reference_mark=interlinear` works; Q/H units work in
-   all length options and `\jlreqsetup` values (1Q=1H=0.25mm), incl. literal
-   `2zw`; Japanese in math (`\mathmc`/`\mathgt`, direct JA chars, matrix
-   cells) works behind enablejfam; `\kansuji` is implemented as an
-   expandable digitwise macro (13 values verified against upLaTeX);
-   `\mag`-based runs are geometry-exact vs the pTeX DVI route.
-   Coexistence verified with hyperref (Japanese bookmarks via UTF-16BE
-   outlines), amsmath, graphicx/xcolor, lists, tables, and a class-options
-   sweep (paper/fontsize/line_length/… + `\jlreqsetup` keys; 割注 works).
-6. **M8 — packaging/docs**: README ja/en describe the experimental support
-   and limitations; `docs/pdftex-{audit,compatibility,internals,tests,
-   jfm-generation}.md`; Makefile `install`/`tds` ship the backend files and
-   the `.def` data; CI gate = `make check-pdftex-jfm`.
+横組み: `pdflatex` クラスオプション（または自動判定）で、JFM に基づく
+文字間グルー（9フィールド全評価、kanjiskip 付随成分・未定義ペアは現行
+skip 値へフォールバック）、禁則（行頭禁則は実 PDF bbox 機械走査で
+違反 0 件）、和欧文間空き、約物の JFM クラス幅組版（インク形状は
+platex 参照と一致）が動作する。
 
-### 検証 / Verification summary
+縦組み（`tate`）: **shipout rotation 構成**で実現（内枠は通常の横組み
+galley、和文グリフを +90° 予備回転、`\@outputpage` で出力箱を −90° 回転）。
+カーネルの `\@outputpage` 丸写しは使わず、begindocument で保存した元実装を
+回転付きの薄いラッパから呼ぶ（build/page フックと hook 付き shipout は
+素通りを機械検証済み）。検証済みの範囲と対照数値:
 
-- p/u/l regression: 3 fixtures × 3 engines — **DVI byte-identical**
-  (timestamp-normalized) for p/u; **PDF date-normalized byte-identical** for
-  lualatex, before vs after the whole backend work.
-- pdflatex: mixed doc + rule-measurement fixtures (7 pair measurements exact
-  to pt) + 23 coexistence fixtures (hyperref JP bookmarks, amsmath,
-  graphicx/xcolor, lists, tables, options sweep incl. Q/H units,
-  jlreqsetup literal-zw, microtype+twocolumn, trimmarks with
-  TrimBox/BleedBox, trimmarks rotated banner, warichu, headings-toc-aux,
-  footnotes-rules, sidenote & sidenote-symbol, math-jfm &
-  math-jfm-disablejfam & math-matrix, eqref-hyperref, kanji-numbers,
-  reference-mark-interlinear) — all rc=0; `pdftotext` extraction correct;
-  IPAex Type 1 embedded.
-- Kinsoku: line-head punctuation machine-scanned from PDF bbox across all
-  fixtures — **0 violations** (closing brackets, stops, commas never start a
-  line). The formerly documented rare edge (latin→closing-bracket `（x）`
-  in narrow columns) is fixed: the zero-glue CJK-decoder residue before
-  prebreak classes is now `\unskip`ped (fixture preclose-latin.tex).
-- Test base: `tests/run-pdftex-tests.sh` (65 checks: T1 JFM data, T2 error
-  gate, T3/T4 rule measurements + bbox scan, T5 documents, T7
-  3-engine regression + backend isolation).
-- Performance: (B) backend 1.5× the raw bxcjkjatype baseline; 0.375s vs
-  upLaTeX 0.191s / LuaLaTeX 0.961s on the 2-page stress fixture.
+* 読み方向（上→下）・段方向（右→左）・禁則・約物配置 — 生成した補助縦
+  フォントによる**本物の縦字形**（vert/vrt2 置換グリフは直立のまま、
+  それ以外は回転、進行幅は JFM クラス幅×現在 zw）。
+* ページ家具: head_space/foot_space/gutter/fore_edge 非対称＋両面＋
+  二段組＋遅延脚注＋傍注（marginpar）が upLaTeX 同一ソースと
+  **ビット一致**。
+* 縦中横 `\tatechuyoko`: 進行 1zw で upLaTeX と一致（star 形は横組みで
+  透過、非 star は他エンジンと同じ ClassError）。
+* 行内・別行数式: pLaTeX `adjustbaseline` と同一式の δ 基準線シフトで
+  upLaTeX と **sp 一致**（10pt: δ=3.44438pt = upLaTeX `\tbaselineshift`）。
+  数式内テキスト箱（`\text`/`\mbox`/`\makebox`）は pTeX の方向一致則に
+  従いスタイル別に counter-shift。行内数式トップレベルの明示的な raw
+  `\hbox`/`\vbox`/`\vcenter` は `\mbox`/`\text` 置換を示す ClassError
+  （pdfTeX に任意 primitive 箱の方向を後から取得する API がないための
+  入力契約）。
+* 脚注・後注・傍注・浮動体: 単一脚注の罫線位置・本文列頭等が upLaTeX と
+  worst 0.011pt（10pt）。割注・savepos 系合印の論理行方向測定は upLaTeX と
+  ビット一致（`\mag=1200` でも同一値）。
+* jlreq-trimmarks: トンボ・TrimBox/BleedBox・奇偶ページ属性、**縦バナー
+  全スロット族が upLaTeX ground truth と 0.01pt 一致**（2ページ×10スロット
+  =20箇所の実 bbox 照合）。
+* ルビ: CJK パッケージの `ruby.sty` を provider として適合
+  （`jlreq-pdftex-ruby.sty`、provider の overlap 計算を保存。
+  jlreq 独自の `\ruby` は定義しない）。横組みは上付き・縦組みは読み枠右側で、
+  lualatex+ruby.sty 同一ソース対照と yoko ベースラインオフセット完全一致・
+  tate 中央合わせ 0.20/0.32pt。
+* 日本語ラベル（`\label{日本語}`/`\ref`/`\pageref`、nameref/hyperref/
+  refcount/cleveref 適合）・和暦 `\today`（元号境界日・縦組み漢数字）・
+  `\西暦`/`\和暦`/`\　` 綴り（展開可能な正規化。ASCII ラベルの aux は
+  バイト互換）。
+* ぶら下げ組み（`hanging_punctuation`、`-b` 系 JFM 変種）: 行末限定の
+  kern/penalty 候補列の**負 end_adjust 候補**として表現（行中は正味 0）、
+  突出し量は upLaTeX と一致。
+* 行末調整: p/u/l/d の 4 エンジンで **0.000pt parity**
+  （`endadjust-lineend` ゲート、参照と 0.1pt 許容で固定検査）。
+* **厳密段落環境 `jlreqparagraph`**: 段落パラメータを全件 snapshot し、
+  native 改行器で一度だけ改行した行を行単位で回復して、JFM ペアグルーの
+  優先順位付き伸縮を厳密に配分する（入力モデルは明示: CJK 連続・欧文
+  word・空白・`\inhibitglue`・`\hspace`/`\kern`/`\penalty`/`\allowbreak`・
+  行内数式・`\mbox`/`\makebox`・label/hyperlink。環境内の別行数式・脚注・
+  傍注は具体的エラー）。通常段落は意図的に native 一括伸縮のまま
+  （優先順位 spri/shpri は境界ごとに記録して同環境が消費する、
+  承認済みの二層設計）。
 
-### 明示的な制限 / Explicit limitations (per the basic principle: no
-unsupported claims)
+フォント: 既定 `ipaex-type1`（Type 1 サブフォント）、`pdftex_fontset=ipa`
+（zhmetrics TrueType チェーン）、`pdftex_fontset=custom` +
+`pdftex_fontprofile=<file>`（`make_pdftex_fonts.py` が生成）。縦字形データ
+はビルド時に生成して**生成済みで配布**（`fonts/pdftex/`、補助縦
+TTF/TFM/enc + プロファイル + ライセンス文）。文字抽出はプロファイル読込時に
+`\pdfglyphtounicode` を登録して `\pdfgentounicode=1` で保証（全フィクスチャ
+PDF で U+FFFD 0 件・未埋込フォント 0 件を実測）。
 
-- 縦組み（`tate`）: **experimental core implemented** (T1, 2026-10-23 —
-  see docs/pdftex-tate-eval.md). bxcjkvert/CJKvert as a *dependency path*
-  is insufficient (glyph-level rotation only; punctuation lands wrong
-  corner, no tate-chu-yoko/JFM/paper model), so instead of that package
-  we use a shipout-rotation architecture (horizontal inner galley,
-  +90° CJK glyphs with per-class metric offsets, whole output box
-  rotated −90°): reading top→bottom, columns right→left, kinsoku
-  verified from galley dumps, 2-page verified, pair glue matches the
-  tests/fixtures/pdflatex-tate-*.tex). Follow-up slices additionally
-  verified page furniture (running heads placement, `\@outputpage`
-  furniture-width override), vertical headings/TOC, footnote/endnote/
-  sidenote/`\marginpar` and basic floats (**T1 core unchanged — bbox/cm
-  parity with uplatex ground truth**), and math adjacency (ground truth
-  is the uplatex "寝かせ" style: whole formula rotated CW-90°, matched
-  with a δ=0.343zw inboard correction; edges bitwise). Remaining:
-  jlreq-trimmarks banner in tate, `\tatechuyoko` (explicit ClassError
-  as on other engines in non-tate spots), ruby, tate-keyed jlreqsetup.
-- Priority-ordered stretch/shrink (`stretch_priority`/`shrink_priority`) and
-  line-end-only `end_adjust`: approximated (single-priority shrink); the
-  exact semantics are inexpressible on the stock breaker — documented and
-  measured harmless on the reference corpus (poc/README-m5-numeric.md).
-- Japanese `\label` names: active-byte expansion inside
-  `\csname r@…\endcsname` — agreed unfixable without breaking hyperref
-  bookmarks; ASCII labels are the documented workaround (see comments in
-  tests/fixtures/pdflatex-coexist/eqref-hyperref.tex). (`\eqref` +
-  hyperref with Japanese section context itself works; fixture proves
-  refs resolve.)
-- Paragraph-start LA→JA boundary gets no xkanjiskip: detecting a latin
-  predecessor in unshifted horizontal mode is structurally unsound under
-  pdfTeX (latin chars are unhookable; indent/kern signatures ambiguous) —
-  limitation agreed after probe (paragraph-boundary reset itself works).
-- `\　` (single-U+3000 control-sequence spelling): U+3000 is not a letter
-  under the CJKutf8 route, so the spelling cannot tokenize — blocked by
-  design. Use the literal U+3000 character (outputs as a CJK space) or
-  `\jaspace{zenkaku/nibu/shibu}` (tested rc=0).
-- Font set is IPAex only (`ipaex-type1`, with `\CJKbold` synthetic bold);
-  other Japanese font presets are future work.
-- fontsize/jafontsize in `zw`/`zh` units is self-referential under pdfTeX
-  and raises an explicit ClassError (jlreq.cls:611–626) — previously it
-  silently became 0pt. Q/H units and `jafontscale` ratios are the supported
-  alternatives (tested).
-- ~~Tombow *drawing coordinates* with `\mag≠1000`~~ → resolved: tombow
-  marks now match uplatex at `\mag=1200` too (HiRes ink-bbox identical:
-  `42.048 42.174 845.082 1140.894`), via the `\put` origin correction in
-  jlreq-trimmarks-pdftex.def:58–77 (cancels the `\hoffset`/`\voffset`
-  leakage into stored drawing coords; content-stream verified; mag=1000
-  stream byte-unchanged). Regression gate: `tests/fixtures/pdflatex-coexist/
-  mag-tombow.tex` + `tests/check-tombow-mag.py` asserting the mag-invariant
-  stored rule coordinates (35.05, 922.444) and the ×1.2 page CTM. Text-block
-  parity stays bitwise (y ≤0.065bp vs uplatex, jlreq-trimmarks-pdftex.def:79–89).
-- Hanging punctuation is implemented (`-b`/`-bz` variants) but degrades
-  silently if a whatsit (e.g. hyperref `\label`) lands between the 、。 and
-  the following pair glue (node-level constraint, poc/README-g3b.md).
+JFM データ: pTeX/upTeX/LuaTeX-ja と**同一ソース**（`jfm-jlreq.lua` /
+`jfm-jlreqv.lua`）から、横/縦 × 括弧位置 3 種 × ぶら下げ on/off の
+**12 変種**（`jlreq-pdftex-jfm*.def`）と manifest
+（`pdftex-jfm-manifest.lua`）を決定的生成。負優先度 stretch も保持
+（旧 PL 変換の落とし込みは解消済み）。
 
-### 提案 / Proposed PR series (per PLAN.md §8)
+### 登録済み残差 / Registered residuals（2 件、数値つき）
 
-1. PR 1: engine detection + fixtures (already structured this way).
-2. PR 2: `jlreq-pdftex.sty` + cls gates (fonts/units/metrics).
-3. PR 3: generator + `.def` data + Makefile check targets.
-4. PR 4: rules backend (`jlreq-pdftex-rules.sty`).
-5. PR 5: complements option + docs + README.
+いずれも `docs/pdftex-internals.md` に登録済みで、単一脚注の通常利用の
+範囲外で発生する:
+
+1. **複数脚注段落時の先頭段列頭**: 1 ページに複数の脚注段落があるとき、
+   **先頭**脚注段落の列頭が **+4.95pt**（10pt）行末側にずれる
+   （2 段落目以降の列頭・列間隔、および単一脚注は完全一致）。
+2. **行内合印オープナーの先頭列残差**: 1 本文行に複数脚注があるときの
+   （＊）オープナー（合印チェーン）が **(+3.49, −1.42)pt**
+   （複数脚注の fn2 列目以降は 0.00pt 完全一致）。
+
+### 検証方法 / Verification
+
+* 一括実行入口 `tests/run-pdftex-tests.sh`: **158 ゲート**（2026-10-25
+  実行時点で 0 skip・0 FAIL・0 XFAIL）。必須資源（JFM .def 12 種 +
+  manifest、バックエンド .sty、補助縦フォント資源等）の欠損は SKIP ではなく
+  **FAIL**。自己申告型検査（banner PASS typeout 等）は廃止済みで、幾何は
+  実 PDF の bbox/座標を pymupdf/pdftotext で機械検査する。
+* p/u/l 回帰: 実装前の固定条件（`SOURCE_DATE_EPOCH` 固定・同じフォント・
+  同じ driver）で記録した**コミット済みベースライン**
+  （`tests/reference/baselines/`）と、DVI はタイムスタンプ正規化後・PDF は
+  日付/ID 正規化後に**バイト同一**であることをスイートが自動照合。
+* 行末調整は `endadjust-lineend.tex` を 4 エンジンでコンパイルし
+  `tests/check-endadjust-parity.py` が pdflatex の 1 行目 xMax を参照と
+  0.1pt 以内で検査（実測は全エンジン 148.20pt、掃引でも ≤0.01pt）。
+* 数値は JFM 元定義から独立に計算した sp 寸法、組版は upLaTeX/LuaLaTeX の
+  同一ソース出力を oracle にする（参照値を新実装の出力から生成していない）。
+* 配布検証: `make install` を一時 TEXMF に行い、リポジトリ外 cwd から
+  `-no-shell-escape` で横組・縦組両文書をコンパイルする staged install
+  smoke（shell-out 証跡 0 件・文字抽出照合つき）。
+* CI: `.github/workflows/pdftex.yml`（push/pull_request の単一 job で
+  4 エンジン suite + 生成物チェック + staged smoke を TeX Live 2025 で
+  実行、失敗時に log/PDF/差分を artifact 保存）。
+
+### ビルド・配布 / Build & distribution
+
+* **生成済みデータをコミットして配布**: 12 変種 `.def` + manifest、
+  `fonts/pdftex/`（プロファイル・補助縦 TTF/TFM/enc・ライセンス文）。
+* 生成器はビルド時のみ実行: `make pdftex-jfm` / `make pdftex-fonts`、
+  検査は `make check-pdftex-jfm` / `make check-pdftex-fonts`
+  （`texlua check_jfm_pdftex.lua` は 12 変種を元 JFM 全項目と照合、
+  再生成差分 0 を確認）。
+* **通常の文書コンパイルは Lua/Python を一切起動しない**
+  （JFM を触らない通常利用では texlua 不要、配布済みフォントを使う
+  通常利用では Python/fontTools/ttf2tfm 不要）。
+
+### 上流統合に必要な変更 / What integration touches
+
+* **既存ファイルへの変更（最小差分）**:
+  * `jlreq.cls` — `pdflatex` クラスオプション、`pdftex_fontset=` /
+    `pdftex_fontprofile=` キー、d エンジン分岐（`\mag` 補償、縦組み
+    `\Cht/\Cdp` の縦 JFM 値での測り直し、`\today` 和暦・縦組み漢数字、
+    数式キャプチャ入口、縦出力ラッパ呼び出し等）。
+  * `jlreq-helpers.sty` — エンジン検出（`\pdftexversion` プリミティブで
+    pdfTeX を判定）。
+  * `jlreq-complements.sty` — `pdflatex` オプション。
+  * `jlreq-trimmarks.sty` — d ドライバ（PDF 属性）と shipout/before フック
+    による奇偶ページ属性、分離実装 `jlreq-trimmarks-pdftex.def`。
+  * `Makefile` — 生成/検査 target と `install`/`tds` への収録。
+  * `README.md` / `README-ja.md` — pdfLaTeX 節。
+* **新規バックエンドモジュール**: `jlreq-pdftex.sty`（フォント/単位/
+  メトリック/数式キャプチャ/出力ラッパ）、`jlreq-pdftex-rules.sty`
+  （JFM ペアグルー・禁則・行末候補列・状態機構・縦グリフ）、
+  `jlreq-pdftex-ruby.sty`（ruby.sty provider 適合）、
+  `jlreq-pdftex-paragraph.sty`（`jlreqparagraph` 厳密段落環境）、
+  生成器 `make_pdftex_jfm.lua` / `make_pdftex_fonts.py`、検査器
+  `check_jfm_pdftex.lua` / `tests/check-pdftex-fonts.py`、生成データ
+  （12 `.def` + manifest + `fonts/pdftex/`）。
+* **テスト一式**: `tests/run-pdftex-tests.sh`、fixtures、幾何検査
+  `tests/check-*.py`、参照ベースライン `tests/reference/baselines/`、
+  CI workflow。
+* **ドキュメント**: `docs/pdftex-compatibility.md`（公開 API 互換表）、
+  `docs/pdftex-internals.md`（機構と実測表）、`docs/pdftex-tests.md`
+  （検証方法）、`docs/pdftex-jfm-generation.md`、
+  `docs/pdftex-dependencies.md`（ライセンス境界: GPL 依存とコード流用の
+  区別）、`docs/pdftex-tate-eval.md`（縦組み評価の測定表と履歴）。
+* 依存: bxcjkjatype（CJKutf8 + IPAex Type 1）を内部で読み込む
+  （TeX Live 収録済み）。`ipa` プリセットは zhmetrics、ルビは ruby.sty。
 
 ### 質問 / Questions for the maintainer
 
-1. Is the horizontal-only scope with an explicit vertical error acceptable
-   for a first merge (vertical gated behind G4)?
-2. Default font configuration `ipaex-type1` — or should another preset be
-   the pdfTeX default?
-3. `jlreq-trimmarks` pdfTeX support is implemented (tombow, TrimBox/BleedBox,
-   rotated banner via `\rotatebox{-90}`). Should it ship in the same PR
-   series as the class integration, or as its own PR for separate review of
-   the reimplemented tombow machinery?
+1. 既定フォント設定は `ipaex-type1` でよいか（`ipa` / `custom` プロファイル
+   も実装済み）。
+2. PR の分割単位の希望（engine 検出 → バックエンド本体 → 生成器とデータ →
+   テスト/CI/ドキュメント、の順で分割可能。すべてのゲートは単一の
+   `tests/run-pdftex-tests.sh` で実行できる）。
+
+### エビデンス / Evidence pointers
+
+* `README.md`「pdfLaTeX (experimental)」節 — 対応範囲の一次サマリ。
+* `docs/pdftex-compatibility.md` — 公開オプション・命令・環境ごとの
+  対応状況マトリクス。
+* `docs/pdftex-tate-eval.md` / `docs/pdftex-internals.md` — 縦組み判定の
+  経緯と、対照数値（家具ビット一致・δ sp 一致・バナー 0.01pt・残差 2 件）
+  の測定表。
+* `docs/pdftex-tests.md` — 検証方法とゲート一覧。

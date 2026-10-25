@@ -1,3 +1,7 @@
+-- HISTORICAL PoC ARTIFACT (superseded -- do not use or update).
+-- Superseded by the production generator make_pdftex_jfm.lua at the
+-- repository root (GEN_VERSION 2.0: 12 variants, yoko+tate, manifest era).
+-- Kept only as the experiment record referenced from docs/ and README.
 --[[---------------------------------------------------------------------------
   make_pdftex_jfm.lua --- PoC generator for M3 (PLAN.md §3.3, §12-4)
 
