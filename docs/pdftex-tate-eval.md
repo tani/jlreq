@@ -34,9 +34,13 @@ hyperref 共存・状態隔離（次境界の pair が正しく復帰）まで�
 （`furniture-options` ゲート）、savepos の論理行方向測定（割注）もビット一致
 （`savepos-warichu`）、mag≠1000 でも同一値（`savepos-warichu-mag`）、marginpar 列/側と
 遅延注位置は行方向相対距離で一致（`savepos-marginpar`）、本文の PDF インクレベル対照は
-worst 0.0010pt（`savepos-anchor-pdf` + `check-anchor-parity.py`。合印・脚注領域の
-マイクロレイアウト残差は同表に数値固定）、tate TOC 2パス不良を解消（`toc-twopass`）
+worst 0.0010pt（`savepos-anchor-pdf` + `check-anchor-parity.py`）、tate TOC 2パス不良を解消（`toc-twopass`）
 ——いずれも docs/pdftex-internals.md「出力ルーチンと semantic frames（P7）」節参照。
+合印・脚注領域のマイクロレイアウト残差も **2026-10-25 のフォローアップで解消**:
+単一脚注の罫線位置・本文列頭・（１）マーク列頭・罫線長・罫線→本文列間隔が
+10pt/12pt とも uplatex と worst 0.011pt（`footnote-parity` ゲート、
+`tests/check-footnote-parity.py`）。複数脚注段落時の先頭段列頭 +4.95pt のみ
+既知残差として残る（internals.md 同節の表参照）。
 `\tatechuyoko` は P5、jlreq-trimmarks 縦組バナー（全スロット族が uplatex ground truth と
 0.01pt 一致; tests/check-banner-tate.py）は P8 で解消済み（上表）。
 **out-of-scope は残っていない**（jlreq.cls 警告リストも空）。

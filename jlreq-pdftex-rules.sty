@@ -1201,6 +1201,13 @@
 % sub=0: rotate the normal glyph; place ink per the profile ink/vorg in em
 % units against the JFM class cell.  The old fixed raise/shift pt table is
 % replaced by per-glyph em data × current \jlreq@jareg.
+% P7 挿入物文脈フラグ \jlreqpdf@insctx (=1 のとき): 挿入物(脚注等)の
+% 内側では縦字形ボックスの ht/dp を JFM クラスの h/d×zw に正規化する。
+% 本文では従来どおり rotatebox の自然寸法(ht=エム/dp=0)のまま — 本文側は
+% 出荷回転の第一行カーンでこの規約を補正しているため(実測一致)。
+% 挿入物側は native 縦組と同じ「エム箱が行基準線を挟んで中央」の
+% 行内配置が全行(折返し行・複数段落脚注を含む)で得られる。
+\newcount\jlreqpdf@insctx \global\jlreqpdf@insctx=0
 \def\jlreqpdf@glyph@tate@rot#1{%
   \jlreqpdf@tate@classdims
   % backend-internal box: guard the frame machinery (P3)
@@ -1209,17 +1216,36 @@
     \rotatebox{90}{\jlreqpdf@orig@CJKsymbol{#1}}}%
   \global\advance\jlreqpdf@nest-1
   \wd\jlreqpdf@charbox=\jlreqpdf@cls@w\jlreq@zw
+  \ifnum\jlreqpdf@insctx=1
+    \ht\jlreqpdf@charbox=\jlreqpdf@cls@h\jlreq@zw
+    \dp\jlreqpdf@charbox=\jlreqpdf@cls@d\jlreq@zw
+  \fi
   \box\jlreqpdf@charbox}
-% sub=1: true vertical form from the auxiliary vertical font (upright,
-% no rotation).  The aux TFM is selected per family and the slot glyph
-% is typeset inside the JFM-width cell.
+% sub=1: true vertical form from the auxiliary vertical font. The aux
+% TFM is selected per family and the slot glyph is typeset inside the
+% JFM-width cell.
+% P7 脚注ブロック実測修正: 内枠（水平組み）は出荷の -90° 回転の
+% 「回転前」空間であるため、その中身はすべて +90° 予備回転して
+% 組む必要がある（rot path は \rotatebox{90} で行っている）。
+% vert path は補助縦フォントの字形を素のまま描いていたため、
+% 最終ページで全補助縦字形（（）。ー 等 sub=1 の全文字）が
+% 90° 横倒しで刷られていた（実測: fn （ が横倒し、native と
+% 形状不一致）。rot path と同じ回転を補助字形にもかけ、
+% 回転後のボックス寸法は JFM クラスの w/h/d×zw で正規化する。
+% さらに native vf と同一の置き型として、半角クラスの全角進行
+% 字形を -(1zw-セル幅) だけ行頭側へずらして描く（uplatex 実測:
+% （ セル [c,c+0.5em] に対し ink [c,c+1em]）。
 \def\jlreqpdf@glyph@tate@vert#1{%
   \jlreqpdf@tate@classdims
   \global\advance\jlreqpdf@nest1
   \setbox\jlreqpdf@charbox=\hbox{%
-    \jlreqpdf@auxfont
-    \expandafter\char\jlreqpdf@vg@slot\relax}%
+    \kern\dimexpr\jlreqpdf@cls@w\jlreq@zw-1\jlreq@zw\relax
+    \rotatebox{90}{%
+      \jlreqpdf@auxfont
+      \expandafter\char\jlreqpdf@vg@slot\relax}}%
   \global\advance\jlreqpdf@nest-1
+  \ht\jlreqpdf@charbox=\jlreqpdf@cls@h\jlreq@zw
+  \dp\jlreqpdf@charbox=\jlreqpdf@cls@d\jlreq@zw
   \wd\jlreqpdf@charbox=\jlreqpdf@cls@w\jlreq@zw
   \box\jlreqpdf@charbox}
 % no profile entry (e.g. yoko-only font in tate): rotate the plain glyph
@@ -1284,10 +1310,16 @@
 % {<w>}{<h>}{<d>}{<align>}{<left>} -- brace-group delimited (the .def
 % values are exactly one brace group each; digit-bearing control words
 % are formed via \csname at the caller, never by \def here)
+% P7: h/d も保存する（縦字形ボックスの ht/dp を JFM クラス値で
+% 正規化するため。cls@h/cls@d は {0.5} のような係数）。
 \def\jlreqpdf@splitcls#1#2#3#4#5{%
   \def\jlreqpdf@cls@w{#1}%
+  \def\jlreqpdf@cls@h{#2}%
+  \def\jlreqpdf@cls@d{#3}%
   \def\jlreqpdf@cls@align{#4}%
 }
+\def\jlreqpdf@cls@h{0.5}%
+\def\jlreqpdf@cls@d{0.5}%
 % P7: \jlreq@pdftex@tate@chtc@dp -- jlreq.cls measures \Cht/\Cdp via
 % \hbox{阿} at class load (before begin document); under the pdfTeX
 % tate path the glyph layer gives horizontal-metric box extents, not

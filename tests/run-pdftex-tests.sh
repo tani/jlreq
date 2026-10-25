@@ -1067,6 +1067,47 @@ else
     fail "anchor-parity" "$ap_pd/compile.out"
   fi
 
+
+  # ---- T8c: P7 脚注ブロック・パリティゲート（10pt/12pt） ----
+  # 検査: d-tate の脚注ブロック微細レイアウト（罫線位置・本文列頭・
+  # （１）マーク列頭・罫線長・罫線→本文列間隔）が uplatex 同一ソース
+  # PDF とインクレベルで一致すること（tol 0.5pt; 実測 worst 0.003pt）。
+  # これは T3 以来の「tate 脚注・合印マイクロレイアウト残差」
+  # （旧実測: 罫線 -8.54pt / 本文列 -1.72pt / マーク -3.71pt @10pt）
+  # を閉じた P7 修正（脚注罫線カーン捕捉・補助縦フォントの実寸
+  # スケール・縦字形の +90° 予備回転と vf 同一置き型・挿入物文脈の
+  # ht/dp 正規化 + 先頭脚注の高さ/行末深さストラット）の回帰ガード。
+  # fontsize=10pt と 12pt の両方で検査する。up 変換は dvipdfmx -p a5。
+  for fnfs in 10 12; do
+    fp_pd=$(outdir_for t8c footnote-parity "pd${fnfs}")
+    fp_up=$(outdir_for t8c footnote-parity "up${fnfs}")
+    fp_rc=0
+    sed -e "s/\\\\documentclass\\[pdflatex,tate,paper=a5\\]/\\\\documentclass[pdflatex,tate,paper=a5,fontsize=${fnfs}pt]/" \
+        tests/fixtures/pdflatex-tate/footnote-parity.tex >"$fp_pd/src.tex"
+    if ! run_compile x "$fp_pd" pdflatex "$fp_pd/src.tex"; then
+      fp_rc=1
+    fi
+    sed -e "s/\\\\documentclass\\[pdflatex,tate,paper=a5\\]/\\\\documentclass[uplatex,tate,paper=a5,fontsize=${fnfs}pt]/" \
+        tests/fixtures/pdflatex-tate/footnote-parity.tex >"$fp_up/src.tex"
+    if ! run_compile x "$fp_up" uplatex "$fp_up/src.tex"; then
+      fp_rc=1
+    fi
+    if ! dvipdfmx -p a5 -o "$fp_up/up.pdf" "$fp_up/src.dvi" \
+         >"$fp_up/dvipdfmx.out" 2>&1; then
+      fp_rc=1
+    fi
+    if [ "$fp_rc" -eq 0 ]; then
+      if python3 tests/check-footnote-parity.py \
+           "$fp_pd/src.pdf" "$fp_up/up.pdf" >"$fp_pd/parity.out" 2>&1; then
+        pass "footnote-parity-${fnfs}pt (tate fn block ink parity pd/up: rule/text/mark/length/gap)"
+      else
+        fail "footnote-parity-${fnfs}pt" "$fp_pd/parity.out"
+      fi
+    else
+      fail "footnote-parity-${fnfs}pt" "$fp_pd/compile.out"
+    fi
+  done
+
   # ---- T8c: P7 家具オプション縦組み対照ゲート ----
   # 検査: head_space/foot_space/gutter/fore_edge 非対称 + twoside +
   # twocolumn + 遅延脚注 + \marginpar を d-tate で組んだときの

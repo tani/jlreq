@@ -234,7 +234,17 @@
 % mc/gt 軸はこの論理判定で一対一に対応する。
 \def\jlreqpdf@aux@fam{mc}%
 \def\jlreqpdf@auxfont@select#1{%
-  \font\jlreqpdf@auxtok=\csname jlreqpdf@fontprofile@\jlreqpdf@aux@fam @tfm@#1\endcsname\relax
+  % P7 脚注ブロック実測修正: 補助縦TFMは design size 10pt のままでは
+  % 現在サイズに追従しない（footnotesize の縦約物が 9.96pt で組まれ、
+  % uplatex は同位置に 7.97pt で組む。fn 行の高さが strut ではなく
+  % この未スケール字形の ink で決まってしまい、列頭 1.72pt の残差と
+  % マーク（１）の -2pt 出張りの主因）。\jlreq@jareg は selectfont で
+  % サイズ追従する（cls の size@update hook）ため at 指定で実寸化する。
+  \edef\jlreqpdf@aux@name{%
+    \csname jlreqpdf@fontprofile@\jlreqpdf@aux@fam @tfm@#1\endcsname}%
+  \expandafter\font\expandafter\jlreqpdf@auxtok
+    \csname jlreqpdf@aux@name\expandafter\endcsname\space
+    at\jlreq@jareg\relax
   \jlreqpdf@auxtok
 }
 \def\jlreqpdf@auxfont{%
@@ -621,7 +631,21 @@
         \ifnum\jlreqpdf@pagedir@count=1
           % tate 論理ページ: 本文箱を -90° 回転（advance=元の ht+dp、
           % cross=体幅半分ずつ — rotatebox の正規化。回転はここだけ）。
-          \setbox\@outputbox=\hbox{\rotatebox{-90}{\box\@outputbox}}%
+          % 【第一行リーディング補正（縦組列配置の完全一致, 2026-10-25
+          %  実測発見）】native 縦組（uplatex）では最初の列のグリフは
+          % 版面の右端から topskip−Cdp だけ内側に来る（galley 第一行の
+          % baseline が topskip 位置にあり、グリフが baseline から Cdp
+          % だけ行頭側へ出るため。実測: uplatex col1 右端 359.7pt =
+          % 版面右端 365.06pt − (topskip 10pt − Cdp 5pt) + ink 0.36）。
+          % 回転箱は galley の上端を回転後の右端にそのまま置くため、
+          % この第一行オフセットが失われ、列全体が版面右端に
+          % 貼り付いていた（実測 +4.98pt ≈ topskip−Cdp）。カーンで
+          % (Cdp−topskip) だけ左へ戻して native と一致させる。
+          % この補正は脚注ブロック・合印も同一の第一行機構で
+          % 下流するため、それらの残差も同時に閉じる。
+          \setbox\@outputbox=\hbox{%
+            \kern\dimexpr\Cdp-\topskip\relax
+            \rotatebox{-90}{\box\@outputbox}}%
         \else
           % yoko 論理ページ（theindex）: 内枠は既に最終方位なので
           % 無回転で出す。行長（\textwidth）は版面巾より狭く、余白は

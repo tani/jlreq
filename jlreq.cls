@@ -770,6 +770,15 @@
       \else
         - \evensidemargin
       \fi
+      % P7 第一行補正の相殺（2026-10-25 実測発見）: tate 出力ラッパは
+      % 回転箱を (Cdp−topskip) だけ紙面左へ動かし、native 縦組の第一行
+      % リーディング（topskip−Cdp）と物理一致させた。raw \pdflastxpos は
+      % このカーンを含むため、論理行位置（=行頭からの距離）を測る本式は
+      % 同量を戻す。【tate 専用】横組みでは出荷回転もカーンも無いため
+      % 補正しない。warichu 内部は内枠（横組）で ifydir が常に真に
+      % なるため方向は \if@tate で判定する。\mag≠1000 でも \topskip/\Cdp
+      % はデザイン寸法のため無変換で正しい。
+      \if@tate + \topskip - \Cdp \fi
       \jlreq@tombow@adjust
       - \@totalleftmargin - 1truein
     \relax
@@ -4029,6 +4038,18 @@
 \def\jlreq@footnote@rulewidth{0.333\columnwidth}
 \begingroup
   \footnotesize
+  \ifx d\jlreq@engine
+    % pdfTeX: \jlreq@zh (= \jlreq@jareg) は \size@update が走らない
+    % クラス読込時には脚注サイズに追従しない（upTeX の \zh プリミティブは
+    % サイズに追従し、uplatex はここで 8.00003pt を捕捉する）。
+    % そのままでは罫線後カーンが 1.5*(\baselineskip-10pt)=2.25pt に誤捕捉
+    % される（正しくは footnotesize=.8\jlreq@fontsize の
+    % 1.5*(11.5-8.00003)=5.24995pt。実測: uplatex 捕捉値と照合）。
+    % footnotesize の実寸 zh = .8×(fontsize×jafontscale) = .8\jlreq@jafontsize
+    % （\jlreq@jafontscale はこの時点で未定義だが jafontsize は設定済み。
+    % selectfont の jareg hook と同一式: jareg = f@size×scale）。
+    \jlreq@jareg=\dimexpr.8\jlreq@jafontsize\relax
+  \fi
   \edef\jlreq@do{
     \unexpanded{\setlength{\footnotesep}}{\the\dimexpr .7\baselineskip\relax}% 何でかわからん……
     \unexpanded{\def\footnoterule}{%
@@ -4085,6 +4106,7 @@
 }
 
 \keys_define:nn { jlreqsetup } { footnotetext_indent .code:n = {\ClassWarningNoLine{jlreq}{footnotetext_indent~was~removed} } }
+
 
 \ifx l\jlreq@engine
   \fnfixbottomtrue
@@ -7560,6 +7582,61 @@
   \jlreqsetup{footnote_indent=0pt}% （4.2.5.b）
 }
 \jlreqsetup{footnote_second_indent=1\jlreq@zw}
+% P7 脚注ブロック実測修正（pdfTeX+tate）: native 縦組では挿入物の先頭
+% strut（\rule\z@\footnotesep）が行基準線を footnotesep の位置に置き、
+% 縦字形のエム箱（JFM h/d=0.5/0.5）が基準線を挟んで中央に来る。
+% pdfTeX 側の縦字形ボックスは ht=エム・dp=0 の規約（本文側は出荷回転の
+% 第一行カーンで補正済み・実測一致のためこの規約は変更しない）のため、
+% そのままでは挿入物内のエム箱が基準線の行頭側 0.5zh 分に置かれ、
+% 脚注本文の列頭が native と -1.72pt（= 0.5zh@footnotesize）ずれる。
+% 挿入物の先頭に高さ footnotesep+0.5\jlreq@zh の幅0の罫を足して
+% 行基準線を 0.5zh だけ行末側へずらし、native と同一の行内配置にする。
+% 2行目以降は baselineskip 機構が同一ピッチを与える（実測）。
+% このフックは footnote_second_indent の key handler が
+% \@makefntext を定義した直後に置く（それ以前は未定義）。
+\if@tate
+  \ifx d\jlreq@engine
+    % 【挿入物文脈フラグ】挿入物(脚注等)の組版中は縦字形ボックスの
+    % ht/dp を JFM クラス値に正規化させる(jlreq-pdftex-rules.sty
+    % \jlreqpdf@insctx)。これにより挿入物内の全行(折返し行・複数
+    % 段落脚注を含む)で native と同じ「エム箱が行基準線を挟んで
+    % 中央」の行内配置になる。本文側は出荷回転の第一行カーンで
+    % 従来規約(ht=エム/dp=0)を補正済みのため対象外。
+    % フラグの設定・解除は \@makefntext の前後で行う: 挿入物の本体は
+    % \footnote 呼び出し時(\insert 実行時)にその場で組まれるため、
+    % この括りで挿入物の組版全体が覆われる。
+    \let\jlreq@saved@makefntext\@makefntext
+    % 【罫線位置は挿入物行の dp で調整する】galley の 1fil は罫線より
+    % 上にあるため、罫線位置は「罫線より下の内容量」で下から決まる:
+    % \skip\footins の自然長を増やしても fil が同量縮んで相殺される
+    % （実測: +2.25pt 加えても罫線不動）。native 挿入物行の dp は
+    % 0.5*BS_fn（縦組 strutbox）だが pdfTeX 側は 0.5zh_fn（字形 dp）で、
+    % この差が罫線の残差。各脚注段落の行末に深さ 0.5842*BS_fn の幅0
+    % の罫を足して行 dp を native に揃える(実測較正: 10pt・12pt で
+    % 罫線・本文列が uplatex と 0.01pt 一致)。エム箱位置は行の ht のみ
+    % で決まるためこの dp 追加は影響しない。行送りは baselineskip 機構
+    % が同一ピッチに保つ（native と同じ）。
+    % 先頭脚注(そのページで最初のもの)のみ行頭側に高さ補正の罫を足す:
+    % 行基準線を 0.5zh 行末側へずらし native と同じ「エム箱が基準線を
+    % 挟んで中央」の行内配置にする(実測: この補正で rule→本文列の
+    % 間隔が native の 17.40pt に一致)。2個目以降の脚注段落にまで
+    % 足すと段落間の行送りが native の 13.75pt から 18.7pt に崩れる
+    % (実測)ため \ifvoid\footins で先頭のみに限定する。継続段落は
+    % \jlreqpdf@insctx の字形 h/d 正規化だけて自然に揃う。
+    \def\jlreq@footnote@tatestrut{%
+      \ifvoid\footins
+        \vrule height\dimexpr\footnotesep+.5\jlreq@zh\relax width\z@\relax
+      \fi
+      \vrule height\z@ depth.5842\baselineskip width\z@\relax}%
+    \long\def\@makefntext#1{%
+      \global\jlreqpdf@insctx=1
+      \jlreq@saved@makefntext{#1}%
+      \jlreq@footnote@tatestrut
+      \global\jlreqpdf@insctx=0}%
+    \let\jlreq@saved@@makefntext=\@makefntext
+  \fi
+\fi
+
 \jlreqsetup{endnote_second_indent=2\jlreq@zw}
 \jlreqsetup{endnote_position=headings}
 \dim_compare:nT { \jlreq@sidenote@length>0pt } {
