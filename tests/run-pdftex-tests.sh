@@ -155,13 +155,17 @@ run() {
 echo "== T0: プリフライト（必須資源の検査; 欠損はSKIPではなくFAIL） =="
 # ===========================================================================
 T0_MISSING=""
-# JFM .def 12組（P2 manifest pdftex-jfm-manifest.lua が唯一の一覧）:
-# 欠損している .def があれば T0 が特定ファイル名つきで FAIL にする。
-for f in jlreq-pdftex-jfm.def jlreq-pdftex-jfm-b.def jlreq-pdftex-jfm-z.def \
-         jlreq-pdftex-jfm-bz.def jlreq-pdftex-jfm-n.def jlreq-pdftex-jfm-bn.def \
-         jlreq-pdftex-jfm-tate.def jlreq-pdftex-jfm-tate-b.def \
-         jlreq-pdftex-jfm-tate-z.def jlreq-pdftex-jfm-tate-bz.def \
-         jlreq-pdftex-jfm-tate-n.def jlreq-pdftex-jfm-tate-bn.def \
+# JFM .def 12組: pdftex-jfm-manifest.lua（P2 が唯一の一覧とする生成
+# manifest）から .def ファイル名を抽出する。manifest が読めない場合は
+# それ自体が FAIL（下の必須チェックで拾う）。
+T0_JFM_DEFS=$(sed -n 's/.*file[[:space:]]*=[[:space:]]*"\(jlreq-pdftex-jfm[^"]*\.def\)".*/\1/p' \
+  pdftex-jfm-manifest.lua 2>/dev/null | sort -u)
+T0_JFM_COUNT=$(printf '%s\n' $T0_JFM_DEFS | grep -c '\.def$' || true)
+if [ "$T0_JFM_COUNT" -ne 12 ]; then
+  echo "FAIL: T0-preflight manifest yields $T0_JFM_COUNT JFM defs (want 12) from pdftex-jfm-manifest.lua"
+  FAILED=$((FAILED+1))
+fi
+for f in $T0_JFM_DEFS \
          pdftex-jfm-manifest.lua \
          jlreq-pdftex.sty jlreq-pdftex-rules.sty jlreq-pdftex-ruby.sty \
          jlreq-pdftex-paragraph.sty \

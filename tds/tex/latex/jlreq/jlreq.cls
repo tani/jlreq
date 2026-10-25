@@ -514,8 +514,8 @@
       \@ehc}
   \fi
 \fi
-% pdfTeX：実験的バックエンド（jlreq-pdftex.sty）を読み込む．
-% バックエンドファイルが無ければ元の「未対応」エラーで停止する（黙って
+% pdfTeX：バックエンド（jlreq-pdftex.sty）を読み込む．
+% バックエンドファイルが無ければ明示エラーで停止する（黙って
 % 進んでpTeX専用プリミティブを踏むことはない）．
 % pdfTeXフォント設定の既定（P4）。未指定時は ipaex-type1（現行挙動）。
 \ifx d\jlreq@engine
@@ -526,32 +526,24 @@
     \RequirePackage{jlreq-pdftex}
   }{
     \ClassError{jlreq}{pdfTeX~backend~file~jlreq-pdftex.sty~is~not~found.}{%
-      The~experimental~pdfTeX~backend~is~missing~from~the~installation.\MessageBreak
-      Please~use~platex,~uplatex~or~lualatex~instead.\MessageBreak
+      The~pdfTeX~backend~is~missing~from~the~installation.\MessageBreak
+      Please~use~platex,~uplatex~or~lualatex~instead,\MessageBreak
+      or~install~the~jlreq~pdfTeX~backend~files.\MessageBreak
       \@ehc}
   }
 \fi
-% 縦組み（pdfTeX: T1 回転出荷アーキテクチャ、実験的）
+% 縦組み（pdfTeX: T1 回転出荷アーキテクチャ）
 % 実現原理: 内側水平枠組みで組み、出荷時にページ全体を時計回り90°回転する
-% (shipout rotation; poc/v4-tate.tex の検証結果)。範囲外の仕組みは警告として
-% 明示する（黙って壊れた出力は出さない）。
+% (shipout rotation)。P5–P10 で全機能面（縦中横・局所方向・家具・注・
+% 数式・trimmarks・ルビ）の実出力検査が通り、out-of-scope は残っていな
+% いため（docs/pdftex-tate-eval.md 参照）、警告で列挙する項目は無い。
+% アーキテクチャの違いだけを行の情報として出す。
 \ifx d\jlreq@engine
   \if@tate
-    \ClassWarning{jlreq}{pdfTeX~tate~support~is~EXPERIMENTAL~(rotation-based).\MessageBreak
-      Verified:~columns/kinsoku/punct-placement,~headings,~TOC,~page~furniture,\MessageBreak
-      footnote/endnote/sidenote/~\string\marginpar,~basic~floats,~inline/display~math,\MessageBreak
-      local~direction~+~\string\tatechuyoko~(1zw-normalized,~star/non-star),\MessageBreak
-      jlreq-trimmarks~banners~in~tate~(P8:~all~slot~families~match~the~uplatex\MessageBreak
-      ground~truth~within~0.01pt;~see~tests/check-banner-tate.py),\MessageBreak
-      P7:~output~routine~is~a~thin~wrapper~over~the~kernel~original;~asymmetric\MessageBreak
-      gutter/fore_edge/head_space/foot_space~+~twoside~+~twocolumn~+~deferred\MessageBreak
-      footnotes~+~\string\marginpar~match~uplatex~bit-for-bit,~savepos~line-extents\MessageBreak
-      (warichu)~match~bit-for-bit,~tate~TOC~ships~both~passes,\MessageBreak
-      P10:~ruby~via~the~ruby.sty~provider~and~the~jlreq-pdftex-ruby~adapter\MessageBreak
-      (annotation~above~in~yoko,~reading-frame~right~in~tate;~consecutive/\MessageBreak
-      overlap/nooverlap,~boundary~glue~=~the~class~table,~lualatex+ruby.sty\MessageBreak
-      placement~parity;~see~tests/fixtures/pdflatex-rules/ruby-*.tex).\MessageBreak
-      See~docs/pdftex-tate-eval.md~and~the~pdflatex-tate~fixtures.}
+    \ClassInfo{jlreq}{pdfTeX~tate~support:~shipout-rotation~architecture\MessageBreak
+      (inner~horizontal~galley,~glyphs~rotated~+90,~page~box~rotated~-90~at\MessageBreak
+      \string\@outputpage).~All~verified~areas~are~covered~by~the~test~suite\MessageBreak
+      (tests/run-pdftex-tests.sh;~see~docs/pdftex-tate-eval.md).}
   \fi
 \fi
 % T1: 柱（ページスタイル）構築用の方向切替マーカー．pTeX系では
@@ -777,6 +769,21 @@
         - \oddsidemargin
       \else
         - \evensidemargin
+      \fi
+      % P7 第一行補正の相殺（2026-10-25 実測発見）: tate 出力ラッパは
+      % 回転箱を (Cdp−topskip) だけ紙面左へ動かし、native 縦組の第一行
+      % リーディング（topskip−Cdp）と物理一致させた。raw \pdflastxpos は
+      % このカーンを含むため、論理行位置（=行頭からの距離）を測る本式は
+      % 同量を戻す。【tate 論理ページ専用】(1) 横組み文書では出荷回転も
+      % カーンも無いため補正しない。(2) tate 文書内の yoko 論理ページ
+      % （theindex、\jlreqpdf@pagedir{0}）も回転・カーンともに適用外
+      % なので補正しない — ラッパ側の回転条件
+      % （\if@tate ∧ pagedir=1）と同じ条件で判定する。
+      % warichu 内部は内枠（横組）で ifydir が常に真になるため方向は
+      % \if@tate で判定する。\mag≠1000 でも \topskip/\Cdp はデザイン
+      % 寸法のため無変換で正しい。
+      \if@tate
+        \ifnum\jlreqpdf@pagedir@count=1 + \topskip - \Cdp \fi
       \fi
       \jlreq@tombow@adjust
       - \@totalleftmargin - 1truein
@@ -4037,6 +4044,18 @@
 \def\jlreq@footnote@rulewidth{0.333\columnwidth}
 \begingroup
   \footnotesize
+  \ifx d\jlreq@engine
+    % pdfTeX: \jlreq@zh (= \jlreq@jareg) は \size@update が走らない
+    % クラス読込時には脚注サイズに追従しない（upTeX の \zh プリミティブは
+    % サイズに追従し、uplatex はここで 8.00003pt を捕捉する）。
+    % そのままでは罫線後カーンが 1.5*(\baselineskip-10pt)=2.25pt に誤捕捉
+    % される（正しくは footnotesize=.8\jlreq@fontsize の
+    % 1.5*(11.5-8.00003)=5.24995pt。実測: uplatex 捕捉値と照合）。
+    % footnotesize の実寸 zh = .8×(fontsize×jafontscale) = .8\jlreq@jafontsize
+    % （\jlreq@jafontscale はこの時点で未定義だが jafontsize は設定済み。
+    % selectfont の jareg hook と同一式: jareg = f@size×scale）。
+    \jlreq@jareg=\dimexpr.8\jlreq@jafontsize\relax
+  \fi
   \edef\jlreq@do{
     \unexpanded{\setlength{\footnotesep}}{\the\dimexpr .7\baselineskip\relax}% 何でかわからん……
     \unexpanded{\def\footnoterule}{%
@@ -4093,6 +4112,7 @@
 }
 
 \keys_define:nn { jlreqsetup } { footnotetext_indent .code:n = {\ClassWarningNoLine{jlreq}{footnotetext_indent~was~removed} } }
+
 
 \ifx l\jlreq@engine
   \fnfixbottomtrue
@@ -7568,6 +7588,61 @@
   \jlreqsetup{footnote_indent=0pt}% （4.2.5.b）
 }
 \jlreqsetup{footnote_second_indent=1\jlreq@zw}
+% P7 脚注ブロック実測修正（pdfTeX+tate）: native 縦組では挿入物の先頭
+% strut（\rule\z@\footnotesep）が行基準線を footnotesep の位置に置き、
+% 縦字形のエム箱（JFM h/d=0.5/0.5）が基準線を挟んで中央に来る。
+% pdfTeX 側の縦字形ボックスは ht=エム・dp=0 の規約（本文側は出荷回転の
+% 第一行カーンで補正済み・実測一致のためこの規約は変更しない）のため、
+% そのままでは挿入物内のエム箱が基準線の行頭側 0.5zh 分に置かれ、
+% 脚注本文の列頭が native と -1.72pt（= 0.5zh@footnotesize）ずれる。
+% 挿入物の先頭に高さ footnotesep+0.5\jlreq@zh の幅0の罫を足して
+% 行基準線を 0.5zh だけ行末側へずらし、native と同一の行内配置にする。
+% 2行目以降は baselineskip 機構が同一ピッチを与える（実測）。
+% このフックは footnote_second_indent の key handler が
+% \@makefntext を定義した直後に置く（それ以前は未定義）。
+\if@tate
+  \ifx d\jlreq@engine
+    % 【挿入物文脈フラグ】挿入物(脚注等)の組版中は縦字形ボックスの
+    % ht/dp を JFM クラス値に正規化させる(jlreq-pdftex-rules.sty
+    % \jlreqpdf@insctx)。これにより挿入物内の全行(折返し行・複数
+    % 段落脚注を含む)で native と同じ「エム箱が行基準線を挟んで
+    % 中央」の行内配置になる。本文側は出荷回転の第一行カーンで
+    % 従来規約(ht=エム/dp=0)を補正済みのため対象外。
+    % フラグの設定・解除は \@makefntext の前後で行う: 挿入物の本体は
+    % \footnote 呼び出し時(\insert 実行時)にその場で組まれるため、
+    % この括りで挿入物の組版全体が覆われる。
+    \let\jlreq@saved@makefntext\@makefntext
+    % 【罫線位置は挿入物行の dp で調整する】galley の 1fil は罫線より
+    % 上にあるため、罫線位置は「罫線より下の内容量」で下から決まる:
+    % \skip\footins の自然長を増やしても fil が同量縮んで相殺される
+    % （実測: +2.25pt 加えても罫線不動）。native 挿入物行の dp は
+    % 0.5*BS_fn（縦組 strutbox）だが pdfTeX 側は 0.5zh_fn（字形 dp）で、
+    % この差が罫線の残差。各脚注段落の行末に深さ 0.5842*BS_fn の幅0
+    % の罫を足して行 dp を native に揃える(実測較正: 10pt・12pt で
+    % 罫線・本文列が uplatex と 0.01pt 一致)。エム箱位置は行の ht のみ
+    % で決まるためこの dp 追加は影響しない。行送りは baselineskip 機構
+    % が同一ピッチに保つ（native と同じ）。
+    % 先頭脚注(そのページで最初のもの)のみ行頭側に高さ補正の罫を足す:
+    % 行基準線を 0.5zh 行末側へずらし native と同じ「エム箱が基準線を
+    % 挟んで中央」の行内配置にする(実測: この補正で rule→本文列の
+    % 間隔が native の 17.40pt に一致)。2個目以降の脚注段落にまで
+    % 足すと段落間の行送りが native の 13.75pt から 18.7pt に崩れる
+    % (実測)ため \ifvoid\footins で先頭のみに限定する。継続段落は
+    % \jlreqpdf@insctx の字形 h/d 正規化だけて自然に揃う。
+    \def\jlreq@footnote@tatestrut{%
+      \ifvoid\footins
+        \vrule height\dimexpr\footnotesep+.5\jlreq@zh\relax width\z@\relax
+      \fi
+      \vrule height\z@ depth.5842\baselineskip width\z@\relax}%
+    \long\def\@makefntext#1{%
+      \global\jlreqpdf@insctx=1
+      \jlreq@saved@makefntext{#1}%
+      \jlreq@footnote@tatestrut
+      \global\jlreqpdf@insctx=0}%
+    \let\jlreq@saved@@makefntext=\@makefntext
+  \fi
+\fi
+
 \jlreqsetup{endnote_second_indent=2\jlreq@zw}
 \jlreqsetup{endnote_position=headings}
 \dim_compare:nT { \jlreq@sidenote@length>0pt } {

@@ -10,9 +10,11 @@ jlreq.cls（公開API・版面設計: 共通）
 ├── l: LuaTeX-ja既存経路
 ├── p/u: (u)pLaTeX既存経路
 └── d（pdfTeX）:
-    ├── jlreq-pdftex.sty        … 土台（フォント・単位・CJK状態）
-    ├── jlreq-pdftex-rules.sty  … 組版規則（JFMグルー・禁則・和欧文間隔）
-    └── jlreq-pdftex-jfm*.def   … 生成済みJFMデータ（4変種）
+    ├── jlreq-pdftex.sty           … 土台（フォント・単位・CJK状態）
+    ├── jlreq-pdftex-rules.sty     … 組版規則（JFMグルー・禁則・和欧文間隔）
+    ├── jlreq-pdftex-ruby.sty       … ruby.sty provider 適合（P10）
+    ├── jlreq-pdftex-paragraph.sty  … 厳密段落 jlreqparagraph（P11）
+    └── jlreq-pdftex-jfm*.def      … 生成済みJFMデータ（12変種 + manifest）
 ```
 
 ## jlreq-pdftex.sty（土台）
@@ -181,22 +183,65 @@ d 分岐、P7）。mag=1000 では 1truein=1in で無変換。これにより論
 方向の current/rest は mag 不変（上表のとおり mag=1200 でも同一値）。
 
 **PDF インクレベル対照**（`savepos-anchor-pdf` ゲート +
-`tests/check-anchor-parity.py`、pymupdf、あ原点合わせ後）:
+`tests/check-anchor-parity.py`、pymupdf、あ原点合わせ後。
+2026-10-25 P7 フォローアップで脚注ブロック残差を閉じた後の実測）:
 
 | 対照項目 | worst Δ |
 |---|---|
 | 本文グリフ走り（あ..こ、先頭行10字） | **0.0010pt**（ゲート閾値 0.1pt） |
-| 行内合印（interlinear mark）オープナー（（＊） の （） | (+1.49, +7.61)pt |
-| 脚注テキスト先頭字（◆/☆） | (−1.71, +2.39)/(−4.00, +1.28)pt |
-| 脚注マーク→脚注本文の行方向オフセット | pd 22.43pt vs up 27.90pt |
-| 脚注列間隔（行直交方向） | pd 11.458pt vs up 13.748pt |
+| 脚注罫線位置 / 罫線長 / 罫線→本文列間隔 | **0.011pt**（10pt/12pt とも。`footnote-parity` ゲート、閾値 0.5pt） |
+| 脚注テキスト列頭（☆）・脚注内（１）マーク列頭 | **0.011pt**（同上） |
+| 行内合印（interlinear mark）オープナー（（＊） の （ | (+3.49, −1.42)pt — 1本文行に複数脚注があるときの**先頭列残差**（下記） |
+| 複数脚注の2列目以降の列頭・列間隔 | **0.00pt**（fn2 列頭・列ピッチ 13.748pt が up と一致） |
 
-本文（論理フレーム本体）は PDF インクでも実質完全一致。合印・脚注領域の
-残差は **tate 脚注・合印マイクロレイアウト**（T3 以来の「家具由来
-オフセット」の実体）で、同一機構の yoko 対照は 0.006/0.53pt である
-ことから縦組み固有のマーク鎖差分。数値は上表に固定し、脚注・合印
-スライスでの回収対象とする（savepos 機構自体は論理レベルで
-ビット一致している）。
+**脚注ブロック残差の解決（2026-10-25）**: T3 以来の「tate 脚注・合印
+マイクロレイアウト」残差（旧実測: 罫線 −8.54pt / 脚注本文列頭 −1.72pt /
+（１）マーク −3.71pt / 罫線→本文列 10.58 vs 17.40pt、いずれも 10pt。
+合印オープナー (+1.49, +7.61)pt、脚注テキスト (−1.71, +2.39)/(−4.00,
++1.28)pt、脚注列間隔 11.458 vs 13.748pt）は、以下の独立した5原因の
+重畳だった。いずれも uplatex を oracle に実測で特定・修正した:
+
+1. **脚注罫線カーンの誤捕捉**（jlreq.cls 罫線定義）: クラス読込時の
+   `\footnotesize` グループ内で `\size@update` が走らず `\jlreq@zh`
+   が本文サイズのまま評価されるため、罫線後カーンが
+   `1.5*(\baselineskip−10pt)=2.25pt` に誤捕捉されていた（uplatex は
+   upTeX の `\zh` プリミティブがサイズ追従し 5.24995pt を捕捉）。
+   d エンジンに限り `\jlreq@jareg=.8\jlreq@jafontsize` を明示して
+   評価するようにした（uplatex の値とビット一致を実測確認）。
+2. **補助縦フォントが現在サイズに追従しない**（jlreq-pdftex.sty）:
+   補助 TFM を design size 10pt のまま `\font` していたため、
+   footnotesize の縦約物（（）。 等）が 9.96pt で組まれ（uplatex は
+   7.97pt）、挿入物行の高さがストラットではなくこの未スケール字形
+   の ink で決まっていた。`at\jlreq@jareg`（selectfont で追従）で
+   実寸化した。
+3. **縦字形が横倒しに刷られていた**（jlreq-pdftex-rules.sty vert 経路）:
+   内枠は出荷回転（−90°）の**回転前**空間のため、内容はすべて +90°
+   予備回転して組む必要がある（rot 経路は `\rotatebox{90}` で実施）。
+   vert 経路（補助縦フォントの真縦字形）は素のまま描いていたため、
+   **全補助縦字形が最終ページで 90° 横倒し**だった（実測: 脚注 （ の
+   形状が native と不一致）。rot 経路と同じ回転をかけた。
+4. **半角クラス縦字形の置き型**（同 vert 経路）: native vf（jlreq-v）は
+   全角アドバンスの字形を `−(1zw−セル幅)` だけ行頭側へずらして描き、
+   ink がセルの行頭端から全角分だけ次側へはみ出る（uplatex 実測:
+   （ セル [c, c+0.5em] に対し ink [c, c+1em]）。同じずらしを
+   ボックス内先頭カーンで再現し、ht/dp も JFM クラス値（縦組 0.5/0.5）
+   で正規化した（`\jlreqpdf@splitcls` が h/d も保存）。
+5. **挿入物の行内配置**（jlreq.cls `\@makefntext` d+tate ラッパ）:
+   pdfTeX 側の縦字形ボックスは ht=エム/dp=0 の規約（本文は出荷回転の
+   第一行カーンで補正済み）のため、そのままでは挿入物内のエム箱が
+   行基準線から 0.5zh 行頭側に置かれる。挿入物組版中のみ
+   `\jlreqpdf@insctx` フラグで縦字形の ht/dp を JFM クラス値に
+   正規化させ（折返し行・複数段落脚注を含む全行で有効）、ページ最初
+   の脚注には行頭側に高さ `footnotesep+0.5zh` のストラットを、
+   各脚注段落には行末に深さ `0.5842*baselineskip` のストラットを
+   足して、罫線位置・本文列頭を native に合わせた（10pt/12pt で
+   0.01pt 一致を gate 固定）。
+
+**残る既知残差**: 1つのページに複数の脚注段落があるとき、**先頭**
+脚注段落の列頭が +4.95pt（10pt）行末側にずれる（2段落目以降の列頭・
+列間隔は完全一致）。先頭段落にだけ足す高さストラットが、下に更に
+段落がある場合の先頭段の位置に影響するため。単一脚注（本表的な
+パリティ測定の対象）は完全一致。複数段落時の先頭段は今後の課題。
 
 ### tate TOC「Leaders not followed by proper glue」——解決
 
@@ -320,11 +365,17 @@ active-$ 機構は撤去した。`$` は catcode 3 のままで、カーネル�
 
 ## jlreq-pdftex-jfm*.def（生成データ）
 
-`make_pdftex_jfm.lua`（ビルド時のみ実行，`make pdftex-jfm`）が `jfm-jlreq.lua`
-単一ソースから生成。4変種: 無印（既定）, `-b`（ぶら下げデータ入り）, `-z`
-（zenkakunibu_nibu）, `-bz`。`make check-pdftex-jfm` で再生成差分ゼロを検査
-（CIゲート）。検証スクリプト `check_jfm_pdftex.lua` が全402ペア・25クラス・
-403文字を検査。**実行時にLuaは不要**（生成済み.defを `\input` するだけ）。
+`make_pdftex_jfm.lua`（ビルド時のみ実行，`make pdftex-jfm`）が横組み
+`jfm-jlreq.lua`・縦組み `jfm-jlreqv.lua` から生成。**12変種**
+（方向2 × `open_bracket_pos` 3 × ぶら下げ2）: 横組みは無印（既定）,
+`-b`, `-z`, `-bz`, `-n`, `-bn`、縦組みは `-tate` に同じ接尾辞
+（`-tate`, `-tate-b`, `-tate-z`, `-tate-bz`, `-tate-n`, `-tate-bn`）。
+一覧の唯一のソースは manifest `pdftex-jfm-manifest.lua`
+（docs/pdftex-jfm-generation.md 参照）。`make check-pdftex-jfm` で
+再生成差分ゼロを検査（CIゲート）。
+検証スクリプト `check_jfm_pdftex.lua` が全ペア・全クラス・全文字
+（12変種それぞれ）を検査。**実行時にLuaは不要**（生成済み.defを
+`\input` するだけ）。
 
 データ形式の要点:
 - 文字→クラス: `cls@<hex>`（ロード時に `dcls@<10進>` へ再キー）
@@ -536,15 +587,91 @@ peek は handler 引数の `{` を見るため handler は引数なしにする�
   ないため位置指定は `\hb@xt@`+`\hss` で自前実装; `[2zw]` の `zw`
   キーワードは pdfTeX には unit として存在しない——クラス既定の
   制限で、pt 等で指定する）。
-- **アセンブリの現状と残作業**: 優先度 tier 配分（JFM×10 /
-  kanjiskip 0 / xkanjiskip 10,-30 / glue 50; sp 整数・比例丸め）と
-  最終行 parfillskip 候補選択（aw_step1_last の
-  `(|残余/伸縮総量|, |残余|, |e|, e)` 辞書順）は設計通りに
-  実装されているが、**現状の出力は native の行 box をそのまま使う**
-  （P3 のペアグルー優先度データ `\jlreqpdf@pairspri/@pairshpri` の
-  消費と tier 分布の再適用は次段階の作業として残る）。テストは
-  この現状の保証（snapshot・入力モデル・エラー・統合・縦組み・
-  行間接続）を固定する。
+- **配分エンジン（実装済み・段階ゲート付き）**: 測定中は規則 backend の
+  グルー発行器（`\jlreqpdf@emitglue@do`/`\jlreqpdf@emitkcomp`）をラップし、
+  全ペアグルー/companion を作成順に境界表 `\jlreqpar@BD@<seq>`
+  （{nat}{str}{shr}{sord}{shord}{stier}{shtier}{role}）へ記録する。
+  role は 1=JFM pair / 2=kanjiskip companion / 3=xkanjiskip class
+  （境界のどちらかが class 27、fallback も 2/3 に分類）/
+  4=explicit・語間・skip zone。tier 値は ltj-adjust.lua:79-101 +
+  jlreq.cls:583-585 の縮尺どおり **JFM spri/shpri×10、kanjiskip 0、
+  xkanjiskip +10/−30、explicit 50**。行ごとに: (a) 行内部を逆走
+  （`\unhcopy` を構築中 hbox の中で pop）して node 表
+  `NW@<n>@<j>`/`NS@<n>@<j>` を記録、(b) グルーを境界表と
+  (nat,str,shr) 完全一致で照合して tier/role を決め前方索引の
+  `GI@<n>@<k>` へ、(c) 残余 R=行幅−自然和を sp で計算し、tier 値
+  の降順（50,20,10,0,−10,−20,−30）に飽和まで充填、部分充填 tier
+  は容量比例、shrink は符号を分けて処理し有限容量超過は
+  PackageWarning（組版不良報告）、(d) 行を再構成（pop+再挿入で
+  位置を保ち、グルーを最終サイズの kern へ置換）——の 4 段階。
+  実装上の注意（実測）: tex 発現は末尾再帰の引数を必ず明示的に
+  渡すこと（`\expandafter\loop\fi` 形で引数を省くと次トークンを
+  誤って食う）; `\skip={...}` の波括弧 glue 代入は本 backend では
+  誤走査する; 名前渡しの split helper は二段展開にする
+  （csname 展開 + マクロ本体展開）。
+- **配分の適用（P11 完了、distphase=4）**: 行 box の再構成まで通る。
+  測定中は 1zw 和文グリフも box 化（`\jlreqpdf@boxglyphs=1`、
+  rules.sty 側フラグ + latadj 拡張で native 改行との差を解消済み）
+  し、行内部を完全走査可能にする。各行: PASS 1 で tail から全 node
+  を pop して専用 slot（RB@<k>、load 時確保 1024 個）へ退避、
+  PASS 2 で head から再構成——box は slot から一回だけ移し、
+  glue は **kern(nat+delta)** へ置換（skip zone=role 5 は fil order
+  込みで native glue 保持）、kern/penalty は NS 表から再出力。
+  **行は測定幅へ \hbox to で pack**（native breaker が hsize へ
+  pack したのと同一契約; 自然 pack だと parfill 領域の 0 自然長で
+  264pt vs 440pt の不一致——probed）。実測検証
+  （`\jlreqpar@verifywd` を定義するとログ出力）:
+  `measured=440.0001pt rebuilt=440.0001pt delta=0.0pt VERDICT=OK`
+  （全行、1sp 以内）。配分実測（hsize=211pt、finite stretch 必要な
+  行）: tier-50 glue 群に delta=+0.06667pt ずつ配分。
+- **ltj 準拠の fil 除外**: parfillskip（無限 order の glue）が
+  ある行は配分をスキップし全 delta=0（ltj aw_step2 の
+  `res.order > 0 → return` と同一意味。parfill の吸収分を有限
+  glue へ配ると過伸長になる——probed: 末行の 130pt 残余）。
+  行内の非再出力 node（whatsit/ins/mark/disc/bare char）は
+  **distskip**（native 行 box のまま）。
+- **BD 表照合（位置非依存 scan に修正）**: 境界グルー記録との照合は
+  表先頭からの位置非依存 first-match に改めた（cursor 消費型は
+  行の head-first 走査と表の tail-first カーソルで整列がずれ、
+  約物 pair が explicit tier(50) に誤分類されていた——実測:
+  」pair が一方の行で −10/−20、別の行で 50/50）。同一 JFM から
+  生成される表では同一 spec は必ず同一 tier を持つため、位置
+  非依存で正しい。さらに **fallback pair グルー（未定義
+  pair@0@0 の漢字-漢字境界=生 kanjiskip）の記録漏れ**を
+  emitglue 入口の wrap で解消（role 2 / tier 0）。実測:
+  漢字-漢字境界は 0/0、」・。pair は −10/−20 と安定分類。
+- **2-tier 差の実証（strict-tierdiff fixture）**: hsize=158pt で
+  stretch 需要 8pt の行について、native 一括比例伸縮なら
+  `\hspace{0pt plus 30pt}` は 8×30/55=4.36pt、各漢字間グルーは
+  0.36pt を受けるところ、tier engine は tier-50 の明示グルーに
+  全量 8.00002pt を配り、kanjiskip(0)/JFM pair(−10) tier は 0
+  （`TIERTOP` ログで検証; runner gate strict-tierdiff-* 4件）。
+- **aw_step1_last 最終行候補再選択（実装・実測）**: 最終行の
+  end_adjust 候補を parfillskip 条件で再選択——slack(e)=残余−e を
+  辞書順 (|slack|, |e|, e) で比較し、native 選択と異なれば
+  F@win として再構成行の末尾 kern に差分 (e_win−e_native) を
+  適用。実測（hsize=70pt、末尾「。」の一行段落）:
+  `FINS: native-e=0.0pt win-e=5.0pt rem=5.0pt slack=0.0pt`
+  ——native は e=0、parfill 条件は e=5pt（0.5zw ぶら下げ）を
+  選ぶ。候補表は生成 .def の endadj（各クラス2フィールド）を
+  直接 unpack して評価（再帰 sentinel walker は tail group を
+  誤飲して \fi を洩らしたため廃棄——probed）。
+- **再構成の内容保全（重大な潜在欠陥の修正）**: PASS-1 のスロット
+  \setbox は測定 \hbox グループ内で実行されるため local——
+  グループ閉鎖で全スロットが void になり、PASS-2 が空行を
+  出力していた。RBWD 幅照合は \hbox to が何もなくても幅を
+  保つためこれを検出できず、日本語グリフが全て消えた行が
+  「検証済み」と見なされていた（実測: distphase=3 で 33 字、
+  =4 で 2 字——global \setbox で解決）。distskip フラグも
+  同一理由で global 化（コピー \hbox グループ内で true に
+  しても外で消えていた）。
+- **skip zone の fil 復元**: role-5 glue は walk 時に
+  `\the\lastskip` の全文（"nat plus X fil..."）を NSf 表に記録し、
+  再構成ではそれを verbatim 再出力する。分割フィールドから
+  "nat plus... fil" を組み立てる方法は単語間空白が失われ
+  mis-parse、リテラル 'fil' グリフが行末に出力されていた
+  （probed; `\advance<skip><glue>` が natural のみ加算する仕様も
+  同根）。
 
 ## 厳密段落の実測メモ（P11 probe 記録）
 

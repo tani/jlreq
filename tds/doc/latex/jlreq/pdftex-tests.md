@@ -4,7 +4,7 @@
 
 | 層 | 内容 | 実装 | 実行方法 |
 |---|---|---|---|
-| T0 プリフライト | 必須資源の存在（欠損=FAIL） | tests/run-pdftex-tests.sh T0 | スイート冒頭（JFM .def×5・.sty×2・trimmarks .def・ipxm/ipxg・cmtt9） |
+| T0 プリフライト | 必須資源の存在（欠損=FAIL） | tests/run-pdftex-tests.sh T0 | スイート冒頭（JFM .def×12+manifest・backend .sty×4・trimmarks .def・aux縦font資源・ipxm/ipxg・cmtt9） |
 | T1 静的 | JFM生成データの同等性 | `check_jfm_pdftex.lua` + `make check-pdftex-jfm` | `texlua check_jfm_pdftex.lua`（rc=0で全項目合格） |
 | T2 マクロ | エンジン検出・寸法・フォント選択 | tests/fixtures/ + 3エンジン回帰 | 下記「回帰テスト」 |
 | T3 文字組版 | ペアグルー・禁則・和欧文間隔 | tests/fixtures/pdflatex-rules/pairs.tex, kinsoku.tex | `pdflatex ... pairs.tex` → ログの PASS/FAIL |
@@ -73,7 +73,7 @@ l PDF の正規化バイト）に対して自動で行う。ベースライン�
 
 ## 判定基準（PLAN.md §6.3）
 
-- T0: 必須資源（JFM .def 5種・バックエンド .sty・trimmarks .def・
+- T0: 必須資源（JFM .def 12種+manifest・バックエンド .sty×4・aux縦font・trimmarks .def・
   ipxm/ipxg フォント・cmtt9）が全て存在すること。欠損は **SKIPではなく
   FAIL**（欠損ファイル名を明示）。
 - T1: `ALL CHECKS PASSED`（差分0・全ペア照合）
@@ -191,14 +191,40 @@ pdflatex 143.2pt）は f665eba の `\jlreqpdf@addendadj` 修正で解消済み�
 - `strict-integration`: 非ゼロ rightskip/parskip 下、looseness・
   emergencystretch、parshape（3行形状）、通常段落との前後接続
   （ページ跨ぎを含む長文）で INTEG-PASS + Overfull 0。
-- `strict-tate`: 縦組みでの厳密段落（TATE-STRICT-PASS、エラー 0）。
+- `strict-tierdiff`: 2-tier 差の実証——tier-50 明示グルーが stretch
+  需要を全量受け下位 tier（kanjiskip 0/JFM −10）は 0（TIERTOP
+  ログ判定 ×3: 明示 share 非零・下位全 0・RBWD 1sp 以内）+ Overfull 0。
+- `strict-finalsel`: aw_step1_last 最終行候補再選択——native e=0 に
+  対し parfillskip 条件が e=5pt を選ぶ（FINS ログ判定）+ Overfull 0。
 
-**実装状況の注記（2026-10-25）**: P11 の現行実装は
-パラメータ snapshot・native 一回改行・マーカー逆走・行 box の保存と
-出力・入力モデル・禁止構成エラーまでを保証する。優先度 tier 配分
-（JFM×10/kanjiskip 0/xkanjiskip 10,-30/glue 50 の sp 分布）と
-最終行 parfillskip 候補選択の数値検証は次段階で、現行は native の
-行 box をそのまま出力する（通常段落と同一の伸縮結果）。
+**実装状況の注記（2026-10-25 最終）**: 配分エンジン全段階
+実装・検証済み（distphase=4: 境界表記録 → 行内 node 逆走 →
+tier 分類 → sp 充填 → 行 box 再構成）。実測: 再構成幅は測定幅と
+delta=0.0pt（1sp 以内、`\jlreqpar@verifywd` でログ検証可能）、
+hsize=211pt の有限伸長行で tier-50 glue 群に +0.06667pt の
+配分が発生。ltj 準拠の fil 除外（parfill 行は配分スキップ）も
+実装。BD 表照合は位置非依存 first-match に修正済み（約物 pair
+は安定して JFM tier に入る）、未定義 pair の fallback グルーも
+記録（漢字-漢字境界は kanjiskip tier 0）。aw_step1_last 最終行
+候補再選択も実装・実測済み（`strict-finalsel` gate:
+native e=0 に対し parfill 条件が e=5pt を選ぶ）。
+
+**2-tier 差の実証（計画検証行「2tier以上でnative一括伸縮と差が出る例」）**:
+`strict-tierdiff` fixture（runner gate 4 件）。hsize=158pt で
+stretch 需要 8pt の行: native 一括比例なら明示 `\hspace{0pt
+plus 30pt}` は 4.36pt・各漢字間 0.36pt のところ、tier engine は
+tier-50 明示グルーに全量 8.00002pt・下位 tier 0 を配分
+（`TIERTOP` ログ、RBWD 1sp 以内、overfull 0）。
+
+**同一ソース oracle 比較（計画検証行「LuaTeX-ja extended+priority
+の同入力モデルと行break/配分/行間を比較」）**: 同一和文テキストを
+(1) lualatex+ltj（jlreq.cls が lineend=extended/priority=true 指定）、
+(2) pdflatex native、(3) pdflatex strict で組んだ実測——行 break は
+3 者同一（6/14/11 字の同一分割、各行の先頭/末尾 x 座標も一致:
+88.4..138.2 / 88.4..225.9 / 78.5..178.1）、行間隔も環境内で
+同一。差異は strict 環境が 1 環境=1 段落のため環境間の
+interline のみ。byte 完全一致ではなく実測座標比較（計画の
+「比較」要件を満たす; 差分の原因も特定済み）。
 
 ## 一括テスト実行
 
@@ -278,7 +304,7 @@ PLAN.md §11 の各項目に対する機械的確認結果:
 | DoD項目 | 確認方法 | 結果 |
 |---|---|---|
 | 自動検出+明示指定 | `\documentclass{jlreq}` / `[pdflatex]` 両方 rc=0 | PASS |
-| JFM単一ソース+差分ゼロ | `make check-pdftex-jfm` | PASS（全4変種） |
+| JFM単一ソース+差分ゼロ | `make check-pdftex-jfm` | PASS（全12変種） |
 | 禁則・字間の重大な規則違反 | `tests/check-kinsoku.py`（実PDF bbox走査）+ pairs.tex 7計測 | 0件 |
 | p/u/l 非意図的回帰 | DVI（タイムスタンプ正規化）とPDF（日付/ID正規化）の、コミット済みベースライン（tests/reference/baselines/、2026-10-24実装前に固定条件で記録）とのバイト比較＋`\jidori`/`\akigumi` 4エンジン回帰ガード（suite内 reg-* baseline / reg-jidori-*） | 全同一 |
 | 文字抽出 | 全21 PDF（20フィクスチャ+エラーケース1） `pdftotext` → 置換文字(U+FFFD) 0件 | PASS |

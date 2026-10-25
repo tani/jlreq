@@ -34,9 +34,13 @@ hyperref 共存・状態隔離（次境界の pair が正しく復帰）まで�
 （`furniture-options` ゲート）、savepos の論理行方向測定（割注）もビット一致
 （`savepos-warichu`）、mag≠1000 でも同一値（`savepos-warichu-mag`）、marginpar 列/側と
 遅延注位置は行方向相対距離で一致（`savepos-marginpar`）、本文の PDF インクレベル対照は
-worst 0.0010pt（`savepos-anchor-pdf` + `check-anchor-parity.py`。合印・脚注領域の
-マイクロレイアウト残差は同表に数値固定）、tate TOC 2パス不良を解消（`toc-twopass`）
+worst 0.0010pt（`savepos-anchor-pdf` + `check-anchor-parity.py`）、tate TOC 2パス不良を解消（`toc-twopass`）
 ——いずれも docs/pdftex-internals.md「出力ルーチンと semantic frames（P7）」節参照。
+合印・脚注領域のマイクロレイアウト残差も **2026-10-25 のフォローアップで解消**:
+単一脚注の罫線位置・本文列頭・（１）マーク列頭・罫線長・罫線→本文列間隔が
+10pt/12pt とも uplatex と worst 0.011pt（`footnote-parity` ゲート、
+`tests/check-footnote-parity.py`）。複数脚注段落時の先頭段列頭 +4.95pt のみ
+既知残差として残る（internals.md 同節の表参照）。
 `\tatechuyoko` は P5、jlreq-trimmarks 縦組バナー（全スロット族が uplatex ground truth と
 0.01pt 一致; tests/check-banner-tate.py）は P8 で解消済み（上表）。
 **out-of-scope は残っていない**（jlreq.cls 警告リストも空）。
@@ -120,7 +124,14 @@ bxcjkvert.sty v0.5a は CJKvert (v4.8.5) を内部で `\RequirePackage` する�
 
 バックエンド共存下の参照証跡として残す。生 CJKvert でも rotation whatsit (`\pdfsetmatrix{0 1 -1 0}`) は発火する (v1-tate-showbox.tex) が、baselinestretch=1.3 強制・フォント reset などは旧版記録通り。bxcjkvert はこの 2 点を解消する。
 
-## 4. jlreq `tate` への接続可否 — ブロッカー表
+## 4. jlreq `tate` への接続可否 — ブロッカー表【歴史記録・T1 実装で全項目解決済み】
+
+> **この節と §5 の判定は 2026-10-23 時点（bxcjkvert 経由案を評価していた当時）の
+> 歴史記録である。** 後の T1–T4 + P5–P8/P10 実装（本ファイル冒頭の表）により、
+> この表の structural 判定は **bxcjkvert/CJKvert 経由に限った正しい分析**であり、
+> 採用された shipout-rotation 構成（内枠横組 galley + 出荷時回転 + 縦JFM 12変種の
+> うち縦6変種 + 補助縦フォント + 局所方向エンジン + 薄い出力ラッパ）が以下の全層を
+> 別実装で解決した。判定自体は当時の証拠としてそのまま残す（改竄しない）。
 
 | # | ブロッカー | 判定 |
 |---|---|---|
@@ -137,11 +148,17 @@ bxcjkvert.sty v0.5a は CJKvert (v4.8.5) を内部で `\RequirePackage` する�
 
 **判読**: jlreq クラスとしての `tate` (JLREQ 準拠の本実装) は引き続き **structurally blocked**。bxcjkvert は「回転レイヤを正しい副作用で供給する」点までは有用だが、JLREQ の縦組み仕様が要求する残りの層は、パッケージの設計範囲外の構造的事項である。
 
-## 5. スケジュール可否の最終判定
+## 5. スケジュール可否の最終判定【歴史記録 — 後の実装で覆された判定】
 
-**jlreq の `tate` を本仕様で pdfTeX に載せるスライスは依然として正当化されない。** 版面と用紙、約物字形と配置、縦用 JFM、家具、縦中横の全層で別実装が要求され、回転近似は JLREQ 準拠の検証 (4.2.2 の約物位置含む) を構造的に落とす。続けるなら低い目標に限定した別枠 (例: 「CJKvert 互換の縦組み近似を出す最小クラス」) であり、jlreq ブランドの tate としては出せない。
+> **2026-10-23 当時の判定をそのまま残す歴史記録。** この判定は「bxcjkvert 経由で
+> 載せる」という当時の唯一の検討案に対するものであり、翌日の T1 実装
+> （shipout-rotation 構成）が別経路で本実装・実測検証を完了させたため
+> **現行の保証とは無効**。jlreq ブランドの tate は現在 `pdflatex,tate` で
+> 動作する（冒頭の状態表・docs/pdftex-compatibility.md の `tate` 行参照）。
 
-現行の `pdflatex,tate` 明示エラーゲート (jlreq.cls:524、runner T2) は正しい状態であり維持する。
+**jlreq の `tate` を本仕様で pdfTeX に載せるスライスは依然として正当化されない。** 版面と用紙、約物字形と配置、縦用 JFM、家具、縦中横の全層で別実装が要求され、回転近似は JLREQ 準拠の検証 (4.2.2 の約物位置含み) を構造的に落とす。続けるなら低い目標に限定した別枠 (例: 「CJKvert 互換の縦組み近似を出す最小クラス」) であり、jlreq ブランドの tate としては出せない。
+
+現行の `pdflatex,tate` 明示エラーゲート (jlreq.cls:524、runner T2) は正しい状態であり維持する。〔歴史注: このゲートは T1 で tate 実装と共に警告ゲートへ移行し、P5–P10 完了後の P12 で ClassInfo へ縮小された。〕
 
 ## 証跡ファイル一覧
 

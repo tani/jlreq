@@ -774,11 +774,17 @@
       % 回転箱を (Cdp−topskip) だけ紙面左へ動かし、native 縦組の第一行
       % リーディング（topskip−Cdp）と物理一致させた。raw \pdflastxpos は
       % このカーンを含むため、論理行位置（=行頭からの距離）を測る本式は
-      % 同量を戻す。【tate 専用】横組みでは出荷回転もカーンも無いため
-      % 補正しない。warichu 内部は内枠（横組）で ifydir が常に真に
-      % なるため方向は \if@tate で判定する。\mag≠1000 でも \topskip/\Cdp
-      % はデザイン寸法のため無変換で正しい。
-      \if@tate + \topskip - \Cdp \fi
+      % 同量を戻す。【tate 論理ページ専用】(1) 横組み文書では出荷回転も
+      % カーンも無いため補正しない。(2) tate 文書内の yoko 論理ページ
+      % （theindex、\jlreqpdf@pagedir{0}）も回転・カーンともに適用外
+      % なので補正しない — ラッパ側の回転条件
+      % （\if@tate ∧ pagedir=1）と同じ条件で判定する。
+      % warichu 内部は内枠（横組）で ifydir が常に真になるため方向は
+      % \if@tate で判定する。\mag≠1000 でも \topskip/\Cdp はデザイン
+      % 寸法のため無変換で正しい。
+      \if@tate
+        \ifnum\jlreqpdf@pagedir@count=1 + \topskip - \Cdp \fi
+      \fi
       \jlreq@tombow@adjust
       - \@totalleftmargin - 1truein
     \relax
