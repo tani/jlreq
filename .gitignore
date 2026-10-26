@@ -1,0 +1,17 @@
+.envrc
+texlive/
+tds/
+# Generated doc artifacts (make doc; pandoc + lualatex from README*.md)
+jlreq.pdf
+jlreq-ja.pdf
+jlreq.html
+jlreq-ja.html
+jlreq-trimmarks.html
+jlreq-trimmarks-ja.html
+
+# pTeX/upTeX/LuaTeX JFM build artifacts (make jfm; regenerable from
+# jfm-jlreq.lua / make_variant_jfm.lua / luajfm2pl.lua at install time)
+*.pl
+*.tfm
+*.vf
+jfm-*-pl.lua
