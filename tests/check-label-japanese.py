@@ -4,9 +4,7 @@ r"""label-japanese.tex の日本語ラベル \ref 解決検証（昇格済みの
 
 契約: \label{日本語ラベル} / \ref{日本語ラベル} / \pageref{日本語ラベル}
 が upLaTeX/LuaLaTeX と同様に解決する（aux への書込と読込が対称に
-正規化される）。現在 pdfTeX バックエンドは active UTF8 byte の label
-key に対称正規化を持たないため、\ref が "Missing \endcsname" 等の
-エラーになりコンパイルが失敗する。
+正規化される — \jlreqpdf@labelkey）。GREEN ゲート。
 
 判定:
   1. 2パスコンパイル後の aux に当該ラベルの \newlabel 行が存在する。

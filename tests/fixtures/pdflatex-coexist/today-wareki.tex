@@ -1,13 +1,13 @@
 % today-wareki.tex -- \today の和暦出力（昇格済みの通常ゲート）。
 % 契約: \jlreqsetup{year_style=wareki} を指定した場合、\today は
 % 令和N年M月D日 の形（uplatex/platex/lualatex + jlreq と同一契約）を
-% 出力する。現在 pdfTeX バックエンドは jlreq.cls の d-engine分岐で
-% \jlreq@seirekitrue を強制し wareki 設定を無視するため、常に
-% 西暦数字 (例: 2026年10月24日) を出力する。
+% 出力する。pdfTeX バックエンドは year_style キーが設定する
+% \ifjlreq@seireki を反映し（year_style=wareki → 和暦）、
+% 横組みでは欧文数字・縦組みでは漢数字で出力する。
 % ランナーは本fixtureを pdflatex と lualatex でコンパイルし
 % （両者に固定日時 SOURCE_DATE_EPOCH=1735689600 を与える）、
 % pdftotext 抽出で pdflatex の日付行が lualatex の日付行（令和N年…）
-% と一致することを要求する。今日は不一致 → XFAIL: today-wareki。
+% と一致することを要求する（昇格済みの GREEN ゲート）。
 \documentclass{jlreq}
 \jlreqsetup{year_style=wareki}
 \pagestyle{empty}
