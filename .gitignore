@@ -15,3 +15,8 @@ jlreq-trimmarks-ja.html
 *.tfm
 *.vf
 jfm-*-pl.lua
+# pdfTeX backend font assets (build outputs of make pdftex-fonts from
+# TeX Live's haranoaji/ipaex/ipa fonts; regenerable, not distributable source)
+fonts/pdftex/*.ttf
+fonts/pdftex/*.tfm
+fonts/pdftex/*.enc

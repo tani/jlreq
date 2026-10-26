@@ -574,10 +574,25 @@ def main():
     args = ap.parse_args()
 
     if args.print_manifest:
-        # The Makefile asks for the file list of the default fontset.
-        print("jlreq-pdftex-fonts-ipaex.def")
-        print("jlreq-pdftex-fonts-ipa.def")
-        print("jlreq-pdftex-fonts-haranoaji.def")
+        # The Makefile asks for the full output list of the default
+        # fontsets (profiles + every aux vertical shard + the HaranoAji
+        # horizontal conversions), so its grouped target depends on real
+        # file names instead of a wildcard over existing files (a wildcard
+        # is empty on a fresh checkout and would skip the build entirely).
+        names = set()
+        for fslabel in ("ipaex", "ipa", "haranoaji"):
+            names.add("jlreq-pdftex-fonts-%s.def" % fslabel)
+            if fslabel == "haranoaji":
+                for f in ("mincho", "mincho-bold", "gothic", "gothic-bold"):
+                    names.add("haranoaji-%s-ttf.ttf" % f)
+            for fam in ("mc", "gt"):
+                for shard in range(4):
+                    base = "jlreqv-%s-%s-%02d" % (fslabel, fam, shard)
+                    names.add(base + ".ttf")
+                    names.add(base + ".enc")
+                    names.add(base + ".tfm")
+        for n in sorted(names):
+            print(n)
         return 0
 
     if args.fontset == "custom":

@@ -8,9 +8,14 @@
 #     各 (section, fixture, engine, pass) に個別サブディレクトリを与える。
 #     各コンパイルは -output-directory=<そのdir> で実行する。ログ・PDFは
 #     すべてそこに残り、失敗行は該当ログのパスを必ず示す。
-#   - T0 プリフライト: 必須資源（JFM .def 5種、バックエンド .sty 2種、
-#     trimmarks .def、フォント ipxm/ipxg、cmtt9）を検査し、欠損は SKIP
-#     ではなく FAIL（欠損ファイル名を明示）。縦組みJFM .def 欠損も FAIL。
+#   - 冒頭で make pdftex-fonts を実行し、TeX Live のフォントから
+#     補助縦フォント・HaranoAji 横組変換 TTF を生成する
+#     （リポジトリにフォントバイナリは無い。生成失敗は FAIL）。
+#   - T0 プリフライト: 必須資源（JFM .def 12種+manifest、バックエンド
+#     .sty（rules/ruby/paragraph）、trimmarks .def、フォントプロファイル
+#     .def×3、補助縦シャード、HaranoAji 横組TTF×4、zhmetrics 動的TFM、
+#     ipxm/ipxg、cmtt9）を検査し、欠損は SKIP ではなく FAIL
+#     （欠損ファイル名を明示）。
 #   - T7 はコンパイル成立 + バックエンド非読込に加えて、コミット済み
 #     ベースライン（tests/reference/baselines/、実装前に固定条件で
 #     記録した p/u DVI・l PDF の正規化バイト）とのバイト比較を行う。
@@ -152,6 +157,12 @@ run() {
 }
 
 # ===========================================================================
+# フォント資源はコミットされていない（make pdftex-fonts が TeX Live の
+# フォントから生成する。生成の要否はタイムスタンプで make が判断する）。
+if ! make pdftex-fonts >"$OUT/pdftex-fonts.out" 2>&1; then
+  fail "pdftex-fonts" "$OUT/pdftex-fonts.out"
+fi
+
 echo "== T0: プリフライト（必須資源の検査; 欠損はSKIPではなくFAIL） =="
 # ===========================================================================
 T0_MISSING=""
@@ -174,7 +185,7 @@ for f in $T0_JFM_DEFS \
 done
 # フォントプロファイル（両組）と第1シャードの aux 縦フォント資源
 # （profile .def + TFM/enc/TTF）は縦組みの必須資源。fonts/pdftex/ は
-# `make pdftex-fonts` の出力先（コミット済み）。
+# `make pdftex-fonts` の出力先（ビルド成果物）。
 for f in fonts/pdftex/jlreq-pdftex-fonts-ipaex.def \
          fonts/pdftex/jlreq-pdftex-fonts-ipa.def \
          fonts/pdftex/jlreq-pdftex-fonts-haranoaji.def \

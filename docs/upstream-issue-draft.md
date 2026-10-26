@@ -90,9 +90,11 @@ luatexja 既定が HaranoAjiMincho であるため、本 fontset は pdfTeX を
 0.862/1000em)による横組用フル TTF 4面と実 Bold 面を含む）、
 `pdftex_fontset=ipa`（zhmetrics TrueType チェーン）、
 `pdftex_fontset=custom` +
-`pdftex_fontprofile=<file>`（`make_pdftex_fonts.py` が生成）。縦字形データ
-はビルド時に生成して**生成済みで配布**（`fonts/pdftex/`、補助縦
-TTF/TFM/enc + プロファイル + ライセンス文）。文字抽出はプロファイル読込時に
+`pdftex_fontprofile=<file>`（`make_pdftex_fonts.py` が生成）。
+フォント派生物（補助縦 TTF/TFM/enc、HaranoAji 横組変換 TTF）は
+**リポジトリに含めず**、TeX Live 収録フォントを `make pdftex-fonts`
+がビルド時に直接読んで生成する（リポジトリはプロファイル .def と
+ライセンス文のみ）。文字抽出はプロファイル読込時に
 `\pdfglyphtounicode` を登録して `\pdfgentounicode=1` で保証（全フィクスチャ
 PDF で U+FFFD 0 件・未埋込フォント 0 件を実測）。
 
@@ -152,15 +154,20 @@ JFM データ: pTeX/upTeX/LuaTeX-ja と**同一ソース**（`jfm-jlreq.lua` /
 
 ### ビルド・配布 / Build & distribution
 
-* **生成済みデータをコミットして配布**: 12 変種 `.def` + manifest、
-  `fonts/pdftex/`（プロファイル・補助縦 TTF/TFM/enc・ライセンス文）。
+* **JFM データ（12 変種 `.def` + manifest）はコミットして配布**
+  （利用者が texlua を持たない場合でも動作する。再生成差分 0 を
+  `make check-pdftex-jfm` が保証）。
+* **フォント派生物はコミットしない**: 補助縦 TTF/TFM/enc と
+  HaranoAji 横組変換 TTF は、TeX Live 収録の
+  HaranoAji/IPAex/IPA フォントを `make pdftex-fonts`
+  （fontTools + ttf2tfm）がビルド時に直接読んで生成する
+  （リポジトリにフォントバイナリを含めない。`make install` が
+  この生成に依存し、生成は一回きり）。
 * 生成器はビルド時のみ実行: `make pdftex-jfm` / `make pdftex-fonts`、
   検査は `make check-pdftex-jfm` / `make check-pdftex-fonts`
-  （`texlua check_jfm_pdftex.lua` は 12 変種を元 JFM 全項目と照合、
-  再生成差分 0 を確認）。
+  （`texlua check_jfm_pdftex.lua` は 12 変種を元 JFM 全項目と照合）。
 * **通常の文書コンパイルは Lua/Python を一切起動しない**
-  （JFM を触らない通常利用では texlua 不要、配布済みフォントを使う
-  通常利用では Python/fontTools/ttf2tfm 不要）。
+  （インストール済み環境では texlua/Python/fontTools/ttf2tfm 不要）。
 
 ### 上流統合に必要な変更 / What integration touches
 

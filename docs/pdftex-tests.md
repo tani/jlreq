@@ -231,6 +231,10 @@ interline のみ。byte 完全一致ではなく実測座標比較
 sh tests/run-pdftex-tests.sh
 ```
 
+ランナーは冒頭で `make pdftex-fonts` を実行し、TeX Live 収録フォントから
+補助縦フォントと HaranoAji 横組変換 TTF を生成する（リポジトリにフォント
+バイナリは無い。生成は manifest 駆動なので fresh clone でも動作する。
+生成失敗は FAIL）。
 実行ごとに `mktemp -d` で隔離された作業ディレクトリ（先頭行にパス表示）
 を作り、各セクション・フィクスチャ・エンジン・パスに個別サブディレクトリ
 を割り当てる（T0/T1/T3/T3b/T5/T5b/T7/T8/T8b の順）。全コンパイルは

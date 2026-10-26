@@ -44,14 +44,20 @@ kpsewhich ipxm-r-u30.pfb            # フォント資産確認
 
 ## フォント（縦字形・フォントプロファイル）
 
-縦組みの実際の縦字形（vert/vrt2 GSUB）は補助縦フォントとして配布する。
+縦組みの実際の縦字形（vert/vrt2 GSUB）は補助縦フォントで実現する。
+補助縦シャード（jlreqv-*.ttf/.tfm/.enc）と HaranoAji 変換横組 TTF は
+**リポジトリには含めないビルド成果物**で、`make pdftex-fonts` が
+TeX Live 収録の haranoaji/ipaex/ipa フォントからユーザー環境上で
+生成する（リポジトリが持つのはプロファイル .def とライセンス文のみ。
+`make install` / `make tds` がこの生成に依存する）。
 実行時とビルド時の依存は分離：
 
 ### 実行時（文書コンパイル; python/fontTools/ttf2tfm 不要）
 - `fonts/pdftex/jlreq-pdftex-fonts-ipaex.def` / `-ipa.def` /
   `-haranoaji.def`（フォントプロファイル。インストール先は `tex/latex/jlreq`）
 - `fonts/pdftex/jlreqv-<fontset>-<mc|gt>-<NN>.ttf` / `.tfm` / `.enc`
-  （補助縦フォント。インストール先は
+  （補助縦フォント。**ビルド成果物**: `make pdftex-fonts` が
+  TeX Live のフォントから生成する。インストール先は
   `fonts/truetype/jlreq-pdftex`, `fonts/tfm/jlreq-pdftex`,
   `fonts/enc/jlreq-pdftex`）
 - クラスオプション `pdftex_fontset=ipa|custom` 利用時の横書きTTF経路:
@@ -60,7 +66,9 @@ kpsewhich ipxm-r-u30.pfb            # フォント資産確認
 - `pdftex_fontset=haranoaji` 利用時の追加資源: **変換済み横組フルTTF**
   `fonts/pdftex/haranoaji-mincho-ttf.ttf` /
   `haranoaji-mincho-bold-ttf.ttf` / `haranoaji-gothic-ttf.ttf` /
-  `haranoaji-gothic-bold-ttf.ttf`（インストール先は
+  `haranoaji-gothic-bold-ttf.ttf`（いずれも**ビルド成果物**:
+  `make pdftex-fonts` が HaranoAji OTF を CFF→quadratic 変換して
+  生成する。インストール先は
   `fonts/truetype/jlreq-pdftex`）。横書きTFM経路は ipa と同一の
   zhmetrics 動的TFMチェーン（unisong/unili/unihei/uniyou@Unicode@）で、
   pdfmapline の埋込先だけがこれらの変換TTFに向く。pdfTeX は
@@ -69,9 +77,11 @@ kpsewhich ipxm-r-u30.pfb            # フォント資産確認
   （staged install smoke `staged-smoke-haranoaji.tex` で実証済み）。
   **ライセンス**: HaranoAji は Copyright (C) 2019-2025 Masamichi Hosoda
   （Reserved Font Name 'Harano Aji'; Adobe / FontWorks 由来の SIL OFL
-  系）。変換TTF・補助縦フォントとも派生物であり、出典・ライセンス文は
+  系）。変換TTF・補助縦フォントとも派生物であり、リポジトリには
+  含めずユーザー環境上で生成する（派生物をこちらから再配布しない）。
+  出典・ライセンス文は
   `fonts/pdftex/LICENSE-aux-haranoaji-*.txt` とプロファイル .def ヘッダに
-  記録・配布する。
+  記録する。
 
 ### ビルド時（`make pdftex-fonts` / custom 生成; 通常の文書では実行しない）
 - **python3 + fontTools**（cmap/GSUB vert・vrt2/hmtx/vmtx/VORG/輪郭bbox読取）
@@ -99,7 +109,7 @@ kpsewhich HaranoAjiMincho-Regular.otf   # haranoaji ソースOTF（縦字形・�
 kpsewhich Unicode.sfd                   # zhmetrics SFD（ipa・haranoaji 横書き）
 kpsewhich unisong30.tfm                 # zhmetrics 動的TFM確認
 ls fonts/pdftex/jlreq-pdftex-fonts-haranoaji.def   # haranoaji プロファイル（repo）
-ls fonts/pdftex/haranoaji-mincho-ttf.ttf           # 変換済み横組TTF（repo）
+ls fonts/pdftex/haranoaji-mincho-ttf.ttf           # 変換済み横組TTF（make pdftex-fonts の生成物）
 ttf2tfm --version                       # 補助TFM生成器（ビルド時のみ）
 python3 -c "import fontTools"           # ビルド時のみ
 ```

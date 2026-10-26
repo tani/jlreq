@@ -98,7 +98,10 @@ check-pdftex-jfm:
 PDFTEX_FONTS_DIR := fonts/pdftex
 PDFTEX_FONTSETS := ipaex ipa haranoaji
 PDFTEX_FONT_PROFILES := jlreq-pdftex-fonts-ipaex.def jlreq-pdftex-fonts-ipa.def jlreq-pdftex-fonts-haranoaji.def
-PDFTEX_FONT_ASSETS := $(filter-out $(PDFTEX_FONT_PROFILES),$(notdir $(wildcard $(PDFTEX_FONTS_DIR)/*)))
+# The asset list comes from the generator's manifest (not a wildcard over
+# existing files: a wildcard is empty on a fresh checkout and make would
+# skip the build).
+PDFTEX_FONT_ASSETS := $(filter-out $(PDFTEX_FONT_PROFILES),$(shell python3 make_pdftex_fonts.py --print-manifest))
 
 # 生成物は repo root からの相対 outdir（fonts/pdftex）へ出す:
 # ttf2tfm は TFM ヘッダに起動引数のパスを焼き付けるため、outdir を
