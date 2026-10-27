@@ -1,0 +1,57 @@
+% pdftexja standalone: horizontal basics (article class, default JFM ujis)
+\documentclass{article}
+\usepackage{pdftexja}
+\makeatletter
+\newcount\ptjtestfail
+\def\check#1#2#3{% name, got, want (compared as strings)
+  \edef\@tempa{#2}\edef\@tempb{#3}%
+  \ifnum\pdfstrcmp{\@tempa}{\@tempb}=0 \typeout{PTJTEST-PASS: #1}%
+  \else\global\advance\ptjtestfail1 \typeout{PTJTEST-FAIL: #1: got [\@tempa] want [\@tempb]}\fi}
+\newbox\tb
+% \measure{name}{material}{expected width}
+\def\measure#1#2#3{\setbox\tb\hbox{#2}\check{#1}{\the\wd\tb}{\the\dimexpr#3\relax}}
+\makeatother
+\ptjdefkanjics{西暦}{\def\kcsresult{seireki}}
+\ptjdefkanjics{西暦true}{\def\kcsresult{seireki-true}}
+\ptjdefkanjics{　}{\def\kcsresult{zenkaku}}
+\begin{document}
+\section{日本語の見出し}\label{sec:日本語}
+% units
+\check{zw at 10pt}{\the\dimexpr1\zw\relax}{\the\dimexpr10pt\relax}
+{\Large\check{zw follows size}{\the\dimexpr1\zw\relax}{\the\dimexpr14.4pt\relax}}
+\def\tl{2zw}\ptjconvertunits\tl
+\check{convertunits}{\the\dimexpr\tl\relax}{\the\dimexpr20pt\relax}
+% per-character parameters (LuaTeX-ja defaults from ltj-kinsoku.tex)
+\check{prebreakpenalty 。}{\ptjgetparameter{prebreakpenalty}{。}}{10000}
+\check{postbreakpenalty 「}{\ptjgetparameter{postbreakpenalty}{「}}{10000}
+\check{jaxspmode 。 (postonly)}{\ptjgetparameter{jaxspmode}{`。}}{2}
+\ptjsetparameter{jaxspmode={あ,inhibit},prebreakpenalty={"3042,123}}
+\check{set jaxspmode}{\ptjgetparameter{jaxspmode}{あ}}{0}
+\check{set prebreakpenalty by code}{\ptjgetparameter{prebreakpenalty}{あ}}{123}
+\ptjsetparameter{jaxspmode={あ,allow},prebreakpenalty={あ,0}}
+% widths: plain kanji run, kanjiskip natural 0
+\measure{kanji run}{漢字漢字}{40pt}
+% xkanjiskip natural .25zw between kanji and latin (ujis)
+\setbox0\hbox{a}\edef\aw{\the\wd0}
+\measure{kanji-latin}{漢a}{12.5pt+\aw}
+\measure{inhibitglue}{漢\inhibitglue a}{10pt+\aw}
+% JFM glue query
+\newskip\js
+\ptjgetjfmglue{」}{漢}\js
+\check{jfm glue 」漢 natural (ujis: .5zw)}{\the\js}{\the\dimexpr5pt\relax}
+% kansuji
+\def\pr#1{[#1]}
+\makeatletter\check{kansuji digits}{\ptj@kansuji@run\pr{2025}}{[2][0][2][5]}\makeatother
+% kanji control sequences
+\西暦true \check{kcs 西暦true}{\kcsresult}{seireki-true}
+\西暦 \check{kcs 西暦}{\kcsresult}{seireki}
+\　\check{kcs zenkaku}{\kcsresult}{zenkaku}
+% labels with Japanese keys
+参照\ref{sec:日本語}。
+\makeatletter\@ifundefined{r@\detokenize{sec:日本語}}{\typeout{(first pass)}}{%
+  \check{japanese label}{\expandafter\expandafter\expandafter\@car\csname r@\detokenize{sec:日本語}\endcsname\@nil}{1}}\makeatother
+% math
+$x^2$と\mathmc{数式}。\ptjjidoribox{4\zw}{字取}\ptjakigumibox{1zw}{空組}
+日本語の文章です。「括弧」と、句読点。
+\typeout{PTJTEST-FAILURES: \the\ptjtestfail}
+\end{document}

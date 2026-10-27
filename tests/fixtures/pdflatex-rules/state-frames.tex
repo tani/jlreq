@@ -20,8 +20,8 @@
     \typeout{P3-FAIL: #1 (\the\wd#3~vs~\the\wd#4, diff \the\sdim)}%
   \fi}
 % 状態の中立化（測定間の汚染防止）
-\def\sreset{\global\jlreqpdf@lastclass=90 \global\jlreqpdf@pend=0
-  \global\jlreqpdf@inhibit=0 \global\jlreqpdf@lastzw=\jlreq@jareg}
+\def\sreset{\global\ptj@lastclass=90 \global\ptj@pend=0
+  \global\ptj@inhibit=0 \global\ptj@lastzw=\ptj@zwreg}
 
 \begin{document}
 % ---- 1. 漢A（CJK->LA 境界: xkanjiskip 0.25zw）

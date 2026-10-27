@@ -12,7 +12,7 @@
 %   - ページ家具（見出し・目次・脚注）
 %   - 数式内和文 (mathmc)
 %   - ruby (provider: ruby.sty)
-%   - 厳密段落 jlreqparagraph
+%   - 厳密段落 ptjparagraph
 % 判定は runner 側で行う: rc=0、ログに shell-out 証跡 0 件
 % (runsystem/write18/shellescape の出力無し)、PDF抽出の照合。
 \RequirePackage{ifpdf}
@@ -27,12 +27,12 @@
 数式内和文は $\mathmc{和文} + x = 1$ のように書く。
 ルビは \ruby{漢字}{かんじ} のように振る。連続しても大丈夫:
 \ruby{東京}{とうきょう}\ruby{大阪}{おおさか}。
-\begin{jlreqparagraph}
+\begin{ptjparagraph}
 厳密段落。優先順位付き伸縮が厳密に扱われる専用環境である。日本語と
 Latin混在、約物（「」、。・）を含む複数行にわたる段落をここに置く。
 あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめ
 もやゆよらりるれろわをん。
-\end{jlreqparagraph}
+\end{ptjparagraph}
 通常段落へ戻る。これで横組みの確認は終わり。
 \typeout{STAGED-YOKO-PASS}
 \end{document}

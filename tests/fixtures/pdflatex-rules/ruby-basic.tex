@@ -54,10 +54,10 @@
 % \box0 (provider の base box) は \ruby 呼び出し後も残る:
 %   ann box は \@tempboxa (消費される)。代わりに幾何で確認:
 %   ルビ box 幅 = base 幅 (wd0; ann が狭い場合)。
-\ifdim\wd\rboxa=\dimexpr1\jlreq@jareg\relax
+\ifdim\wd\rboxa=\dimexpr1\ptj@zwreg\relax
   \typeout{RUBY-PASS: narrow-ann-box-width (wd=\the\wd\rboxa)}%
 \else
-  \typeout{RUBY-FAIL: narrow-ann-box-width (wd=\the\wd\rboxa, expected \the\jlreq@jareg)}%
+  \typeout{RUBY-FAIL: narrow-ann-box-width (wd=\the\wd\rboxa, expected \the\ptj@zwreg)}%
 \fi
 % ================= 2. 境界グルー: 、→ルビ =================
 % \ruby{字}{じ} の base を plain の 字 に置き換えた対照行と
@@ -77,12 +77,12 @@
 % provider の vm kern は真の段落頭のみ)。全体幅 = 10 + 9 + 10。
 \setbox\rboxa=\hbox{\ruby{漢}{かんたんいそん}\ruby{字}{じ}}%
 \rdiff=\wd\rboxa
-\advance\rdiff-\dimexpr2\jlreq@jareg+0.9\jlreq@jareg\relax
+\advance\rdiff-\dimexpr2\ptj@zwreg+0.9\ptj@zwreg\relax
 \ifdim\rdiff<\z@ \rdiff=-\rdiff \fi
 \ifdim\rdiff<0.01pt
   \typeout{RUBY-PASS: consecutive-overlap-advance (wd=\the\wd\rboxa)}%
 \else
-  \typeout{RUBY-FAIL: consecutive-overlap-advance (wd=\the\wd\rboxa, expected 2.9\jlreq@jareg, residual=\the\rdiff)}%
+  \typeout{RUBY-FAIL: consecutive-overlap-advance (wd=\the\wd\rboxa, expected 2.9\ptj@zwreg, residual=\the\rdiff)}%
 \fi
 % ================= 4. 本文より長いルビ (nooverlap) =================
 \rubynooverlap
@@ -91,19 +91,19 @@
 % 厳密には 39.99939pt — 0.01pt の許容で検査)。
 \rdiff=\wd\rboxa
 \rdiff=-\rdiff
-\advance\rdiff4\jlreq@jareg
+\advance\rdiff4\ptj@zwreg
 \ifdim\rdiff<\z@ \rdiff=-\rdiff \fi
 \ifdim\rdiff<0.01pt
   \typeout{RUBY-PASS: long-ann-nooverlap-width (wd=\the\wd\rboxa)}%
 \else
-  \typeout{RUBY-FAIL: long-ann-nooverlap-width (wd=\the\wd\rboxa, expected 4\jlreq@jareg, diff=\the\rdiff)}%
+  \typeout{RUBY-FAIL: long-ann-nooverlap-width (wd=\the\wd\rboxa, expected 4\ptj@zwreg, diff=\the\rdiff)}%
 \fi
 % base が長い場合: 外枠 = base 幅。
 \setbox\rboxa=\hbox{\ruby{依存関係}{いぞん}}%
-\ifdim\wd\rboxa=\dimexpr4\jlreq@jareg\relax
+\ifdim\wd\rboxa=\dimexpr4\ptj@zwreg\relax
   \typeout{RUBY-PASS: long-base-nooverlap-width (wd=\the\wd\rboxa)}%
 \else
-  \typeout{RUBY-FAIL: long-base-nooverlap-width (wd=\the\wd\rboxa, expected \the\dimexpr4\jlreq@jareg\relax)}%
+  \typeout{RUBY-FAIL: long-base-nooverlap-width (wd=\the\wd\rboxa, expected \the\dimexpr4\ptj@zwreg\relax)}%
 \fi
 \rubyoverlap
 % ================= 5. provider パラメータ =================
@@ -111,10 +111,10 @@
 \renewcommand{\rubysize}{0.5}%
 \setbox\rboxa=\hbox{\ruby{漢}{かん}}%
 % ann 幅 = 2 × 0.5 × 10pt = 10pt (= base 幅 → ruby@width = 0)
-\ifdim\wd\rboxa=\jlreq@jareg
+\ifdim\wd\rboxa=\ptj@zwreg
   \typeout{RUBY-PASS: rubysize-05 (wd=\the\wd\rboxa)}%
 \else
-  \typeout{RUBY-FAIL: rubysize-05 (wd=\the\wd\rboxa, expected \the\jlreq@jareg)}%
+  \typeout{RUBY-FAIL: rubysize-05 (wd=\the\wd\rboxa, expected \the\ptj@zwreg)}%
 \fi
 \renewcommand{\rubysize}{0.4}%
 % rubysep: \rubysep は provider が kern として使うだけなので

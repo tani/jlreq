@@ -27,7 +27,7 @@
   hsizeを最大0.5zw超えて」を行末に残す（jfm-jlreq.luaのクラス2
   end_adjust {0,0.5} の作用）。
 - pdfTeXバックエンドは禁則（」を行頭にしない）を守るが、
-  end_adjustはshrink畳み込み近似（docs/pdftex-internals.md 参照）で
+  end_adjustはshrink畳み込み近似（pdftexja/doc/pdftexja-internals.md 参照）で
   あるため、参照エンジンほど行を伸ばせず、」が次行へ落ちる。
   「行頭禁則違反」ではなく「行末追込みの近似差」であり、
   docs/pdftex-compatibility.md の既知の制限（既知違反）の実測値である。
@@ -35,7 +35,7 @@
 ## 訂正（2026-10-24、基準化作業での再実測）
 
 上記の pdflatex 143.2pt という計測は **旧実装**
-による歴史的記録である。現行の `\jlreqpdf@addendadj` は、旧2引数
+による歴史的記録である。現行の `\ptj@addendadj` は、旧2引数
 版が `\fi` を引数に食って end_adjust データと無関係に常に 1zw を
 shrink に畳み込んでいたバグを修正したものである。修正後の現行 HEAD では
 同一入力の再実測で全エンジン parity が成立する:

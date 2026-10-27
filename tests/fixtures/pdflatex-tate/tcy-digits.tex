@@ -15,25 +15,25 @@
 % --- TCY-BOX: 工場出力の box 寸法（1zw 正規化・中央割り）
 \newbox\tcybox
 \setbox\tcybox=\hbox{\tatechuyoko{1}}%
-\ifdim\wd\tcybox=\dimexpr1\jlreq@jareg\relax
+\ifdim\wd\tcybox=\dimexpr1\ptj@zwreg\relax
   \typeout{TATE-PASS: TCY-BOX-1 (wd=\the\wd\tcybox, ht=\the\ht\tcybox, dp=\the\dp\tcybox)}%
 \else
-  \typeout{TATE-FAIL: TCY-BOX-1 (wd=\the\wd\tcybox, expected \the\dimexpr1\jlreq@jareg\relax)}%
+  \typeout{TATE-FAIL: TCY-BOX-1 (wd=\the\wd\tcybox, expected \the\dimexpr1\ptj@zwreg\relax)}%
 \fi
 \setbox\tcybox=\hbox{\tatechuyoko{12}}%
-\ifdim\wd\tcybox=\dimexpr1\jlreq@jareg\relax
+\ifdim\wd\tcybox=\dimexpr1\ptj@zwreg\relax
   \typeout{TATE-PASS: TCY-BOX-2 (wd=\the\wd\tcybox)}%
 \else
   \typeout{TATE-FAIL: TCY-BOX-2 (wd=\the\wd\tcybox)}%
 \fi
 \setbox\tcybox=\hbox{\tatechuyoko{123}}%
-\ifdim\wd\tcybox=\dimexpr1\jlreq@jareg\relax
+\ifdim\wd\tcybox=\dimexpr1\ptj@zwreg\relax
   \typeout{TATE-PASS: TCY-BOX-3 (wd=\the\wd\tcybox)}%
 \else
   \typeout{TATE-FAIL: TCY-BOX-3 (wd=\the\wd\tcybox)}%
 \fi
 \setbox\tcybox=\hbox{\tatechuyoko{1234}}%
-\ifdim\wd\tcybox=\dimexpr1\jlreq@jareg\relax
+\ifdim\wd\tcybox=\dimexpr1\ptj@zwreg\relax
   \typeout{TATE-PASS: TCY-BOX-4 (wd=\the\wd\tcybox)}%
 \else
   \typeout{TATE-FAIL: TCY-BOX-4 (wd=\the\wd\tcybox)}%
@@ -48,23 +48,23 @@
 % --- TCY-SIZE: フォントサイズ変更で 1zw が追従する
 {\Large
 \setbox\tcybox=\hbox{\tatechuyoko{12}}%
-\ifdim\wd\tcybox=\dimexpr1\jlreq@jareg\relax
-  \typeout{TATE-PASS: TCY-SIZE-LARGE (wd=\the\wd\tcybox, jareg=\the\jlreq@jareg)}%
+\ifdim\wd\tcybox=\dimexpr1\ptj@zwreg\relax
+  \typeout{TATE-PASS: TCY-SIZE-LARGE (wd=\the\wd\tcybox, jareg=\the\ptj@zwreg)}%
 \else
-  \typeout{TATE-FAIL: TCY-SIZE-LARGE (wd=\the\wd\tcybox, jareg=\the\jlreq@jareg)}%
+  \typeout{TATE-FAIL: TCY-SIZE-LARGE (wd=\the\wd\tcybox, jareg=\the\ptj@zwreg)}%
 \fi
 }%
 {\footnotesize
 \setbox\tcybox=\hbox{\tatechuyoko{12}}%
-\ifdim\wd\tcybox=\dimexpr1\jlreq@jareg\relax
-  \typeout{TATE-PASS: TCY-SIZE-FOOTNOTE (wd=\the\wd\tcybox, jareg=\the\jlreq@jareg)}%
+\ifdim\wd\tcybox=\dimexpr1\ptj@zwreg\relax
+  \typeout{TATE-PASS: TCY-SIZE-FOOTNOTE (wd=\the\wd\tcybox, jareg=\the\ptj@zwreg)}%
 \else
-  \typeout{TATE-FAIL: TCY-SIZE-FOOTNOTE (wd=\the\wd\tcybox, jareg=\the\jlreq@jareg)}%
+  \typeout{TATE-FAIL: TCY-SIZE-FOOTNOTE (wd=\the\wd\tcybox, jareg=\the\ptj@zwreg)}%
 \fi
 }%
 % --- TCY-STAR: star 形も tate では同一の 1zw 正規化構造
 \setbox\tcybox=\hbox{\tatechuyoko*{123}}%
-\ifdim\wd\tcybox=\dimexpr1\jlreq@jareg\relax
+\ifdim\wd\tcybox=\dimexpr1\ptj@zwreg\relax
   \typeout{TATE-PASS: TCY-STAR (wd=\the\wd\tcybox)}%
 \else
   \typeout{TATE-FAIL: TCY-STAR (wd=\the\wd\tcybox)}%

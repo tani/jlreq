@@ -1,0 +1,10 @@
+% pdftexja standalone: priority-adjusted paragraph
+\documentclass{article}
+\usepackage{pdftexja}
+\usepackage{pdftexja-adjust}
+\begin{document}
+\begin{ptjparagraph}
+これは優先順位付きの伸縮で組まれる段落です。「括弧」や、句読点。Latin wordsも混ざる。
+\end{ptjparagraph}
+\typeout{PTJTEST-PASS: adjust compiled}
+\end{document}

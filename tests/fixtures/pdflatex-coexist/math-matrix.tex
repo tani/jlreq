@@ -1,8 +1,8 @@
 % 共存試験: 行列・場合分けのセル内和文（CJKアクティブ文字と\halignの相互作用）。
-% root cause（修正済み）: backend の post-glyph peek \jlreqpdf@peek（=
+% root cause（修正済み）: backend の post-glyph peek \ptj@peek（=
 % \CJK@ignorespaces）が「\ifmmode\else\futurelet..\fi」形だったため、CJKutf8の
 % \CJK@XXX 末尾条件群内で展開されると \else スキップを越えて窥き見本体が古い
-% \jlreqpdf@next で走り、\CJK@XXX の \fi 群を突いて Extra \fi で落ちた（再現:
+% \ptj@next で走り、\CJK@XXX の \fi 群を突いて Extra \fi で落ちた（再現:
 % 直前に和文がある状態の $あ$、行列セル内和文）。\@gobble イディオム化＋数式内
 % グリフの自然幅化で解消。以下がすべて組めることを検証する。
 \documentclass[pdflatex]{jlreq}

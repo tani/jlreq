@@ -7,7 +7,7 @@
 % 基準線シフト（生 box との差分）と比較する:
 %   δ = (h_M+d_M−JH−JD)/2 + JD − d_M
 %   JH/JD = 縦JFM class 0 の高さ/深さ（対称: 0.5zw + 0.5zw = 1zw）
-% ground truth: uplatex [tate] 実測（jlreq-pdftex.sty の数式キャプチャ実測表）
+% ground truth: uplatex [tate] 実測（pdftexja-core.sty の数式キャプチャ実測表）
 %   10pt: δ=3.44438pt, 14pt: δ=4.89066pt（tbaselineshift と一致）
 %   yoko では行内数式シフト無し（ybaselineshift=0 のまま）
 %
@@ -35,9 +35,9 @@
 \setbox0=\hbox{$x$}%
 % 生参照: one-shot guard を立てたままにすると捕捉が素通りする
 %（同一式の再入力経路 = 実装の契約そのものを使った独立測定）
-\global\jlreqpdf@math@grab=1
+\global\ptj@math@grab=1
 \setbox2=\hbox{$x$}%
-\global\jlreqpdf@math@grab=0
+\global\ptj@math@grab=0
 \@tempdimb=\dimexpr\ht2-\ht0-\@tempdima\relax
 \ifdim\@tempdimb<\z@ \@tempdimb=-\@tempdimb\fi
 \ifdim\@tempdimb<0.05pt\relax
@@ -50,9 +50,9 @@
 \setbox8=\hbox{M}%
 \@tempdima=\dimexpr(\ht8+\dp8-1\jlreq@zw)/2+.5\jlreq@zw-\dp8\relax
 \setbox0=\hbox{$x$}%
-\global\jlreqpdf@math@grab=1
+\global\ptj@math@grab=1
 \setbox2=\hbox{$x$}%
-\global\jlreqpdf@math@grab=0
+\global\ptj@math@grab=0
 \@tempdimb=\dimexpr\ht2-\ht0-\@tempdima\relax
 \ifdim\@tempdimb<\z@ \@tempdimb=-\@tempdimb\fi
 \ifdim\@tempdimb<0.05pt\relax
@@ -107,9 +107,9 @@
 \mathsurround=4pt
 \setbox10=\hbox{a$x$b}%
 % 生参照: guard 下で同一数式を素通りさせ、mathsurround 1対との差を測る
-\global\jlreqpdf@math@grab=1
+\global\ptj@math@grab=1
 \setbox11=\hbox{a$x$b}%
-\global\jlreqpdf@math@grab=0
+\global\ptj@math@grab=0
 \@tempdima=\dimexpr\wd10-\wd11\relax
 \ifdim\@tempdima<\z@ \@tempdima=-\@tempdima\fi
 \ifdim\@tempdima<0.05pt\relax

@@ -19,7 +19,7 @@ micro-layout differences (the earlier "furniture-derived offset", now quantified
 mark site d≈(+1.49,+7.61)pt, footnote text d≈2.3-5.5pt along the line,
 inter-note column spacing 11.458 vs 13.748pt). yoko parity of the same
 machinery is 0.006/0.53pt (measured), so these are tate-mark-chain
-residuals, tracked in docs/pdftex-internals.md, not savepos defects.
+residuals, tracked in pdftexja/doc/pdftexja-internals.md, not savepos defects.
 
 Usage: check-anchor-parity.py <pdflatex.pdf> <uplatex-dvipdfmx.pdf>
 Exit 0 iff the body run is within TOL_BODY.

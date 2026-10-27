@@ -17,16 +17,16 @@
 \end{theindex}
 % --- DIR-IDX-RESTORE: 索引ページ後に tate へ復帰
 本文再開。
-\ifnum\jlreqpdf@dir=1
+\ifnum\ptj@dir=1
   \typeout{TATE-PASS: DIR-IDX-RESTORE (dir=1 after theindex_yoko pages)}%
 \else
-  \typeout{TATE-FAIL: DIR-IDX-RESTORE (dir=\the\jlreqpdf@dir, expected 1)}%
+  \typeout{TATE-FAIL: DIR-IDX-RESTORE (dir=\the\ptj@dir, expected 1)}%
 \fi
 % --- DIR-IDX-PAGEDIR: ページ方向フラグも復帰（次ページは回転出荷）
-\ifnum\jlreqpdf@pagedir@count=1
+\ifnum\ptj@pagedir@count=1
   \typeout{TATE-PASS: DIR-IDX-PAGEDIR (pagedir=1 restored)}%
 \else
-  \typeout{TATE-FAIL: DIR-IDX-PAGEDIR (pagedir=\the\jlreqpdf@pagedir@count, expected 1)}%
+  \typeout{TATE-FAIL: DIR-IDX-PAGEDIR (pagedir=\the\ptj@pagedir@count, expected 1)}%
 \fi
 % --- DIR-IDX-HSIZE: \hsize も縦組み寸法に戻る
 \ifdim\hsize=\textwidth\relax

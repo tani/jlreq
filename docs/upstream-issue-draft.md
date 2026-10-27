@@ -5,6 +5,13 @@ current implementation state of the `pdflatex` branch: **horizontal and
 vertical (`tate`) typesetting are both complete and verified** (two
 quantified residuals registered).
 
+**Structure (2026-10-27)**: the engine-level part is a separate package,
+**pdfTeX-ja** (`pdftexja/`), which plays for pdfLaTeX the role LuaTeX-ja plays
+for LuaLaTeX. The jlreq-side change is limited to a thin `pdflatex` branch in
+jlreq.cls calling the pdfTeX-ja API, jlreq's JFM data (`ptjfm-jlreq*.def`,
+generated from `jfm-jlreq.lua`/`jfm-jlreqv.lua`) and the rotated-banner part of
+jlreq-trimmarks. pdfTeX-ja could live in its own repository/CTAN package.
+
 ---
 
 ## Title (proposal)
@@ -60,7 +67,7 @@ galley、和文グリフを +90° 予備回転、`\@outputpage` で出力箱を 
   全スロット族が upLaTeX ground truth と 0.01pt 一致**（2ページ×10スロット
   =20箇所の実 bbox 照合）。
 * ルビ: CJK パッケージの `ruby.sty` を provider として適合
-  （`jlreq-pdftex-ruby.sty`、provider の overlap 計算を保存。
+  （`pdftexja-ruby.sty`、provider の overlap 計算を保存。
   jlreq 独自の `\ruby` は定義しない）。横組みは上付き・縦組みは読み枠右側で、
   lualatex+ruby.sty 同一ソース対照と yoko ベースラインオフセット完全一致・
   tate 中央合わせ 0.20/0.32pt。
@@ -73,7 +80,7 @@ galley、和文グリフを +90° 予備回転、`\@outputpage` で出力箱を 
   突出し量は upLaTeX と一致。
 * 行末調整: p/u/l/d の 4 エンジンで **0.000pt parity**
   （`endadjust-lineend` ゲート、参照と 0.1pt 許容で固定検査）。
-* **厳密段落環境 `jlreqparagraph`**: 段落パラメータを全件 snapshot し、
+* **厳密段落環境 `ptjparagraph`**: 段落パラメータを全件 snapshot し、
   native 改行器で一度だけ改行した行を行単位で回復して、JFM ペアグルーの
   優先順位付き伸縮を厳密に配分する（入力モデルは明示: CJK 連続・欧文
   word・空白・`\inhibitglue`・`\hspace`/`\kern`/`\penalty`/`\allowbreak`・
@@ -90,9 +97,9 @@ luatexja 既定が HaranoAjiMincho であるため、本 fontset は pdfTeX を
 0.862/1000em)による横組用フル TTF 4面と実 Bold 面を含む）、
 `pdftex_fontset=ipa`（zhmetrics TrueType チェーン）、
 `pdftex_fontset=custom` +
-`pdftex_fontprofile=<file>`（`make_pdftex_fonts.py` が生成）。
+`pdftex_fontprofile=<file>`（`pdftexja-mkfontprofile.py` が生成）。
 フォント派生物（補助縦 TTF/TFM/enc、HaranoAji 横組変換 TTF）は
-**リポジトリに含めず**、TeX Live 収録フォントを `make pdftex-fonts`
+**リポジトリに含めず**、TeX Live 収録フォントを `make -C pdftexja fonts`
 がビルド時に直接読んで生成する（リポジトリはプロファイル .def と
 ライセンス文のみ）。文字抽出はプロファイル読込時に
 `\pdfglyphtounicode` を登録して `\pdfgentounicode=1` で保証（全フィクスチャ
@@ -100,13 +107,13 @@ PDF で U+FFFD 0 件・未埋込フォント 0 件を実測）。
 
 JFM データ: pTeX/upTeX/LuaTeX-ja と**同一ソース**（`jfm-jlreq.lua` /
 `jfm-jlreqv.lua`）から、横/縦 × 括弧位置 3 種 × ぶら下げ on/off の
-**12 変種**（`jlreq-pdftex-jfm*.def`）と manifest
-（`pdftex-jfm-manifest.lua`）を決定的生成。負優先度 stretch も保持
+**12 変種**（`ptjfm-jlreq*.def`）と manifest
+（`ptjfm-jlreq-manifest.lua`）を決定的生成。負優先度 stretch も保持
 （旧 PL 変換の落とし込みは解消済み）。
 
 ### 登録済み残差 / Registered limitations
 
-**数値つき残差（2 件）** — いずれも `docs/pdftex-internals.md` に登録済みで、
+**数値つき残差（2 件）** — いずれも `pdftexja/doc/pdftexja-internals.md` に登録済みで、
 単一脚注の通常利用の範囲外で発生する:
 
 1. **複数脚注段落時の先頭段列頭**: 1 ページに複数の脚注段落があるとき、
@@ -156,16 +163,16 @@ JFM データ: pTeX/upTeX/LuaTeX-ja と**同一ソース**（`jfm-jlreq.lua` /
 
 * **JFM データ（12 変種 `.def` + manifest）はコミットして配布**
   （利用者が texlua を持たない場合でも動作する。再生成差分 0 を
-  `make check-pdftex-jfm` が保証）。
+  `make check-pdftexja-jfm` が保証）。
 * **フォント派生物はコミットしない**: 補助縦 TTF/TFM/enc と
   HaranoAji 横組変換 TTF は、TeX Live 収録の
-  HaranoAji/IPAex/IPA フォントを `make pdftex-fonts`
+  HaranoAji/IPAex/IPA フォントを `make -C pdftexja fonts`
   （fontTools + ttf2tfm）がビルド時に直接読んで生成する
   （リポジトリにフォントバイナリを含めない。`make install` が
   この生成に依存し、生成は一回きり）。
-* 生成器はビルド時のみ実行: `make pdftex-jfm` / `make pdftex-fonts`、
-  検査は `make check-pdftex-jfm` / `make check-pdftex-fonts`
-  （`texlua check_jfm_pdftex.lua` は 12 変種を元 JFM 全項目と照合）。
+* 生成器はビルド時のみ実行: `make pdftexja-jfm` / `make -C pdftexja fonts`、
+  検査は `make check-pdftexja-jfm` / `make -C pdftexja check-fonts`
+  （`texlua check_jfm_pdftexja.lua` は 12 変種を元 JFM 全項目と照合）。
 * **通常の文書コンパイルは Lua/Python を一切起動しない**
   （インストール済み環境では texlua/Python/fontTools/ttf2tfm 不要）。
 
@@ -183,21 +190,21 @@ JFM データ: pTeX/upTeX/LuaTeX-ja と**同一ソース**（`jfm-jlreq.lua` /
     による奇偶ページ属性、分離実装 `jlreq-trimmarks-pdftex.def`。
   * `Makefile` — 生成/検査 target と `install`/`tds` への収録。
   * `README.md` / `README-ja.md` — pdfLaTeX 節。
-* **新規バックエンドモジュール**: `jlreq-pdftex.sty`（フォント/単位/
-  メトリック/数式キャプチャ/出力ラッパ）、`jlreq-pdftex-rules.sty`
+* **新規バックエンドモジュール**: `pdftexja-core.sty`（フォント/単位/
+  メトリック/数式キャプチャ/出力ラッパ）、`pdftexja-jfmglue.sty`
   （JFM ペアグルー・禁則・行末候補列・状態機構・縦グリフ）、
-  `jlreq-pdftex-ruby.sty`（ruby.sty provider 適合）、
-  `jlreq-pdftex-paragraph.sty`（`jlreqparagraph` 厳密段落環境）、
-  生成器 `make_pdftex_jfm.lua` / `make_pdftex_fonts.py`、検査器
-  `check_jfm_pdftex.lua` / `tests/check-pdftex-fonts.py`、生成データ
-  （12 `.def` + manifest + `fonts/pdftex/`）。
+  `pdftexja-ruby.sty`（ruby.sty provider 適合）、
+  `pdftexja-adjust.sty`（`ptjparagraph` 厳密段落環境）、
+  生成器 `make_pdftexja_jfm.lua` / `pdftexja-mkfontprofile.py`、検査器
+  `check_jfm_pdftexja.lua` / `pdftexja/tests/check-fontprofiles.py`、生成データ
+  （12 `.def` + manifest + `pdftexja/fonts/`）。
 * **テスト一式**: `tests/run-pdftex-tests.sh`、fixtures、幾何検査
   `tests/check-*.py`、参照ベースライン `tests/reference/baselines/`、
   CI workflow。
 * **ドキュメント**: `docs/pdftex-compatibility.md`（公開 API 互換表）、
-  `docs/pdftex-internals.md`（機構と実測表）、`docs/pdftex-tests.md`
-  （検証方法）、`docs/pdftex-jfm-generation.md`、
-  `docs/pdftex-dependencies.md`（ライセンス境界: GPL 依存とコード流用の
+  `pdftexja/doc/pdftexja-internals.md`（機構と実測表）、`docs/pdftex-tests.md`
+  （検証方法）、`pdftexja/doc/pdftexja-jfm.md`、
+  `pdftexja/doc/pdftexja-dependencies.md`（ライセンス境界: GPL 依存とコード流用の
   区別）。
 * 依存: bxcjkjatype（CJKutf8 + IPAex Type 1）を内部で読み込む
   （TeX Live 収録済み）。`ipa` プリセットは zhmetrics、ルビは ruby.sty。
@@ -215,5 +222,5 @@ JFM データ: pTeX/upTeX/LuaTeX-ja と**同一ソース**（`jfm-jlreq.lua` /
 * `README.md`「pdfLaTeX (experimental)」節 — 対応範囲の一次サマリ。
 * `docs/pdftex-compatibility.md` — 公開オプション・命令・環境ごとの
   対応状況マトリクス。
-* `docs/pdftex-internals.md` — 縦組みの機構と、対照数値（家具ビット一致・δ sp 一致・バナー 0.01pt・残差 2 件）の測定表。（作業記録は pdflatex-worklog ブランチ）
+* `pdftexja/doc/pdftexja-internals.md` — 縦組みの機構と、対照数値（家具ビット一致・δ sp 一致・バナー 0.01pt・残差 2 件）の測定表。（作業記録は pdflatex-worklog ブランチ）
 * `docs/pdftex-tests.md` — 検証方法とゲート一覧。

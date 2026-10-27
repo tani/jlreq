@@ -1,0 +1,1680 @@
+%%
+%% This is file 'pdftexja-core.sty'.
+%% pdfTeX-ja core (loaded by pdftexja.sty; do not load directly).
+%%
+%% Scope:
+%%   - glyph output via bxcjkjatype (CJKutf8; fontset-dependent faces)
+%%   - always-on CJK state from load time (Japanese literals can be
+%%     measured/typeset anywhere, e.g. inside a document class)
+%%   - \zw/\zh as size-tracking dimen-register macros; \Cht..\Chs
+%%   - \mcfamily/\gtfamily/\mgfamily via CJKfamily; bold via CJKbold
+%%   - vertical font profiles (aux vertical TTF shards + per-glyph data)
+%%   - local/page direction state, direction box factory, tate output
+%%   - inline math capture (tate baseline shift), \mathmc/\mathgt
+%%   - \ptjkansuji, Japanese \label keys, kanji control sequences,
+%%     pLaTeX-compatible tombow (trim mark) machinery
+%%   - JFM glue / kinsoku / line-end adjustment: pdftexja-jfmglue.sty
+%%
+
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{pdftexja-core}[2026/10/27 v0.3 pdfTeX-ja core (experimental)]
+\@ifpackageloaded{pdftexja}{}{%
+  \PackageError{pdftexja-core}{Load pdftexja, not pdftexja-core}{\@ehc}}
+\RequirePackage{pdftexja-jfmglue}
+\RequirePackage{pdftexja-ruby}
+
+%. ---------------------------------------------------------- glyph base
+% Fontset (package option fontset=ipaex-type1|ipa|haranoaji|custom)
+% selects the HORIZONTAL font axis:
+%   ipaex-type1 -> bxcjkjatype ipaex-type1 (Type1 subfonts ipxm/ipxg; the
+%                  default, embeds everywhere, ToUnicode ok)
+%   ipa         -> bxcjkjatype ipa (TrueType uniweight preset: zhmetrics
+%                  dynamic TFM chain unisong@Unicode@ etc.)
+%   haranoaji   -> HaranoAji ships OTF-only (CFF), so pdfTeX's TrueType
+%                  chain reuses the same font-agnostic zhmetrics dynamic
+%                  TFMs and re-points the pdfmapline targets at the
+%                  build-time converted quadratic TTFs
+%                  (pdftexja-mkfontprofile.py --fontset haranoaji emits
+%                  haranoaji-{mincho,gothic}{,-bold}-ttf.ttf). The REAL
+%                  bold faces are wired through bxcjkjatype multiweight.
+%   custom      -> no preset: the user's profile (fontprofile=<file>)
+%                  supplies the vertical axis; the horizontal axis stays
+%                  on the CJK family set up via \setminchofont etc.
+% noCJKpunct : punctuation spacing comes from the JFM rules
+%              (pdftexja-jfmglue.sty); CJKpunct's kerning would double-apply.
+% no `whole' : the CJK state is turned on here (always-on), not per env.
+\edef\ptj@fontopt{\ptj@opt@fontset}%
+\ifnum\pdfstrcmp\expandafter{\ptj@fontopt}{custom}=0 \relax
+  \edef\ptj@tmp{noCJKpunct,scale=\ptj@scale}%
+\else\ifnum\pdfstrcmp\expandafter{\ptj@fontopt}{haranoaji}=0 \relax
+  \edef\ptj@tmp{noCJKpunct,scale=\ptj@scale}%
+\else
+  \edef\ptj@tmp{\ptj@fontopt,noCJKpunct,scale=\ptj@scale}%
+\fi\fi
+\expandafter\PassOptionsToPackage\expandafter{\ptj@tmp}{bxcjkjatype}
+\RequirePackage{bxcjkjatype}
+\ifnum\pdfstrcmp\expandafter{\ptj@fontopt}{haranoaji}=0 \relax
+  \setminchofont{haranoaji-mincho-ttf.ttf}%
+  \setboldminchofont{haranoaji-mincho-bold-ttf.ttf}%
+  \setgothicfont{haranoaji-gothic-ttf.ttf}%
+  \setboldgothicfont{haranoaji-gothic-bold-ttf.ttf}%
+  \setmarugothicfont{haranoaji-gothic-ttf.ttf}%
+\fi
+
+%. --------------------------------------------------- always-on CJK state
+% Japanese literals may appear anywhere (class files evaluate them at load
+% time: char lists, \contentsname, heading labels), so a site-by-site env
+% approach cannot cover that; uncap CJK's encapsulation: make its
+% \global/\active/\local prefixes really global and start the UTF8 state
+% once. State then persists file-wide.
+\makeatletter
+\let\CJK@global\global
+\let\CJK@active\global
+\let\CJK@local\global
+% The CJK family follows the fontset's horizontal preset:
+% ipaex-type1 -> ipxm/ipxg (Type1 planes); others -> mc/gt.
+\def\ptj@cjkfam{mc}%
+\ifnum\pdfstrcmp\expandafter{\ptj@fontopt}{ipaex-type1}=0 \relax
+  \def\ptj@cjkfam{ipxm}%
+\fi
+\CJK@envStart{}{UTF8}{\ptj@cjkfam}%
+% \CJK@ignorespaces is NOT set up by envStart when entered directly
+% (CJK.sty sets it in \CJKspace, normally called from the env form).
+\CJKspace
+% CJK's lazy \CJK@input (\makeatother..\makeatletter) may have flipped
+% the @ catcode; re-issue before using @-named internals.
+\makeatletter
+
+%. --------------------------------------------------------------- units
+% pdfTeX has no zw/zh units. Plain TeX's <factor><internal dimen>
+% scan-dimen syntax (e.g. 2\baselineskip) still works, so the units are
+% macros expanding to a dimen register: `2\zw' works wherever a
+% dimension is scanned. The register is recomputed at every font size
+% change (\size@update) as \f@size x scale, group-locally like the
+% font size itself.
+\newdimen\ptj@zwreg
+\def\zw{\ptj@zwreg}%
+\def\zh{\ptj@zwreg}%
+% Full-width glyphs of the supported fonts are square: 1zh == 1zw.
+% \ptjsetzw{<dimen>}: provisional assignment (classes that need a zw
+% before their first \selectfont).
+\def\ptjsetzw#1{\ptj@zwreg=\dimexpr#1\relax}
+% \f@size is a point count string ("10"); build the pt dimen first and
+% then scale it (\dimexpr\f@size\ptj@scale pt would concatenate the two
+% digit strings).
+\def\ptj@sizehook{%
+  \ptj@zwreg=\dimexpr\f@size pt\relax
+  \ptj@zwreg=\ptj@scale\ptj@zwreg}
+\AddToHook{cmd/set@fontsize/after}{%
+  \expandafter\def\expandafter\size@update\expandafter{\size@update\ptj@sizehook}}
+\ptj@sizehook
+
+% \ptjconvertunits<tl var>: rewrite the pTeX units in a token list of
+% length specifications: <digit>zw -> <digit>\zw, <digit>zh -> <digit>\zh,
+% <digit>Q / <digit>H (1Q = 1H = 0.25mm) -> <digit>\dimexpr0.25mm\relax.
+% Only units directly after a digit are touched (macro names containing
+% these letters are safe). For classes accepting pTeX-style lengths in
+% key-value options.
+\ExplSyntaxOn
+\cs_new_protected:Npn \ptjconvertunits #1
+  {
+    \tl_map_inline:nn { 0123456789 }
+      {
+        \tl_replace_all:Nnn #1 { ##1 zw } { ##1 \zw }
+        \tl_replace_all:Nnn #1 { ##1 zh } { ##1 \zh }
+        \tl_replace_all:Nnn #1 { ##1 Q } { ##1 \dimexpr 0.25mm \relax }
+        \tl_replace_all:Nnn #1 { ##1 H } { ##1 \dimexpr 0.25mm \relax }
+      }
+  }
+\ExplSyntaxOff
+
+% \Cht..\Chs are engine-provided under pTeX (plcore.ltx) and LuaTeX-ja
+% (lltjfont.sty); declare them here (measured by the class or the user).
+\newdimen\Cht
+\newdimen\Cdp
+\newdimen\Cwd
+\newdimen\Cvs
+\newdimen\Chs
+
+%. -------------------------------------------------------------- fonts
+% bxcjkjatype already: \mcdefault/\gtdefault, \mcfamily/\gtfamily/
+% \mgfamily as CJKfamily wrappers, rmfamily/sffamily/ttfamily hooked to
+% CJKfamily selection. Latin NFSS stays a separate axis.
+
+% Bold: \bfseries alone does not raise \CJK@bold@. Track the current
+% NFSS series and switch CJK bold so \sffamily\gtfamily\bfseries
+% headings embolden the kanji too (same test as the kernel's \bfseries:
+% a series starting with b is bold).
+\AddToHook{selectfont}{%
+  \ptj@trackseries
+}
+\def\ptj@trackseries{%
+  \if b\expandafter\@car\f@series\@nil
+    \expandafter\ptj@bold
+  \else
+    \expandafter\ptj@nobold
+  \fi
+}
+\def\ptj@bold{\CJKbold}%
+\def\ptj@nobold{\CJKnormal}%
+
+
+%. ----------------------------------------------- font profile
+% Data source of the vertical glyph forms. fontset (default ipaex-type1):
+%   ipaex-type1 -> pdftexja-fontprofile-ipaex.def
+%   ipa         -> pdftexja-fontprofile-ipa.def
+%   haranoaji   -> pdftexja-fontprofile-haranoaji.def
+%   custom      -> fontprofile=<file> (required for tate)
+% profile contents (pdftexja-mkfontprofile.py):
+%   \ptj@fontprofile@(mc|gt)@shards / @tfm@<n> / @enc@<n>
+%   \pdfmapline{...}   (aux vertical TTF embedding)
+%   \ptj@vglyph@<cp>{{sub}{adv}{vorg}{ink}{shard}{slot}{uni}}
+%   \pdfglyphtounicode{ptjvXXXX}{...}   (text extraction contract)
+%   \pdfgentounicode=1
+% A user-given fontprofile is honoured for every fontset.
+\edef\ptj@profile@file{\ptj@opt@fontprofile}%
+\ifx\ptj@profile@file\@empty
+  \ifnum\pdfstrcmp\expandafter{\ptj@fontopt}{ipa}=0 \relax
+    \def\ptj@profile@file{pdftexja-fontprofile-ipa.def}%
+  \else\ifnum\pdfstrcmp\expandafter{\ptj@fontopt}{haranoaji}=0 \relax
+    \def\ptj@profile@file{pdftexja-fontprofile-haranoaji.def}%
+  \else\ifnum\pdfstrcmp\expandafter{\ptj@fontopt}{ipaex-type1}=0 \relax
+    \def\ptj@profile@file{pdftexja-fontprofile-ipaex.def}%
+  \fi\fi\fi
+\fi
+% No profile: vertical glyph data missing -> explicit error in tate (yoko
+% documents do not need the vertical data).
+\ifx\ptj@profile@file\@empty
+  \ifptj@tate
+    \PackageError{pdftexja}{%
+      tate typesetting needs a font profile}{%
+      The vertical glyph data (profile .def + aux vertical TTF/TFM/enc)\MessageBreak
+      is required for tate. Build it with pdftexja-mkfontprofile.py\MessageBreak
+      and pass it via fontprofile=<file>.\MessageBreak
+      \@ehc}%
+  \fi
+\else
+  \IfFileExists{\ptj@profile@file}{%
+    \input{\ptj@profile@file}%
+  }{%
+    \PackageError{pdftexja}{%
+      font profile file \ptj@profile@file\space is missing}{%
+    pdfTeX-ja cannot find the font profile \ptj@profile@file.\MessageBreak
+    Run `make fonts' in the pdftexja source tree to build the\MessageBreak
+    built-in profiles (installed under tex/latex/pdftexja).\MessageBreak
+    \@ehc}%
+  }%
+\fi
+
+% tate + a profile without vertical glyph data: no silent rotation
+% substitute.
+\ifptj@tate
+  \@ifundefined{ptj@fontprofile@mc@tfm@0}{%
+    \PackageError{pdftexja}{%
+      the font profile has no vertical glyph data (tate)}{%
+    The loaded profile contains no aux vertical font shards.\MessageBreak
+    Regenerate it with `pdftexja-mkfontprofile.py --fontset custom\MessageBreak
+    --mincho <TTF> --gothic <TTF> --profile <file>'.\MessageBreak
+    \@ehc}%
+  }{}%
+\fi
+% 縦字形の実フォント選択: 現在の CJK family に追従して mc/gt 各シャード
+% の補助TFMへ切替える（rules の \ptj@glyph@tate@vert が
+% \ptj@auxfont を使い、シャード番号は \ptj@vg@shard）。
+% family 判定は CJK.sty の現在値 \CJK@family（\usefont の選択に使われ
+% るもの; ipaex-type1 では ipxm/ipxg, ipa プリセットでは mc/gt）と
+% \gtdefault の比較: ゴシック系 == \gtdefault。プロファイル表の
+% mc/gt 軸はこの論理判定で一対一に対応する。
+\def\ptj@aux@fam{mc}%
+\def\ptj@auxfont@select#1{%
+  % 脚注ブロック実測修正: 補助縦TFMは design size 10pt のままでは
+  % 現在サイズに追従しない（footnotesize の縦約物が 9.96pt で組まれ、
+  % uplatex は同位置に 7.97pt で組む。fn 行の高さが strut ではなく
+  % この未スケール字形の ink で決まってしまい、列頭 1.72pt の残差と
+  % マーク（１）の -2pt 出張りの主因）。\ptj@zwreg は selectfont で
+  % サイズ追従する（cls の size@update hook）ため at 指定で実寸化する。
+  \edef\ptj@aux@name{%
+    \csname ptj@fontprofile@\ptj@aux@fam @tfm@#1\endcsname}%
+  \expandafter\font\expandafter\ptj@auxtok
+    \csname ptj@aux@name\expandafter\endcsname\space
+    at\ptj@zwreg\relax
+  \ptj@auxtok
+}
+\def\ptj@auxfont{%
+  \ifx\CJK@family\gtdefault
+    \def\ptj@aux@fam{gt}%
+  \else
+    \def\ptj@aux@fam{mc}%
+  \fi
+  \ptj@auxfont@select{\ptj@vg@shard}%
+}
+%. ------------------------------------------- shims / direction / state
+% \inhibitglue: real one-boundary suppression. Sets the rules
+% machinery's interlock so the NEXT eligible CJK boundary's JFM/auto
+% skip is suppressed ONCE (the emitter consumes the flag at the first
+% boundary it serves -- including the CJK->LA boundary the peek
+% machinery detects). Paragraph/box/math starts re-initialize the flag
+% (everypar / the frame push / the math entry), so a stale token never
+% leaks into a later paragraph.
+\protected\def\inhibitglue{\global\ptj@inhibit=1 }
+
+% Live local direction. \ptj@dir (0=yoko/1=tate, pdftexja-jfmglue.sty)
+% is the CURRENT frame direction: the main document direction seeds it
+% at begin document (package option tate), the box factory and the page
+% direction switches change it. The public tests read it:
+%   \ptjifydir{<true>}{<false>}, \ptjiftdir{<true>}{<false>}
+% (expandable; the pTeX \ifydir/\iftdir analogues).
+\def\ptjifydir{%
+  \ifnum\ptj@dir=0 \expandafter\@firstoftwo \else \expandafter\@secondoftwo \fi}
+\def\ptjiftdir{%
+  \ifnum\ptj@dir=1 \expandafter\@firstoftwo \else \expandafter\@secondoftwo \fi}
+% direction seeding: main-document direction (idempotent, group-free).
+\def\ptj@setmaindir{%
+  \ifptj@tate \global\ptj@dir=1 \else \global\ptj@dir=0 \fi}
+\AtBeginDocument{\ptj@setmaindir}%
+
+%. ---------------------------------------- direction box factory
+% \ptj@yokobox{<body>} / \ptj@tatebox{<body>}: the backend-
+% owned box factory for local direction switches. Contract:
+%   * typesets <body> ONCE, in a box whose frame direction is yoko /
+%     tate respectively; the surrounding direction is restored after;
+%   * cross-direction embedding is normalized to the basic geometry:
+%     a yoko box (w,h,d) placed upright in a tate frame advances h+d,
+%     with cross extent h' = w/2, d' = w - h' (basic normalization;
+%     exact arithmetic, no slack);
+%   * in the SAME direction as the current frame, the box is returned
+%     unchanged (identity, no extra wrapper);
+%   * the factory's boxes carry the direction in the frame state while
+%     they are built; for register \copy/\box re-use the direction is
+%     whatever the current frame is at unboxing time (pdfTeX has no box
+%     attributes; the private-query helper below enforces honesty).
+% In the shipout-rotation model the inner frame of a tate document
+% is horizontal: a "tatebox" body is typeset as a normal horizontal
+% paragraph (the glyphs self-rotate via the rules glyph layer) and a
+% "yokobox" body likewise; the geometric transform for the cross case
+% is therefore applied only when the OUTER frame is the opposite of the
+% requested one, as explicit box arithmetic (\kern/\raise + rotatebox),
+% mirroring pTeX's automatic yoko-in-tate embedding:
+%   anchor A, body B(w,h,d) upright:
+%     advance = h+d, cross: ht=w/2 dp=w-h/2, B's baseline at A.
+\newbox\ptj@dirbox
+\long\def\ptj@yokobox#1{%
+  \ifnum\ptj@dir=0
+    % already yoko: identity (single typeset pass, no wrapper)
+    #1%
+  \else
+    % yoko body inside a tate frame: normalized upright embedding.
+    % Guard the rules frame machinery for the measurement pass (this is
+    % a backend-internal box, not a semantic boundary).
+    \global\advance\ptj@nest1
+    \global\ptj@dir=0
+    \setbox\ptj@dirbox=\hbox{{#1}}%
+    \global\ptj@dir=1
+    \global\advance\ptj@nest-1
+    \ptj@embed@yoko@in@tate
+  \fi}
+% \ptj@yokobox@strut{<ht>}{<dp>}{<body>}: like \ptj@yokobox but
+% the measured body box's height/depth are SET to <ht>/<dp> before the
+% embedding arithmetic. pTeX's tcy pins the body's ht+dp at 1zw via a
+% strut rule whose extent the (pTeX-metric) digits never exceed; the
+% pdfTeX latin metrics can exceed .5zw halves, so the pinning is done on
+% the BOX DIMS directly (content may overhang the body box -- boxes do
+% not clip, and the outer box's ht/dp/wd are still the normalized values,
+% matching uplatex's showbox: outer ht=dp=w/2, advance=ht+dp=1zw).
+\long\def\ptj@yokobox@strut#1#2#3{%
+  \ifnum\ptj@dir=0
+    #3%
+  \else
+    \global\advance\ptj@nest1
+    \global\ptj@dir=0
+    \setbox\ptj@dirbox=\hbox{{#3}}%
+    \global\ptj@dir=1
+    \global\advance\ptj@nest-1
+    \ht\ptj@dirbox=#1\relax
+    \dp\ptj@dirbox=#2\relax
+    \ptj@embed@yoko@in@tate
+  \fi}
+\long\def\ptj@tatebox#1{%
+  \ifnum\ptj@dir=1
+    % already tate: identity
+    #1%
+  \else
+    % tate body inside a yoko frame: the body is typeset horizontally
+    % (inner frame of the rotation model); its glyphs must read as a
+    % vertical run in the final yoko page, so the run is rotated 90deg
+    % CCW and the advance is normalized to the body's cross extent.
+    \global\advance\ptj@nest1
+    \global\ptj@dir=1
+    \setbox\ptj@dirbox=\hbox{{#1}}%
+    \global\ptj@dir=0
+    \global\advance\ptj@nest-1
+    \ptj@embed@tate@in@yoko
+  \fi}
+% yoko-in-tate exact embedding (the tcy primitive; also the generic
+% factory path). Body = \box\ptj@dirbox (w,h,d). Uses the SAME
+% graphicx \rotatebox{90} bbox normalization the tate glyph renderer
+% relies on: \rotatebox{90}{B} yields wd=h+d, ht=w, dp=0, with B's
+% baseline at x=ht(B) inside the result (measured: rot4 probe).
+\def\ptj@embed@yoko@in@tate{%
+  % save the body's geometry FIRST: \rotatebox's argument \box-empties
+  % \ptj@dirbox, so w/h/d must not be read after the rotation.
+  \ptj@emb@w=\wd\ptj@dirbox
+  \ptj@emb@h=\ht\ptj@dirbox
+  \ptj@emb@d=\dp\ptj@dirbox
+  \setbox\@tempboxa=\hbox{\rotatebox{90}{\box\ptj@dirbox}}%
+  % \box\@tempboxa: wd=h+d, ht=w, dp=0; its left edge = B's TOP, and B's
+  % baseline sits at x=ht(B) inside the result (measured: rot4 probe).
+  % Shift so B's baseline lands on the outer reference x=0 (B's height
+  % then hangs into the previous cell, exactly pTeX's anchor mapping:
+  % uplatex PDF bbox shows digit baseline = advance-slot top) and the
+  % cross extent (B's width) is centered on the tate baseline.
+  \setbox\@tempboxa=\hbox{%
+    \kern-\ptj@emb@h
+    \lower.5\ptj@emb@w
+    \box\@tempboxa}%
+  % advance = h+d of the body (pTeX's yoko-in-tate advance; with the tcy
+  % rule strut ht+dp = 1zw). The kern makes the NATURAL width d only, so
+  % the advance is set EXPLICITLY (no slack; matches uplatex showbox:
+  % outer box wd = ht_B + dp_B).
+  \wd\@tempboxa=\dimexpr\ptj@emb@h+\ptj@emb@d\relax
+  % cross extent: the body's width split evenly around the tate baseline
+  % (pTeX dirbox normalization; uplatex showbox: ht=dp=w/2)
+  \ht\@tempboxa=\dimexpr.5\ptj@emb@w\relax
+  \dp\@tempboxa=\dimexpr\ptj@emb@w-.5\ptj@emb@w\relax
+  \box\@tempboxa}
+\newdimen\ptj@emb@w
+\newdimen\ptj@emb@h
+\newdimen\ptj@emb@d
+% tate-in-yoko exact embedding: the tate run (built horizontally in
+% the inner frame) rotated CCW so it reads top-to-bottom in the yoko
+% page; advance = the body's cross extent, cross = its run length.
+\def\ptj@embed@tate@in@yoko{%
+  \setbox\@tempboxa=\hbox{\rotatebox{90}{\box\ptj@dirbox}}%
+  \box\@tempboxa}
+% Public names of the factory.
+\let\ptjyokobox\ptj@yokobox
+\let\ptjtatebox\ptj@tatebox
+% \ptjtatechuyoko{<body>}: tate-chu-yoko. In a tate frame the yoko body
+% is embedded upright with its advance pinned to one character cell:
+% the body's ht/dp are set to the JFM class-0 height/depth x zw
+% (\ptjcharheight/\ptjchardepth; 0.5/0.5 zw for the usual vertical
+% JFMs, i.e. advance = 1zw, as pTeX's \hbox{\yoko ...} with a 1zw strut).
+% In a yoko frame the body is typeset as is.
+\long\def\ptjtatechuyoko#1{\ptj@yokobox@strut{\ptjcharheight}{\ptjchardepth}{#1}}
+% \ptj@boxdir{<box register>}: private query helper. pdfTeX has no
+% box-direction attribute: a box built by the factory is only known to
+% be direction-tagged while it is being built. Once the box is a bare
+% register, its interior direction CANNOT be derived. This helper is
+% the plan's safety contract: it STOPS with ClassError for any box not
+% currently known (no silent yoko fallback), and returns the direction
+% only for boxes recorded by the factory in the same group scope.
+% Normal documents never hit it: every internal caller uses the
+% factory helpers above.
+\def\ptj@boxdir#1{%
+  \PackageError{pdftexja}{direction of an unknown box cannot be queried}{%
+    pdfTeX has no box-direction attribute. A box is direction-tagged only\MessageBreak
+    while the box factory (\noexpand\ptjyokobox/\noexpand\ptjtatebox)\MessageBreak
+    builds it. Use the factory instead of querying raw registers.\MessageBreak
+    \@ehc}%
+  % error recovery: assume the current frame direction (never a silent
+  % yoko fallback -- the error above has already fired)
+  \ifnum\ptj@dir=0 yoko\else tate\fi}
+
+%. --------------------------------------------------- math
+% pTeX's \DeclareSymbolFont{mincho}/\jfam do not exist under pdfTeX:
+% Japanese in math is supplied as a text-font box (\ptj@mathja, below).
+% \mathmc/\mathgt are defined unless the package option disablejfam is
+% given (the (u)pTeX semantics of disablejfam).
+\ifptj@jfam
+  \AtEndOfPackage{%
+    \DeclareRobustCommand{\mathmc}[1]{\ptj@mathja{mc}{#1}}%
+    \DeclareRobustCommand{\mathgt}[1]{\ptj@mathja{gt}{#1}}}
+\fi
+
+%. ------------------------------------------- kanji numerals (\kansuji)
+% pTeXの\kansujiに相当するプリミティブはpdfTeXには無い．uplatex/platexでの
+% 実測（0–1000000をtypeout照合）により，pTeXの仕様は「十進の各桁を
+% 〇一二三四五六七八九に置き換える」桁置換であり（10→一〇，100→一〇〇，
+% 2025→二〇二五），十・百・千の位取りは行わない．0→〇，負数→空．
+% これを完全展開可能なマクロで再現する．
+%
+% always-on CJK下では和文リテラル（UTF-8活字化バイト列）を\edefや素の
+% \writeで展開するとCJK内部の条件分岐（\CJK@XXX）が破綻するため，字形
+% への置換は組版時まで遅延させる設計:
+%  * \ptj@kjczero..\ptj@kjcnine : 各桁の生文字マクロ（UTF-8リテラル）．
+%  * \ptj@kansuji@digit{<d>} : 1桁印字．\protectedなので\edef/\write/
+%    \mark/\typeoutのすべてで凍結され，TOC・柱・見出しラベルを安全に
+%    通過する（組版時に展開されて生文字を出力）．
+%  * \ptj@kansuji{<num>} : 完全展開可能．<num>は\numexpr式または
+%    単一トークン（\c@chapter等）．展開結果は\ptj@kansuji@digitの列．
+%  * \ptj@kansuji@run{<printer>}{<num>} : プリンタ差替口．テストが
+%    \detokenize系プリンタを渡してログ照合に用いる．
+\def\ptj@kjczero{〇}
+\def\ptj@kjcone{一}
+\def\ptj@kjctwo{二}
+\def\ptj@kjcthree{三}
+\def\ptj@kjcfour{四}
+\def\ptj@kjcfive{五}
+\def\ptj@kjcsix{六}
+\def\ptj@kjcseven{七}
+\def\ptj@kjceight{八}
+\def\ptj@kjcnine{九}
+\protected\def\ptj@kansuji@digit#1{%
+  \ifcase#1 \ptj@kjczero\or \ptj@kjcone\or \ptj@kjctwo\or \ptj@kjcthree\or
+    \ptj@kjcfour\or \ptj@kjcfive\or \ptj@kjcsix\or \ptj@kjcseven\or
+    \ptj@kjceight\or \ptj@kjcnine\fi}
+\def\ptj@kansuji#1{\ptj@kansuji@run\ptj@kansuji@digit{#1}}
+\def\ptj@kansuji@run#1#2{%
+  \expandafter\ptj@kansuji@norm\expandafter#1\expandafter{\the\numexpr#2\relax}}
+% #1=プリンタ，#2=符号付き10進文字列（\the\numexpr済み）．負数は空．
+\def\ptj@kansuji@norm#1#2{%
+  \ifnum#2<\z@\else\ptj@kansuji@loop#1#2\ptj@kansuji@stop\fi}
+% 再帰呼出しは \expandafter で自身の \fi を先に閉じる（さもないと次桁ではなく
+% \fi が #2 として拾われて無限再帰になる，定番の罠）．
+\def\ptj@kansuji@loop#1#2{%
+  \ifx#2\ptj@kansuji@stop
+  \else
+    #1{#2}%
+    \expandafter\ptj@kansuji@loop\expandafter#1%
+  \fi}
+\def\ptj@kansuji@stop{\ptj@kansuji@stop}
+% Public: \ptjkansuji{<integer expression>} (or a single register token,
+% \ptjkansuji\year): pTeX \kansuji digit substitution, fully expandable.
+\let\ptjkansuji\ptj@kansuji
+
+%. ------------------------------- label key normalizer
+% 日本語ラベル key の対称正規化。常時CJK（UTF8 byte 群がアクティブ）の
+% pdfTeX では、\label{日本語} の key は \csname r@<key>\endcsname
+% （kernel \@kernel@sref 等）で裸展開され、byte マクロ内部の \global・
+% \futurelet が \csname 内に混入して "Missing \endcsname" になる
+% （実測: 2バイト・3バイト文字で再現）。CJK の byte マクロは
+% \ifx\protect\@typeset@protect 分岐で「\protect がタイプセット保護の
+% 間は自らを \noexpand する」契約なので、kernel の \protected@write /
+% \protected@edef と同じ仕組みで展開を先導すると生 byte が残る:
+%   (1) \protected@edef 系で key を一度「凍結」すると、UTF8 byte は
+%       catcode 12/13 のまま文字列化された byte 列になる
+%       （実測: \let\protect\@unexpandable@protect + \edef で
+%        日本語ラベル が同一 byte 列に凍結される）。
+%   (2) \detokenize{<凍結済み列>} は catcode を 12 に揃えるだけで
+%       byte は一切変えない（実測: 2 回適用で同一、pdfstrcmp 0）。
+%   (3) catcode 12 の byte 列は \csname 構成でも安全（実測:
+%       gdef\csname r@<detok列> の定義・参照が丸ごと成立）。
+% よって正規化器は「\detokenize で key 全体を同一 byte 列化」である。
+% これは ASCII key に対しては完全な恒等変換（aux の ASCII \newlabel 行は
+% byte 不変、実測: \newlabel{sec:top} が1 byte 単位で不変）。
+% マクロ label（\label{\mylabelmacro}）も \detokenize 前に
+% \protected@edef の保護下で通常どおり展開されるため意味が変わらない
+% （kernel \label の書込経路と同一条件）。
+% 対象は write（\label 系の key 部）・read（aux の \newlabel 行）・
+% query（\ref 系の key）の3点で全て同じ正規化を通す（対称性）。
+\long\def\ptj@labelkey#1{%
+  \begingroup
+    \let\protect\@unexpandable@protect
+    % 段階1: 通常マクロ・カウンタは従来どおり展開し、UTF8 byte は
+    % CJK byte マクロの保護分岐（\noexpand<byte>）で凍結する。
+    % （実測: この条件下の \edef で日本語ラベル が同一 byte に凍結）
+    \protected@edef\ptj@labelkey@res{#1}%
+    % 段階2: catcode を 12 に揃える（byte は不変）。\detokenize は引数を
+    % 展開しないため、段階1で展開を済ませてから適用する
+    \protected@edef\ptj@labelkey@res{\detokenize\expandafter{\ptj@labelkey@res}}%
+  \expandafter\endgroup
+  \expandafter\def\expandafter\ptj@labelkey@out\expandafter{\ptj@labelkey@res}%
+}
+% ↑ 定義系（非展開）入口: 結果を \ptj@labelkey@out に返す。
+% 段階1で user macro（\mylabel 等）は kernel \label の書込経路と同じ
+% 条件で展開され、UTF8 byte は凍結。段階2で csname-safe 化する。
+\long\def\ptj@labelkey@write#1#2{%
+  % #1 = \write 出力先（\@auxout 等; kernel protected@write と同じ
+  %     呼び出し規約）, #2 = 正規化済み key を含む出力本体
+  \protected@write#1{}{#2}%
+}
+
+% Japanese label keys: the hooks.
+% kernel の label/ref 面のうち、key が \csname r@<key>\endcsname に
+% 裸で渡る箇所に同一正規化を挿入する:
+%   * \label（書込）: \protected@write の前に key を正規化
+%   * \newlabel / \@newl@bel（aux 読込）: key を正規化してから
+%     \gdef\csname r@<key> に渡す
+%   * \ref/\pageref（star 両形; \eqref は \ref 経由）: query key を正規化
+% パッケージ面（nameref/hyperref/refcount/cleveref）は begin document 後、
+% 各パッケージの実装を上書きする（kernel 面と同じ正規化器を使用）。
+% 読込側（aux の \newlabel 行）だけは kernel が aux を読む
+% \UseOneTimeHook{begindocument} の「前」に実行されるため、
+% \AtBeginDocument では間に合わない（実測: latex.ltx \document は
+% \@input{\jobname.aux} を begindocument hook より前に置く）。
+% begindocument/before は aux 読込より前に発火する唯一のフック。
+\AddToHook{begindocument/before}{%
+  % --- (2) \newlabel: aux 読込側（key を正規化してから r@<key> を定義）---
+  \def\newlabel#1#2{%
+    \ptj@labelkey{#1}%
+    \expandafter\gdef\csname r@\ptj@labelkey@out\endcsname{#2}}%
+}
+\AtBeginDocument{%
+  % --- (1) \label: write 側（kernel 定義を正規化版で上書き）---
+  \def\label#1{%
+    \@bsphack
+    \begingroup
+      \UseHookWithArguments{label}{1}{#1}%
+      \ptj@labelkey{#1}%
+      \protected@write\@auxout{}%
+         {\string\newlabel{\ptj@labelkey@out}{{\@currentlabel}{\thepage}%
+          {\@currentlabelname}{\@currentHref}{\@kernel@reserved@label@data}}}%
+    \endgroup
+    \@esphack}%
+  % --- (3) \ref / \pageref: query 側（star 両形; eqref は \ref 経由）---
+  \renewcommand{\ref}{\@ifstar{\ptj@ref@n@s}{\ptj@ref@n@ns}}%
+  \renewcommand{\pageref}{\@ifstar{\ptj@pageref@n@s}{\ptj@pageref@n@ns}}%
+  \newcommand{\ptj@ref@n@ns}[1]{\ptj@setref{#1}\@firstoffive}%
+  \newcommand{\ptj@ref@n@s}[1]{\ptj@setref{#1}\@firstoffive}%
+  \newcommand{\ptj@pageref@n@ns}[1]{\ptj@setref{#1}\@secondoffive}%
+  \newcommand{\ptj@pageref@n@s}[1]{\ptj@setref{#1}\@secondoffive}%
+  % \ptj@setref{<raw key>}{<selector>}: kernel \@setref と同一の二段構成。
+  % 第一段: \csname r@<正規化key> を先に展開して「cs トークン」を作り、
+  % 第二段（\ptj@setref@i）で \expandafter#2#1 の形でその中身を
+  % selector に渡す（kernel \setref の "\expandafter#2#1\@empty.." と同じ）。
+  \newcommand{\ptj@setref}[2]{%
+    \ptj@labelkey{#1}%
+    \expandafter\ptj@setref@i
+      \csname r@\ptj@labelkey@out\endcsname{#2}{#1}}%
+  \newcommand{\ptj@setref@i}[3]{%
+    \ifx#1\relax
+      \protect\G@refundefinedtrue
+      \nfss@text{\reset@font\bfseries ??}%
+      \@latex@warning{Reference `#3' on page \thepage \space undefined}%
+    \else
+      \expandafter#2#1\@empty\@empty\@empty\null
+    \fi}%
+}
+  % --- (4) パッケージ面（nameref/hyperref/refcount/cleveref hooks）---
+  % begindocument/end は全 begindocument フック（nameref の \ref 再定義、
+  % hyperref の諸設定）より後に発火するため、ここで各パッケージの
+  % key 渡し面に同じ正規化を接続する。
+  \AddToHook{begindocument/end}{%
+    % nameref: \NR@setref の \csname r@#1 を正規化 key で組み直す
+    \@ifundefined{NR@setref}{}{%
+      \def\NR@setref#1{%
+        \ptj@labelkey{#1}%
+        \begingroup
+          \@safe@activestrue
+          \expandafter
+        \endgroup
+        \expandafter\NR@@setref
+          \csname r@\ptj@labelkey@out\endcsname}%
+    }%
+    % hyperref: \label@hyperref（\hyperref[..] の key 照合）と
+    % \HyRef@autoref（\autoref の key 照合）の \csname r@<key> を正規化
+    \@ifundefined{label@hyperref}{}{%
+      \def\label@hyperref[#1]{%
+        \ptj@labelkey{#1}%
+        \expandafter\label@@hyperref
+          \csname r@\ptj@labelkey@out\endcsname{#1}}%
+    }%
+    \@ifundefined{HyRef@autoref}{}{%
+      \def\HyRef@autoref#1#2{%
+        \ptj@labelkey{#2}%
+        \begingroup
+          \Hy@safe@activestrue
+          \expandafter\HyRef@autosetref
+            \csname r@\ptj@labelkey@out\endcsname{#2}{#1}%
+        \endgroup}%
+    }%
+    % refcount: \rc@set（定義文脈）は正規化を先行させる。
+    % \getrefnumber は「完全展開可能」契約を維持するため、展開文脈でも
+    % 安全な \detokenize による byte 列化のみを行う（アクティブ CJK byte
+    % は \detokenize が展開せず string 化するため \csname 構成が安全に
+    % なる。マクロ入り key は kernel の展開型照合でも元々非対称のため
+    % 従来どおり）。eqref は \ref 経由のため重複 patch 不要。
+    \@ifundefined{rc@set}{}{%
+      % \refused（\ltx@IfUndefined{r@<key>} の生 key 照合）も正規化する
+      \def\refused#1{%
+        \ptj@labelkey{#1}%
+        \expandafter\ifx\csname r@\ptj@labelkey@out\endcsname\relax
+          \protect\G@refundefinedtrue
+          \rc@WarningUndefined{#1}%
+        \fi}%
+      \def\rc@set#1#2#3#4{%
+        \begingroup
+          \csname @safe@activestrue\endcsname
+          \refused{#4}%
+          \ptj@labelkey{#4}%
+          \expandafter\rc@@set
+            \csname r@\ptj@labelkey@out\endcsname{#1}{#2}{#3}%
+        \endgroup}%
+    }%
+    \@ifundefined{getrefnumber}{}{%
+      % \getrefnumber は refcount の「完全展開可能」契約を維持する:
+      % \detokenize は引数を展開せず string 化するため展開文脈で安全で、
+      % アクティブ CJK byte の \csname 構成が成立する。
+      % マクロ入り key は stock kernel/refcount の展開型照合でも書込側と
+      % 非対称のため従来同等（ドキュメント化済みの境界）。
+      \renewcommand*{\getrefnumber}[1]{%
+        \romannumeral
+        \expandafter\ptj@grn@e\expandafter{\detokenize{#1}}}%
+      \def\ptj@grn@e#1{%
+        \ltx@ifundefined{r@#1}{%
+          \expandafter\ltx@zero\rc@default
+        }{%
+          \expandafter\expandafter\expandafter\rc@extract@
+          \expandafter\expandafter\expandafter!%
+          \csname r@#1\expandafter\endcsname
+          \expandafter{\rc@default}\@nil
+        }}%
+    }%
+    % cleveref: \cref の取得面 \cref@getref / \cpageref@getref と
+    % 書込面（\newlabel{<key>@cref}）は cleveref の label hook 経由で
+    % key が渡る。読み側の r@<key>@cref 構成を正規化 key で行う。
+    \@ifundefined{cref@getref}{}{%
+      % cleveref 内部の \edef\@tempa{#2}（key list 走査）がアクティブ CJK
+      % byte を裸展開するため、\@cref の入口で key list を先に正規化する
+      % （catcode 12 byte はそれ以降の cleveref 内部処理で展開されない）。
+      % \cref@getref は正規化 key を受ける（再度の正規化は冪等）。
+      % 書込面の \newlabel{<key>@cref} 行の byte 列と読込面の正規化 key は
+      % 同一 byte になる（aux は生 byte、読みは catcode 12 の同一列）。
+      \let\ptj@cref@orig@atcref\@cref%
+      \def\@cref#1#2{%
+        \ptj@labelkey{#2}%
+        \edef\ptj@cref@call{%
+          \noexpand\ptj@cref@orig@atcref{#1}{\ptj@labelkey@out}}%
+        \ptj@cref@call}%
+      % NOTE: "\csname r@\ptj@labelkey@out@cref" は @ が letter のため
+      % 「out@cref」が単一の制御綴に融合する。接尾辞はマクロ経由で連結する。
+      \def\ptj@cref@suffix{@cref}%
+      \def\cref@getref#1#2{%
+        \ptj@labelkey{#1}%
+        \expandafter\let\expandafter#2%
+          \csname r@\ptj@labelkey@out\ptj@cref@suffix\endcsname%
+        \expandafter\expandafter\expandafter\def%
+          \expandafter\expandafter\expandafter#2%
+          \expandafter\expandafter\expandafter{%
+            \expandafter\@firstoftwo#2}}%
+      \def\cpageref@getref#1#2{%
+        \ptj@labelkey{#1}%
+        \expandafter\let\expandafter#2%
+          \csname r@\ptj@labelkey@out\ptj@cref@suffix\endcsname%
+        \expandafter\expandafter\expandafter\def%
+          \expandafter\expandafter\expandafter#2%
+          \expandafter\expandafter\expandafter{%
+            \expandafter\@secondoftwo#2}}%
+    }%
+  }%
+
+%. ------------------------------------------------ tate output
+% 出荷時回転（shipout rotation）＋薄い出力ラッパ。
+%
+% 【再構成】かつてはカーネル \@outputpage 本体を丸写しして家具行の幅を
+% \textheight に差し替えていた。丸写しは (a) カーネル進化（tagging
+% socket・catcode ブロック等）に自動追従しない、(b) 本体パッチや
+% build/page フックの追加を複製し忘れる、という構造的リスクを抱える。
+% この再構成は丸写しを廃止し、begin document で「その時点のカーネル実装」を
+% \ptj@saved@outputpage に保存して呼び出す薄いラッパに置き換えた:
+%
+%   1. ページ方向フラグ \ptj@pagedir@count（1=tate 論理ページ/
+%      0=yoko 論理ページ; theindex 系が 0 にする; 既定 1）を見る。
+%   2. tate のとき本文箱 \@outputbox を -90° 回転して \@outputbox に
+%      戻す（回転はここだけ; 家具・shipout は元実装のまま流れる）。
+%   3. 家具行の幅: カーネル本体は \hb@xt@\textwidth{\@thehead} で
+%      柱・ノンブル行を組む。縦組みページの最終枠巾は版面高
+%      （\textheight）なので、ラッパは saved 本体の実行中だけ
+%      \textwidth を \textheight に（局所 group。版面巾と版面高という
+%      論理寸法と物理寸法の区別はこの一箇所に集約する — 散在する
+%      raise/kern・寸法上書きはしない）。yoko 論理ページ（theindex）も
+%      同じ最終枠巾で家具を組むため同じ差し替えを使う。
+%   4. 保存した元実装を呼ぶ。build/page/* フック・kernel の hook 付き
+%      shipout・trimmarks の \@tombowreset@@paper（build/page/reset）は
+%      すべて元実装の内部でそのまま走る。
+%
+% yoko 文書（\ifptj@tate が偽）はこのラッパを一切通さない: カーネルの
+% \@outputpage がそのまま使われる。
+%
+% NOTE: \ifptj@tate は \newif 条件トークン。\ifptj@tate...\fi の中に本体を
+% 置くと条件スキップが \if@newlist を数えてしまうので、
+% \expandafter\@firstofone/\@gobble イディオムで条件を閉じてから
+% ブロックを読む（出力ルーチン改修以来維持している注意）。
+%
+% ページ方向フラグ: theindex（complements の theindex_yoko を含む）は
+% tate 文書内に本当の横組み論理ページを作る。ページレベルの方向はこの
+% フラグ: \ifptj@tate かつフラグ=1 のとき出荷回転が掛かる。フラグを切り
+% 替えたページは先に \clearpage で流し切る（呼出し側; フラグが作り途中
+% のページに遡って効かないため）。
+\newcount\ptj@pagedir@count \global\ptj@pagedir@count=1
+\def\ptj@pagedir@restore{\global\ptj@pagedir@count=1 }%
+\def\ptj@pagedir#1{\global\ptj@pagedir@count=#1\relax}%
+% Public page-direction API (tate documents; pTeX's page-level \yoko):
+%   \ptjyokopage  -- \clearpage, then horizontal logical pages: no
+%                    shipout rotation, local direction yoko, and the
+%                    galley measure becomes the vertical text block
+%                    length (\hsize = \linewidth = \columnwidth =
+%                    \textheight, pTeX's \yoko page role swap)
+%   \ptjtatepage  -- \clearpage, then back to vertical pages
+%   \ptjiftatepage{<true>}{<false>} -- expandable: the current page is
+%                    a rotated (vertical) logical page
+% In yoko documents \ptjyokopage/\ptjtatepage do nothing.
+\def\ptjyokopage{%
+  \ifptj@tate\ifnum\ptj@pagedir@count=1
+    \clearpage
+    \ptj@pagedir{0}%
+    \global\ptj@dir=0
+    \hsize=\textheight
+    \linewidth\hsize
+    \columnwidth\hsize
+  \fi\fi}
+\def\ptjtatepage{%
+  \ifptj@tate\ifnum\ptj@pagedir@count=0
+    \clearpage
+    \ptj@pagedir@restore
+    \global\ptj@dir=1
+    \hsize=\textwidth
+    \linewidth\textwidth
+    \columnwidth\textwidth
+  \fi\fi}
+\def\ptjiftatepage{%
+  \ifptj@tate
+    \ifnum\ptj@pagedir@count=1
+      \expandafter\expandafter\expandafter\@firstoftwo
+    \else
+      \expandafter\expandafter\expandafter\@secondoftwo
+    \fi
+  \else
+    \expandafter\@secondoftwo
+  \fi}
+\ifptj@tate\expandafter\@firstofone\else\expandafter\@gobble\fi
+  {\AtBeginDocument{%
+    \expandafter\let\expandafter\ptj@saved@outputpage\csname @outputpage\endcsname
+    \expandafter\def\csname @outputpage\endcsname{%
+      \begingroup
+        \ifnum\ptj@pagedir@count=1
+          % tate 論理ページ: 本文箱を -90° 回転（advance=元の ht+dp、
+          % cross=体幅半分ずつ — rotatebox の正規化。回転はここだけ）。
+          %  【第一行リーディング補正（縦組列配置の完全一致）】
+          %  native 縦組（uplatex）では最初の列のグリフは
+          % 版面の右端から topskip−Cdp だけ内側に来る（galley 第一行の
+          % baseline が topskip 位置にあり、グリフが baseline から Cdp
+          % だけ行頭側へ出るため。実測: uplatex col1 右端 359.7pt =
+          % 版面右端 365.06pt − (topskip 10pt − Cdp 5pt) + ink 0.36）。
+          % 回転箱は galley の上端を回転後の右端にそのまま置くため、
+          % この第一行オフセットが失われ、列全体が版面右端に
+          % 貼り付いていた（実測 +4.98pt ≈ topskip−Cdp）。カーンで
+          % (Cdp−topskip) だけ左へ戻して native と一致させる。
+          % この補正は脚注ブロック・合印も同一の第一行機構で
+          % 下流するため、それらの残差も同時に閉じる。
+          \setbox\@outputbox=\hbox{%
+            \kern\dimexpr\Cdp-\topskip\relax
+            \rotatebox{-90}{\box\@outputbox}}%
+        \else
+          % yoko 論理ページ（theindex）: 内枠は既に最終方位なので
+          % 無回転で出す。行長（\textwidth）は版面巾より狭く、余白は
+          % galley 側で配分される（実測どおり）。
+        \fi
+        % 家具行の幅 = 最終枠巾（縦組みページでは版面高）。saved 本体は
+        % \hb@xt@\textwidth{...} を 2 箇所で読むため、実行中だけ差し替え
+        % る。物理用紙寸法（\paperwidth/\paperheight）や版面高は無関係。
+        \textwidth\textheight
+        \ptj@saved@outputpage
+      \endgroup
+    }%
+  }}
+
+%. ------------------------------------------------ math capture
+% 数式の統一キャプチャ（active-$ 撤去・全入口を一回実行へ統合）。
+%
+% 【状態と ground truth（実測・uplatex 同一ソース bbox/showbox）】
+%   * tate 文書: 行内数式は式全体が δ_t 下げ（uplatex: \hbox{$x$} の
+%     ht/dp が raw 数式寸法からちょうど δ_t だけ下がる。δ_t =
+%     plcore.ltx:776-792 \adjustbaseline と同一式）。
+%     δ_t = (h_M+d_M−JH−JD)/2 + JD − d_M
+%     （M=現在の欧文フォントを無補正で測定、JH/JD=現JFM class 0 の
+%      高さ/深さ×zw。縦JFM は対称 h=d=0.5zw なので
+%      δ_t=(h_M+d_M−1zw)/2+0.5zw−d_M）
+%   * yoko 文書: uplatex は行内数式に一切シフトを掛けない
+%     （\ybaselineshift=0 のまま; 実測: \hbox{$x$} が raw 数式寸法と
+%      完全一致。adjustbaseline の \iftdir 分岐が tbaselineshift しか
+%      計算しないため）。→ 横組みではシフト無し・キャプチャ不要。
+%   * 数式内テキスト box（\text/\mbox/\mathmc 等、tate で横組内容）:
+%     uplatex では式全体の δ_t に加え、方向一致部品が
+%     ptex-base.ch [36.720] shift_sub_exp_box により
+%     t_baseline_shift×factor(1000/700/500) だけ逆向きに戻される。
+%     実測（jlreq 既定 \ybaselineshift=0）での部品の静止位置:
+%       net = −δ_yoko_formula（10pt: +0.35562pt 上方、14pt: +0.42934pt）
+%     ここで δ_yoko_formula は横JFM(h=0.88/d=0.12zw)で計算した
+%     adjustbaseline 値（符号は負）。pdfTeX 側の実装:
+%       counter = (δ_t − δ_yoko) × factor/1000 を部品 box に
+%       \raise で与える（式全体 −δ_t との和が静止位置 = −δ_yoko になる）。
+%   * 表示数式: 出荷回転構成のまま y-baseline 0（uplatex strip 配置
+%     一致は実測済み）。frozen@everydisplay には触れない。
+%
+% 【キャプチャ経路（cat3-$ 維持・frozen everymath 差し替え）】
+%   カーネルは数式開始時にプリミティブ everymath（= \frozen@everymath）を
+%   「1回だけ」実行する。これを {\ptj@math@entry} に差し替える:
+%     outer entry（guard=0・tate）: 本体を閉じ cat3-$ までトークン歩行
+%       で捕捉し、(a) カーネルの開始時処理（\aftergroup\@ignorefalse・
+%       mathlevel 更新・\check@mathfonts・ユーザー \everymath）を
+%       ちょうど1回だけ外側の空数式で実行、(b) 本体を
+%       \raise−δ_t\hbox{\m@th$<body>$} に載せ替える。
+%       \mathsurround は外側の空数式に1対だけ付く（内側は \m@th）。
+%     inner entry（guard≠0）: 同一式の再入力。素通り（何もしない）。
+%       \text 等の box 内で新しく始まる数式もこの素通り経路になり、
+%       「横組形式の部品内数式 = 無補正」という uplatex 挙動と一致する
+%       （yoko 文書の数式と同一の静止位置）。
+%   \$ は catcode 3 のままなので、moving argument・\mark・aux・bookmark
+%   でアクティブ文字展開の破綻が原理的に起こらない。
+%   \(...\) は専用 wrapper（\) は protected で delimiter scan 中に展開
+%   されないため素通りの frozen 経路では捕捉できない）。
+%   math 環境はカーネル定義 \math=\( / \endmath=\) なので \( の差し替えで
+%   自動的に同経路に載る。\ensuremath の $\relax#1$ も outer entry 経由。
+%
+% 【yoko 文書】 δ=0 かつ uplatex は無補正のため、entry は保存済みの
+%   元 frozen トークンを実行して素通りする（キャプチャなし・ノード構造
+%   も従来と byte 互換）。横組みでは raw box 検出も行わない
+%   （捕捉が存在しないため; 保証契約は縦組みの捕捉 body に対するもの）。
+%
+% 【raw primitive box 境界】 捕捉した本体のトークン歩行中、
+%   登録済み text-wrapper（\text/\mbox/\makebox/\mathmc/\mathgt/旧字体
+%   コマンド）の引数の外側に明示的な \hbox/\vbox/\vtop/\vcenter が
+%   現れたら実行前に ClassError で停止し \mbox/\text への置換を示す。
+%   wrapper 引数内・通常の {..} グループ内・マクロ展開で生成される
+%   primitive は契約外（docs/pdftex-internals.md に明記）。
+%
+% --------------------------------------------------------------------
+\newdimen\ptj@math@delta      % δ_t（現方向; yoko では常に 0）
+\newdimen\ptj@math@delta@yoko % 横JFM で計算した δ（部品 counter 用）
+\newbox\ptj@math@probebox
+\newbox\ptj@mathbox
+\newcount\ptj@math@grab      % one-shot guard: 0=素通り, 1=同一式再入力
+\newtoks\ptj@math@frozen@saved  % カーネル元 frozen トークンの複製
+\newtoks\ptj@math@body      % 捕捉した本体
+\newcount\ptj@math@depth    % 歩行中の wrapper 引数深度（未使用深度は0固定）
+\expandafter\let\expandafter\ptj@dollar@plain\expandafter=$%
+
+% ---- δ 計算（plcore.ltx:776-792 と同一の演算順序/sp整数演算）----
+% plcore: dimen = ht(M)+dp(M); dimen -= cHT; dimen /= 2; dimen += cdp;
+%         dimen -= dp(M)   （cHT=cht+cdp=JH+JD, cdp=JD）
+% M の測定は毎回の数式開始時（fontsize/family 変化に自動追従）。
+% JH/JD は現 JFM (.def) class 0 の h/d × 現在の zw（\ptj@zwreg）。
+\def\ptj@math@setdelta{%
+  % 欧文フォント M の無補正寸法（backend-internal box: guard）
+  \global\advance\ptj@nest1
+  \setbox\ptj@math@probebox=\hbox{M}%
+  \global\advance\ptj@nest-1
+  % 現JFM class 0 の h/d（zw 小数列を dimexpr で実寸化）
+  \expandafter\ptj@math@splitcls@i\csname ptj@jfm@class@0\endcsname
+  \@tempdima=\ptj@cls@h\ptj@zwreg   % JH
+  \@tempdimb=\ptj@cls@d\ptj@zwreg   % JD
+  % δ_t（現方向）
+  \ptj@math@delta=\ht\ptj@math@probebox
+  \advance\ptj@math@delta\dp\ptj@math@probebox
+  \advance\ptj@math@delta-\@tempdima
+  \advance\ptj@math@delta-\@tempdimb
+  \divide\ptj@math@delta\tw@
+  \advance\ptj@math@delta\@tempdimb
+  \advance\ptj@math@delta-\dp\ptj@math@probebox
+  % δ_yoko（横JFM h=0.88/d=0.12zw で同式; 部品 counter 用）
+  \ptj@math@delta@yoko=\ht\ptj@math@probebox
+  \advance\ptj@math@delta@yoko\dp\ptj@math@probebox
+  \advance\ptj@math@delta@yoko-\ptj@zwreg
+  \divide\ptj@math@delta@yoko\tw@
+  \advance\ptj@math@delta@yoko.12\ptj@zwreg
+  \advance\ptj@math@delta@yoko-\dp\ptj@math@probebox
+  % 横組み文書では行内数式シフト無し（uplatex 実測: ybaselineshift=0）
+  \ifnum\ptj@dir=0
+    \ptj@math@delta=\z@
+    \ptj@math@delta@yoko=\z@
+  \fi
+}
+% δ の再計算点は plcore と同じ「サイズ更新時」（\size@update 内の
+% \adjustbaseline と同一契約; selectfont フックは常にテキストモードで
+% 走るため M プローブが安全）。数式開始時はこのキャッシュ値を読む。
+% （数式内でのフォント変更は selectfont を経由するため同じフックで
+%  再計算される; jlreq既定では行内数式中のサイズ変更は \mathchoice
+%  分岐の hbox 内 = hmode で行われる。）
+\def\ptj@math@setdelta@font{%
+  % plcore の size@update は「サイズ変化時」のみ \adjustbaseline を
+  % 再実行する（ファミリ切替では tbaselineshift は変わらない:
+  % uplatex 実測 tt/sf でも数式内和文静止位置は同一）。
+  % 同じ契約で (1) JFM データがロード済み（クラスロード中でない）、
+  % かつ (2) サイズが前回と異なる場合のみ再計算する。
+  \@ifundefined{ptj@jfm@classlist}{}{%
+    \expandafter\ifx\csname ptj@math@lastsize\endcsname\f@size
+    \else
+      \expandafter\edef\csname ptj@math@lastsize\endcsname{\f@size}%
+      \ptj@math@setdelta
+    \fi
+  }%
+}
+\AddToHook{selectfont}{\ptj@math@setdelta@font}%
+\AtBeginDocument{\ptj@math@setdelta}%
+% class 0 メトリクス {w}{h}{d}{align}{left} の分割
+\def\ptj@math@splitcls#1#2#3#4#5{%
+  \def\ptj@cls@w{#1}\def\ptj@cls@h{#2}\def\ptj@cls@d{#3}%
+  \def\ptj@cls@align{#4}\def\ptj@cls@left{#5}%
+}
+\def\ptj@math@splitcls@i#1{\expandafter\ptj@math@splitcls#1}
+
+% ---- 捕捉入り口（frozen@everymath の中身そのもの）----
+% トークン代入のみ（\edef/\xdef 禁止: \the\everymath 起点の再展開で
+% 条件トークンの対応が崩れる——実測で "Incomplete \iffalse" を起こす。
+% toks 代入は内容を再展開しないため安全）。
+\def\ptj@math@entry{%
+  \ifnum\ptj@dir=1
+    \expandafter\ptj@math@entry@tate
+  \else
+    % yoko: 元 frozen トークンを実行して素通り（byte 互換・キャプチャ無し）
+    \expandafter\the\expandafter\ptj@math@frozen@saved
+  \fi
+}
+% tate: guard で「生の外側入口」と「同一式の内側再入力」を判別
+% カーネル/クラス内部の数式開始（tabular の $..\halign..$ 構成、
+% 目次ドットリーダーの $\m@th\mkern..$ 等）は素通りさせる:
+% LaTeX の \@tabular は \hbox\bgroup $..\halign..$ の構成で、環境全体を
+% 数式内に組み、\endtabular の $ で閉じる（latex.ltx:16554-16560）。
+% この内部 $ を捕捉すると \halign が mmode で再実行され破綻する
+% （実測: "File ended while scanning use of \ptj@math@scan"）。
+% 環境の begin/end でカウンタを 1/0 するグループ安全なフラグで
+% 判別する（ネスト対応; tabular/tabular* 両方の入口でインクリメント）。
+% the kernel's math nesting counter (LaTeX 2024+); older kernels have none
+\ifx\@math@level\@undefined
+  \let\ptj@mathlevel@inc\relax
+\else
+  \def\ptj@mathlevel@inc{\advance\@math@level\@ne}
+\fi
+\newcount\ptj@math@in@array
+\def\ptj@math@array@flag{%
+  \global\advance\ptj@math@in@array\@ne
+  \aftergroup\ptj@math@array@unflag
+}
+\def\ptj@math@array@unflag{%
+  \global\advance\ptj@math@in@array-\@ne
+}
+% \ptj@math@internal{<body>}: クラス内部の数式（tabular 等の
+% フラグ保護実行）。body 内の数式開始は everymath 経路で
+% 「内部扱い = 素通り」となる。ボディ直後の即時解除で十分
+% （body は1つのグループ; \aftergroup は使わない）。
+\long\def\ptj@math@internal#1{%
+  \global\advance\ptj@math@in@array\@ne
+  #1%
+  \global\advance\ptj@math@in@array-\@ne
+}
+% グループ引数を取らない on/off 対命令。\leaders\hbox{...}<glue> の
+% ように「ボックスとグルーの間にグループ終端が入ってはならない」場所
+% で使う（\leaders のグルー走査は群終端を越えられないため、引数形
+% {\leaders\hbox{..}}\hfill は純TeXでも "Leaders not followed by
+% proper glue" になる。目次リーダー＝TOC 2パス目不良の第二要因）。
+% on と off の間で \leaders が break/エラーで中断されても破綻しない
+% よう、off 側は現在値を明示的に戻す（保存値の完全な対称性は
+% 保護対象が浅い入れ子（leader 箱内の $..$）のみのため不要）。
+\def\ptj@math@internal@on{%
+  \global\advance\ptj@math@in@array\@ne
+}
+\def\ptj@math@internal@off{%
+  \global\advance\ptj@math@in@array-\@ne
+}
+% 表示数式環境の登録（表示入口; ネイティブ処理を維持）
+\def\ptj@math@reg@disp#1{%
+  \expandafter\def\csname ptj@math@disp@#1\endcsname{1}}%
+\ptj@math@reg@disp{equation}%
+\ptj@math@reg@disp{equation*}%
+\ptj@math@reg@disp{align}%
+\ptj@math@reg@disp{align*}%
+\ptj@math@reg@disp{gather}%
+\ptj@math@reg@disp{gather*}%
+\ptj@math@reg@disp{multline}%
+\ptj@math@reg@disp{multline*}%
+\ptj@math@reg@disp{flalign}%
+\ptj@math@reg@disp{flalign*}%
+\ptj@math@reg@disp{alignat}%
+\ptj@math@reg@disp{alignat*}%
+\ptj@math@reg@disp{xalignat}%
+\ptj@math@reg@disp{xxalignat}%
+\ptj@math@reg@disp{split}%
+\ptj@math@reg@disp{aligned}%
+\ptj@math@reg@disp{gathered}%
+\ptj@math@reg@disp{cases}%
+\ptj@math@reg@disp{matrix}%
+\ptj@math@reg@disp{pmatrix}%
+\ptj@math@reg@disp{bmatrix}%
+\ptj@math@reg@disp{Bmatrix}%
+\ptj@math@reg@disp{vmatrix}%
+\ptj@math@reg@disp{Vmatrix}%
+\ptj@math@reg@disp{smallmatrix}%
+\ptj@math@reg@disp{subarray}%
+\ptj@math@reg@disp{eqnarray}%
+\ptj@math@reg@disp{eqnarray*}%
+\ptj@math@reg@disp{displaymath}%
+% tabular/tabular* の入口でフラグを立てる（\@tabular は latex.ltx:16560
+% の \hbox\bgroup $.. 構成; tabular* は \tabular を経由して同じ
+% \@tabular に入る。array 系パッケージが再定義しても構わないよう
+% begin document で「その時点の \@tabular」をラップする）。
+\AtBeginDocument{%
+  \let\ptj@math@saved@tabular\@tabular
+  \def\@tabular{\ptj@math@array@flag\ptj@math@saved@tabular}%
+}
+% 表示数式環境内の内部 $ は素通り: amsmath の equation/align 系は本体を
+% インライン数式 $..$ として組む（\endequation 内の $ と対応する）。
+% これを捕捉すると環境機構（\refstepcounter・\label・行組み立て）が
+% キャプチャ内で破綻する（実測: "Display math should end with $$" /
+% "File ended while scanning"）。表示入口は「native 処理を
+% 維持」が契約のため、これらの環境では捕捉しない。
+\def\ptj@math@if@dispenv{%
+  \expandafter\ifx\csname ptj@math@disp@\@currenvir\endcsname\relax
+    \expandafter\@secondoftwo
+  \else
+    \expandafter\@firstoftwo
+  \fi}
+\def\ptj@math@entry@tate{%
+  \ifnum\ptj@math@grab=\z@
+    \ptj@math@if@dispenv{%
+      % 表示数式環境（equation/align/…）の内部 $ は native 処理を維持
+      \ptj@math@passthrough
+    }{%
+      \ifinner
+        \ifnum\ptj@math@in@array=\z@
+          \expandafter\ptj@math@capture
+        \else
+          \expandafter\ptj@math@passthrough
+        \fi
+      \else
+        \expandafter\ptj@math@passthrough
+      \fi
+    }%
+  \fi
+}
+% 素通り: 元 frozen トークン（\aftergroup\@ignorefalse・mathlevel 更新・
+% \check@mathfonts・ユーザー \everymath）をそのまま1回実行する。
+\def\ptj@math@passthrough{%
+  \the\ptj@math@frozen@saved
+}
+% ---- 外側入口: 本体の区切り子走査捕捉 ----
+% TeX 自身の区切り付き引数走査 `#1$' を使う（旧 active-$ 実装と \( の
+% 経路で実績のある方式: 括弧対応・アクティブ byte・マクロ展開のすべてが
+% TeX の標準引数取得と同一に扱われる。walk 方式は グループ引数/CJK
+% byte 列/内部ボックス機構との干渉が相次いだため撤去）。
+% wrapper 引数（\text{..} 等）は {..} グループとして #1 内に丸ごと
+% 入るため raw box 検査の対象外（exempt と同一意味論）。
+\def\ptj@math@capture{%
+  \global\ptj@math@grab=\@ne
+  \ptj@math@scan
+}
+\long\def\ptj@math@scan#1${%
+  % raw box 検出（token level; wrapper 引数 {..} は1引数として不透過）
+  \ptj@math@rawcheck{#1}%
+  % カーネルの開始時処理（frozen の残り）を外側数式でちょうど1回。
+  % \aftergroup は使わない: 捕捉対象の $..$ が \leaders の直前にある
+  % 移動引数（目次の見出し等）で、aftergroup トークンがリーダーと
+  % 干渉して "Leaders not followed by proper glue" になる（実測:
+  % TOC 2パス目）。外側の空数式は直後に閉じるため、\@ignorefalse は
+  % $ の直後で即時に実行すればカーネルと同一位置・同一意味になる。
+  \ptj@mathlevel@inc
+  \check@mathfonts
+  \the\everymath
+  % 外側数式を閉じる（空数式; \mathsurround 1対はここに付く）
+  \ptj@dollar@plain
+  \@ignorefalse
+  % 本体: 自然幅 hbox を δ 下げ（yoko では δ=0 のため無組版差）
+  \global\advance\ptj@nest1
+  \setbox\ptj@mathbox=\hbox{\m@th
+    \ptj@dollar@plain#1\ptj@dollar@plain}%
+  \global\advance\ptj@nest-1
+  \ifdim\ptj@math@delta=\z@
+    \box\ptj@mathbox
+  \else
+    \raise-\ptj@math@delta\box\ptj@mathbox
+  \fi
+  \global\ptj@math@grab=\z@
+  % 数式は欧文境界（クラス27; peek@lat と同じ意味論）
+  \global\ptj@lastclass=27
+}
+
+% ---- \(...\) 専用 wrapper ----
+% カーネルの \) は protected（DeclareRobustCommand）のため delimiter scan
+% 中に展開されず、素通りの frozen 経路では本体の終端が見つからない
+% （参照実装の指摘どおり）。よって \( は \) TOKEN を終端として
+% 本体を直接捕捉する専用 wrapper に差し替える。math 環境
+% （\math=\(, \endmath=\)）もこの経路に自動的に載る。
+% 本体中の raw box 検出は wrapper に限定した簡易走査（歩行と同一契約）。
+\protected\def\ptj@imath@paren#1\){%
+  \ifnum\ptj@dir=1
+    % δ は selectfont フックで計算済み（plcore の size@update 契約と同一）
+    \global\ptj@math@grab=\@ne
+    \ptj@math@rawcheck{#1}%
+    % 開始時処理1回（raw $ 経路と同じ; ここでは外側数式はまだ無いので
+    % 空数式を1つだけ開いて閉じ、\mathsurround 1対をその中に置く。
+    % \aftergroup は \leaders 干渉のため使用しない（raw 経路の注記参照））
+    \ptj@dollar@plain
+      \ptj@mathlevel@inc
+      \check@mathfonts
+      \the\everymath
+    \ptj@dollar@plain
+    \@ignorefalse
+    \global\advance\ptj@nest1
+    \setbox\ptj@mathbox=\hbox{\m@th
+      \ptj@dollar@plain#1\ptj@dollar@plain}%
+    \global\advance\ptj@nest-1
+    \ifdim\ptj@math@delta=\z@
+      \box\ptj@mathbox
+    \else
+      \raise-\ptj@math@delta\box\ptj@mathbox
+    \fi
+    \global\ptj@math@grab=\z@
+    \global\ptj@lastclass=27
+  \else
+    % yoko: 素通り（元の \( の意味: \relax\ifmmode\@badmath\else$\fi）
+    \begingroup
+      \the\ptj@math@frozen@saved
+    \endgroup
+    \ptj@dollar@plain\relax#1\ptj@dollar@plain
+  \fi
+}
+% 簡易 raw 検査（\( 経路: トークンレベル・wrapper 引数は透過扱い）
+\def\ptj@math@rawcheck#1{%
+  \def\ptj@math@raw@ctx{0}%
+  \ptj@math@raw@loop#1\ptj@math@raw@stop
+}
+\def\ptj@math@raw@stop{\ptj@math@raw@stop}
+\def\ptj@math@raw@loop#1{%
+  \ifx\ptj@math@raw@stop#1%
+  \else
+    \ptj@math@raw@one{#1}%
+    \expandafter\ptj@math@raw@loop
+  \fi}
+% Text wrappers whose argument is exempt from the raw box check (their
+% content is typeset in text mode, direction-tagged by the factory).
+% \ptjregistermathtextwrapper\cs adds a command (classes register their
+% old-style font commands, for example).
+\def\ptj@math@wrappers{\text\mbox\mathmc\mathgt}
+\def\ptjregistermathtextwrapper#1{\g@addto@macro\ptj@math@wrappers{#1}}
+\def\ptj@math@raw@one#1{%
+  \let\ptj@math@raw@hit\@empty
+  \@tfor\ptj@math@w:=\ptj@math@wrappers\do{%
+    \expandafter\ifx\ptj@math@w#1\def\ptj@math@raw@hit{1}\fi}%
+  \ifx\ptj@math@raw@hit\@empty
+    \ifx\makebox#1\def\ptj@math@raw@ctx{2}%
+    \else
+      \ifnum\ptj@math@raw@ctx=\z@
+        \ifx\hbox#1\ptj@math@rawerr{hbox}%
+        \else\ifx\vbox#1\ptj@math@rawerr{vbox}%
+        \else\ifx\vtop#1\ptj@math@rawerr{vtop}%
+        \else\ifx\vcenter#1\ptj@math@rawerr{vcenter}%
+        \fi\fi\fi\fi
+      \fi
+      \def\ptj@math@raw@ctx{0}%
+    \fi
+  \else
+    \def\ptj@math@raw@ctx{1}%
+  \fi}
+\newcount\ptj@math@rawerrcnt
+\def\ptj@math@rawerr#1{%
+  \global\advance\ptj@math@rawerrcnt\@ne
+  \PackageError{pdftexja}{raw primitive box \string#1 in a captured math formula}{%
+  pTeX applies its math baseline adjustment only to boxes it can direction-tag.\MessageBreak
+  The pdfTeX backend has no box-direction attribute, so an unmodified raw\MessageBreak
+  \string#1 in a captured formula is outside the guaranteed path.\MessageBreak
+  Replace it with \string\mbox{...} or \string\text{...} (amstext), or put the\MessageBreak
+  content in a registered text wrapper. Macro-expanded primitive boxes are\MessageBreak
+  outside the contract by design.\MessageBreak
+  \@ehc}%
+}
+
+% ---- frozen@everymath 差し替え（begin document; トークン代入のみ）----
+% \toks 代入は \the を再帰展開しない（\edef は \the\everymath 起点の
+% 二段階展開で条件トークンの対応を壊す——実測: "Incomplete \iffalse"）。
+\AtBeginDocument{%
+  \global\ptj@math@frozen@saved\expandafter{\the\frozen@everymath}%
+  \global\frozen@everymath{\ptj@math@entry}%
+  % \( 差し替え（\math/\endmath = \( /\) も同経路化）
+  \protected\def\({\relax\ifmmode\@badmath\else\expandafter\ptj@imath@paren\fi}%
+}
+
+%. ---------------- text-in-math 2層補正（tate のみ非0）----
+% 方向一致部品の counter = (δ_t − δ_yoko) × factor/1000。
+% factor: display/text=1000, script=700, scriptscript=500
+% （ptex-base.ch shift_sub_exp_box と同一係数）。
+% uplatex 実測との対応: 部品静止位置 = −δ_yoko_formula
+% （10pt: 0.35562pt 上方, 14pt: 0.42934pt 上方; 実測値）。
+\newdimen\ptj@tim@shift
+\newcount\ptj@tim@cnt
+\def\ptj@tim@raise#1{% #1 = factor (1000/700/500)
+  \ifnum\ptj@dir=1
+    \ptj@tim@shift=\ptj@math@delta
+    \advance\ptj@tim@shift-\ptj@math@delta@yoko
+    \ifdim\ptj@tim@shift=\z@\else
+      % sp 整数演算（δ×factor÷1000 を sp で丸める）
+      \ptj@tim@cnt=\ptj@tim@shift
+      \multiply\ptj@tim@cnt#1\relax
+      \divide\ptj@tim@cnt\@m
+      \ptj@tim@shift=\ptj@tim@cnt sp\relax
+      \kern\ptj@tim@shift
+    \fi
+  \fi
+}
+
+%. ---------------- mathja rework（スタイル分岐維持 + counter）----
+% \ptj@mathja{<mc|gt>}{<本文>}:
+%   数式内: \mathchoice の4分岐でサイズ（f@size/sf@size/ssf@size）を
+%     切り替え、対応サイズの \hbox に本文を組む（uplatex の jfam は
+%     スタイルごとに実フォントサイズで和文を組む——10pt→7pt→5pt の
+%     実測互換のため分岐維持。「box once + copy」を取ると script 環境
+%     で実サイズの縮小表現が不可能になるため、分岐ごとの組版とし、
+%     同一サイズ分岐（display/text はともに f@size）は1回の組版結果を
+%     2番目の分岐で \copy 再利用する（組版回数 4→3）。
+%     各分岐には方向一致部品の counter（factor 1000/700/500）を適用。
+%   数式外: {\<fam>family 本文}（従来どおり）。
+\newbox\ptj@mathja@boxa
+\def\ptj@mathja#1#2{%
+  \ifmmode
+    \def\ptj@mathja@fam{#1}%
+    \def\ptj@mathja@body{#2}%
+    \global\setbox\ptj@mathja@boxa=\box\voidb@x
+    \mathchoice
+      {\ptj@mathja@box@save\f@size{1000}}%
+      {\ptj@mathja@box@use\f@size{1000}}%
+      {\ptj@mathja@box@wrap\sf@size{700}}%
+      {\ptj@mathja@box@wrap\ssf@size{500}}%
+  \else
+    {\csname #1family\endcsname #2}%
+  \fi
+}
+% #1 = サイズ（pt数値マクロ）, #2 = counter factor
+% 「組むだけ」: box レジスタに本文を組む（emit は呼び出し側; レジスタの
+% 空き抜きをしないため display/text 分岐間で copy/box 共有が可能）。
+\def\ptj@mathja@box#1#2{%
+  \global\advance\ptj@nest1
+  \global\setbox\ptj@mathja@boxa=\hbox{%
+    \fontsize{#1}{#1}\selectfont
+    \csname\ptj@mathja@fam family\endcsname
+    \global\ptj@lastclass=93 \global\ptj@pend=0
+    \ptj@mathja@body
+  }%
+  \global\advance\ptj@nest-1
+  \global\ptj@lastclass=27
+}
+% 方向一致部品の counter（2層目）。数式モードでは \raise は直接使え
+% ないため、部品 box を raise 付きの外側 hbox で包む（mmode でも可）。
+% counter = (δ_t − δ_yoko) × factor/1000（uplatex 実測: 部品静止位置が
+% plain 位置 + (−δ_yoko) になる。raise は cross-frame 方向 = uplatex
+% の box shift_amount と同一方向）。
+\newdimen\ptj@tim@raise
+\def\ptj@tim@emit#1#2{%
+  % #1 = factor (1000/700/500), #2 = box register
+  \ptj@tim@raise=\z@
+  \ifnum\ptj@dir=1
+    \ptj@tim@shift=\ptj@math@delta
+    \advance\ptj@tim@shift-\ptj@math@delta@yoko
+    \ifdim\ptj@tim@shift=\z@\else
+      % sp 整数演算（δ×factor÷1000 を sp で丸める）
+      \ptj@tim@cnt=\ptj@tim@shift
+      \multiply\ptj@tim@cnt#1\relax
+      \divide\ptj@tim@cnt\@m
+      \ptj@tim@raise=\ptj@tim@cnt sp\relax
+    \fi
+  \fi
+  \ifdim\ptj@tim@raise=\z@
+    \copy#2%
+  \else
+    \hbox{\raise\ptj@tim@raise\copy#2}%
+  \fi
+}
+% emit path: counter raise wraps the branch box（factor は分岐ごと）。
+% display 分岐は \tim@emit が \box で消費し、text 分岐（同サイズ）は
+% \copy で再利用するため、同一サイズの本体組版は1回だけになる
+% （本体副作用 4→3; script/scriptscript は実サイズが必要なため別組版）。
+\def\ptj@mathja@box@save#1#2{%
+  \ptj@mathja@box{#1}{#2}%
+  \ptj@tim@emit{#2}\ptj@mathja@boxa
+}
+\def\ptj@mathja@box@use#1#2{%
+  \ifvoid\ptj@mathja@boxa
+    \expandafter\ptj@mathja@box\expandafter{#1}{#2}%
+  \fi
+  \ptj@tim@emit{#2}\ptj@mathja@boxa
+}
+\def\ptj@mathja@box@wrap#1#2{%
+  \ptj@mathja@box{#1}{#2}%
+  \ptj@tim@emit{#2}\ptj@mathja@boxa}
+
+%. ------------------------------------------------ tate inserts
+% Footnote inserts in tate documents. The vertical glyph boxes carry
+% ht=em/dp=0 in the main galley (the shipout rotation's first-line kern
+% compensates); inside insert material they are normalized to the JFM
+% class h/d (\ptj@insctx), so every footnote line puts the em box
+% centred on its baseline as native vertical typesetting does. The first
+% footnote of a page gets a footnotesep+0.5zh strut at its line head,
+% every footnote paragraph a 0.5842\baselineskip deep strut at its end
+% (calibrated against upLaTeX: rule position and text column agree to
+% 0.01pt at 10pt/12pt). Installed around the final \@makefntext at
+% begin document.
+\def\ptj@fntext@strut{%
+  \ifvoid\footins
+    \vrule height\dimexpr\footnotesep+.5\zh\relax width\z@\relax
+  \fi
+  \vrule height\z@ depth.5842\baselineskip width\z@\relax}
+\ifptj@tate
+  \AtBeginDocument{%
+    \@ifundefined{@makefntext}{}{%
+      \let\ptj@saved@makefntext\@makefntext
+      \long\def\@makefntext#1{%
+        \global\ptj@insctx=1
+        \ptj@saved@makefntext{#1}%
+        \ptj@fntext@strut
+        \global\ptj@insctx=0 }}}
+\fi
+
+%. ------------------------------------------- character state frames
+% \ptjsavecharstate: snapshot the running inter-character state into
+% \ptjrestorecharstate (one level; used around material inserted into
+% the text that must not disturb the surrounding boundaries, e.g. a
+% footnote mark). \ptjresumeboundary: re-run the post-glyph look-ahead
+% after such material, so the boundary towards the following item is
+% emitted exactly as if the material were absent.
+\def\ptjsavecharstate{%
+  \xdef\ptjrestorecharstate{%
+    \global\ptj@lastclass=\the\ptj@lastclass\relax
+    \global\ptj@pend=\the\ptj@pend\relax
+    \global\ptj@inhibit=\the\ptj@inhibit\relax
+    \global\ptj@zwreg=\the\ptj@zwreg\relax
+    \global\ptj@lastzw=\the\ptj@lastzw\relax}%
+  \global\ptj@inhibit=0 }
+\let\ptjrestorecharstate\@empty
+\def\ptjresumeboundary{\futurelet\ptj@next\ptj@peek@a}
+% \ptjresetcharstate: paragraph-boundary state (pTeX's parbdd).
+\def\ptjresetcharstate{%
+  \global\ptj@lastclass=90 \global\ptj@pend=0
+  \global\ptj@inhibit=0 \global\ptj@lastnodechar=-1
+  \global\ptj@lastzw=\ptj@zwreg}
+% \ptjmathinternal@on / @off: bracket class-internal inline math that
+% must not be captured by the tate math machinery (e.g. TOC dot leaders,
+% where a group between the leader box and its glue is not allowed).
+\let\ptjmathinternalon\ptj@math@internal@on
+\let\ptjmathinternaloff\ptj@math@internal@off
+
+%. ------------------------------------------------ kanji control sequences
+% 8-bit pdfTeX cannot form control sequence names from multi-byte
+% characters: `\<kanji>...' is read as the control symbol of the FIRST
+% UTF-8 byte followed by the remaining (active) bytes. pdfTeX-ja
+% emulates pTeX's kanji control sequences on top of that:
+%   \ptjdefkanjics{<name>}{<replacement>}
+% defines \<name> (UTF-8; kanji/kana and ASCII letters, or one symbol
+% character such as U+3000). The lead-byte control symbol becomes a
+% dispatcher that reads the rest of the name pTeX-style -- the first
+% character, then (when it is a kanji/kana) the longest run of kanji,
+% kana and ASCII letters -- and executes the replacement. Spaces after a
+% multi-letter name are skipped (control word semantics); a symbol
+% name is a control symbol. Unknown names raise an error. The dispatch
+% is not expandable (like pTeX's \protected commands it must not be
+% used inside \edef/\write).
+\long\def\ptjdefkanjics#1#2{%
+  \expandafter\long\expandafter\gdef
+    \csname ptj@kcs@\detokenize{#1}\endcsname{#2}%
+  \ptj@kcs@installlead#1\ptj@kcs@end}
+\def\ptj@kcs@installlead#1#2\ptj@kcs@end{%
+  \expandafter\gdef\csname\string#1\endcsname{\ptj@kcs@start#1}}
+% utf-8 length from a lead byte code
+\def\ptj@utflen#1{%
+  \ifnum#1<"C0 1\else\ifnum#1<"E0 2\else\ifnum#1<"F0 3\else 4\fi\fi\fi}
+% \ptjforeachchar{<text>}<cmd>: <cmd>{<char>} for every character of
+% <text>, a multi-byte UTF-8 character being passed as ONE argument (its
+% byte tokens). <text> must consist of character tokens (spaces skipped).
+\long\def\ptjforeachchar#1#2{\ptj@fec{#2}#1\ptj@fec@end}
+\long\def\ptj@fec#1#2{%
+  \ifx\ptj@fec@end#2\expandafter\@gobble
+  \else\expandafter\@firstofone\fi
+  {\csname ptj@fec@g\ptj@utflen{`#2}\endcsname{#1}#2}}
+\def\ptj@fec@end{\ptj@fec@end}
+\expandafter\long\expandafter\def\csname ptj@fec@g1\endcsname#1#2{#1{#2}\ptj@fec{#1}}
+\expandafter\long\expandafter\def\csname ptj@fec@g2\endcsname#1#2#3{#1{#2#3}\ptj@fec{#1}}
+\expandafter\long\expandafter\def\csname ptj@fec@g3\endcsname#1#2#3#4{#1{#2#3#4}\ptj@fec{#1}}
+\expandafter\long\expandafter\def\csname ptj@fec@g4\endcsname#1#2#3#4#5{#1{#2#3#4#5}\ptj@fec{#1}}
+% kanji/kana "letter" test on a code point (々〆〇, kana, CJK ideographs)
+\def\ptj@kcs@ifletter#1{%
+  \ifnum0\ifnum#1>"3004 \ifnum#1<"3008 1\fi\fi
+         \ifnum#1>"3040 \ifnum#1<"3100 1\fi\fi
+         \ifnum#1>"33FF \ifnum#1<"A000 1\fi\fi
+         \ifnum#1>"F8FF \ifnum#1<"FB00 1\fi\fi
+         \ifnum#1>"1FFFF \ifnum#1<"30000 1\fi\fi>0
+    \expandafter\@firstoftwo\else\expandafter\@secondoftwo\fi}
+\newcount\ptj@kcs@cp
+% \ptj@kcs@getchar{<lead byte token>}<continuation bytes>: read one full
+% UTF-8 character, set \ptj@kcs@cp and \ptj@kcs@chr (its tokens), then
+% continue with \ptj@kcs@k.
+\def\ptj@kcs@getchar#1{%
+  \csname ptj@kcs@g\ptj@utflen{`#1}\endcsname#1}
+\expandafter\def\csname ptj@kcs@g1\endcsname#1{%
+  \ptj@kcs@cp=`#1\relax\def\ptj@kcs@chr{#1}\ptj@kcs@k}
+\expandafter\def\csname ptj@kcs@g2\endcsname#1#2{%
+  \ptj@kcs@cp=\numexpr(`#1-"C0)*64+`#2-"80\relax
+  \def\ptj@kcs@chr{#1#2}\ptj@kcs@k}
+\expandafter\def\csname ptj@kcs@g3\endcsname#1#2#3{%
+  \ptj@kcs@cp=\numexpr(`#1-"E0)*4096+(`#2-"80)*64+`#3-"80\relax
+  \def\ptj@kcs@chr{#1#2#3}\ptj@kcs@k}
+\expandafter\def\csname ptj@kcs@g4\endcsname#1#2#3#4{%
+  \ptj@kcs@cp=\numexpr(`#1-"F0)*262144+(`#2-"80)*4096+(`#3-"80)*64+`#4-"80\relax
+  \def\ptj@kcs@chr{#1#2#3#4}\ptj@kcs@k}
+\def\ptj@kcs@appendchr{%
+  \edef\ptj@kcs@acc{\ptj@kcs@acc\expandafter\detokenize\expandafter{\ptj@kcs@chr}}}
+\def\ptj@kcs@start#1{%
+  \def\ptj@kcs@acc{}%
+  \def\ptj@kcs@k{%
+    \ptj@kcs@appendchr
+    \ptj@kcs@ifletter{\ptj@kcs@cp}%
+      {\ptj@kcs@munch}{\ptj@kcs@emit{}}}%
+  \ptj@kcs@getchar#1}
+\def\ptj@kcs@munch{\futurelet\ptj@kcs@next\ptj@kcs@munch@a}
+\def\ptj@kcs@munch@a{%
+  \let\ptj@kcs@then\ptj@kcs@munch@b
+  \ifx\ptj@kcs@next\@sptoken \let\ptj@kcs@then\ptj@kcs@emit@sp \fi
+  \ifx\ptj@kcs@next\bgroup \let\ptj@kcs@then\ptj@kcs@emit@nil \fi
+  \ifx\ptj@kcs@next\egroup \let\ptj@kcs@then\ptj@kcs@emit@nil \fi
+  \ptj@kcs@then}
+\def\ptj@kcs@emit@nil{\ptj@kcs@emit{}}
+% one more token of a multi-letter name: an ASCII letter or the lead
+% byte of a kanji/kana continues the name, anything else ends it (and
+% is put back)
+\long\def\ptj@kcs@munch@b#1{%
+  \def\ptj@kcs@then{\ptj@kcs@emit{#1}}%
+  \def\ptj@kcs@k{%
+    \ptj@kcs@ifletter{\ptj@kcs@cp}%
+      {\ptj@kcs@appendchr\ptj@kcs@munch}%
+      {\expandafter\ptj@kcs@emit\expandafter{\ptj@kcs@chr}}}%
+  \ifcat\relax\noexpand#1\else
+    \ifcat a\noexpand#1%
+      \ifnum`#1<128
+        \edef\ptj@kcs@acc{\ptj@kcs@acc\string#1}%
+        \let\ptj@kcs@then\ptj@kcs@munch
+      \fi
+    \else
+      \ifcat\noexpand~\noexpand#1%
+        \ifnum`#1>"BF
+          \def\ptj@kcs@then{\ptj@kcs@getchar#1}%
+        \fi
+      \fi
+    \fi
+  \fi
+  \ptj@kcs@then}
+% emit: run the replacement of \ptj@kcs@acc, then the put-back tokens
+\long\def\ptj@kcs@emit#1{%
+  \ifcsname ptj@kcs@\ptj@kcs@acc\endcsname
+    \edef\ptj@kcs@do{%
+      \unexpanded\expandafter\expandafter\expandafter
+        {\csname ptj@kcs@\ptj@kcs@acc\endcsname}%
+      \unexpanded{#1}}%
+  \else
+    \edef\ptj@kcs@do{\noexpand\ptj@kcs@undef{\ptj@kcs@acc}\unexpanded{#1}}%
+  \fi
+  \ptj@kcs@do}
+% a space follows a multi-letter name: skip it (control word semantics)
+\def\ptj@kcs@emit@sp{%
+  \ifcsname ptj@kcs@\ptj@kcs@acc\endcsname
+    \edef\ptj@kcs@do{%
+      \unexpanded\expandafter\expandafter\expandafter
+        {\csname ptj@kcs@\ptj@kcs@acc\endcsname}}%
+  \else
+    \edef\ptj@kcs@do{\noexpand\ptj@kcs@undef{\ptj@kcs@acc}}%
+  \fi
+  \expandafter\ptj@kcs@do\romannumeral-`0}
+\def\ptj@kcs@undef#1{%
+  \PackageError{pdftexja}{Undefined control sequence \string\\#1}{%
+    The kanji control sequence \string\\#1 is not defined (see \string\ptjdefkanjics).}}
+%. ------------------------------------------------ page size / \mag
+% \ptjsetpagesize{<width>}{<height>}: set the PDF page size with the
+% pLaTeX DVI semantics of a late \mag: under pTeX + dvipdfmx the paper
+% stays physically fixed and the origin is 1in, only the type area is
+% magnified; pdfTeX instead multiplies \pdfpagewidth and \pdfhorigin by
+% \mag at shipout. Compensate: the origins become 1truein (= 1in after
+% the shipout magnification) and the page size is scaled by 1000/\mag.
+% With \mag=1000 this is exactly \pdfpagewidth=<width> etc.
+\def\ptjsetpagesize#1#2{%
+  \pdfhorigin=1truein
+  \pdfvorigin=1truein
+  \pdfpagewidth=\dimexpr#1*1000/\mag\relax
+  \pdfpageheight=\dimexpr#2*1000/\mag\relax}
+
+%. ------------------------------------------------ tombow (trim marks)
+% The pLaTeX/LuaTeX-ja kernel trim mark interface (\iftombow,
+% \iftombowdate, \@tombowwidth, \@bannerfont, \@bannertoken,
+% \maketombowbox, \@outputtombow, \@tombowbleed, \@tombowcolor,
+% \@@paperwidth/\@@paperheight, \hour/\minute), as in lltjcore.sty.
+% Output: the shipout/background hook draws \@outputtombow at the stock
+% origin (1in,1in from the page box corner); the type area moves 1in
+% down via \topmargin (pLaTeX's \vskip\@@topmargin).
+\newif\iftombow \tombowfalse
+\newif\iftombowdate \tombowdatetrue
+\newdimen\@tombowwidth
+\setlength{\@tombowwidth}{.1\p@}
+\newbox\@TL\newbox\@Tl
+\newbox\@TC
+\newbox\@TR\newbox\@Tr
+\newbox\@BL\newbox\@Bl
+\newbox\@BC
+\newbox\@BR\newbox\@Br
+\newbox\@CL
+\newbox\@CR
+\font\@bannerfont=cmtt9
+\newtoks\@bannertoken
+\@bannertoken{}
+\@ifundefined{hour}{\newcount\hour}{}
+\@ifundefined{minute}{\newcount\minute}{}
+\hour=\time \divide\hour by 60
+\minute=\numexpr\time-60*\hour\relax
+\def\maketombowbox{%
+  \setbox\@TL\hbox to\z@{\hss
+      \vrule width\dimexpr 10mm+\@tombowbleed\relax height\@tombowwidth depth\z@
+      \vrule height10mm width\@tombowwidth depth\z@
+      \iftombowdate
+        \raise4pt\hbox to\z@{\hskip5mm\@bannerfont\the\@bannertoken\hss}%
+      \fi}%
+  \setbox\@Tl\hbox to\z@{\hss
+      \vrule width10mm height\@tombowwidth depth\z@
+      \vrule height\dimexpr 10mm+\@tombowbleed\relax  width\@tombowwidth depth\z@}%
+  \setbox\@TC\hbox{%
+      \vrule width10mm height\@tombowwidth depth\z@
+      \vrule height10mm width\@tombowwidth depth\z@
+      \vrule width10mm height\@tombowwidth depth\z@}%
+  \setbox\@TR\hbox to\z@{%
+      \vrule height10mm width\@tombowwidth depth\z@
+      \vrule width\dimexpr 10mm+\@tombowbleed\relax height\@tombowwidth depth\z@\hss}%
+  \setbox\@Tr\hbox to\z@{%
+      \vrule height\dimexpr 10mm+\@tombowbleed\relax width\@tombowwidth depth\z@
+      \vrule width10mm height\@tombowwidth depth\z@\hss}%
+  \setbox\@BL\hbox to\z@{\hss
+      \vrule width\dimexpr 10mm+\@tombowbleed\relax depth\@tombowwidth height\z@
+      \vrule depth10mm width\@tombowwidth height\z@}%
+  \setbox\@Bl\hbox to\z@{\hss
+      \vrule width10mm depth\@tombowwidth height\z@
+      \vrule depth\dimexpr 10mm+\@tombowbleed\relax width\@tombowwidth height\z@}%
+  \setbox\@BC\hbox{%
+      \vrule width10mm depth\@tombowwidth height\z@
+      \vrule depth10mm width\@tombowwidth height\z@
+      \vrule width10mm depth\@tombowwidth height\z@}%
+  \setbox\@BR\hbox to\z@{%
+      \vrule depth10mm width\@tombowwidth height\z@
+      \vrule width\dimexpr 10mm+\@tombowbleed\relax depth\@tombowwidth height\z@\hss}%
+  \setbox\@Br\hbox to\z@{%
+      \vrule depth\dimexpr 10mm+\@tombowbleed\relax width\@tombowwidth height\z@
+      \vrule width10mm depth\@tombowwidth height\z@\hss}%
+  \setbox\@CL\hbox to\z@{\hss
+      \vrule width10mm height.5\@tombowwidth depth.5\@tombowwidth
+      \vrule height10mm depth10mm width\@tombowwidth}%
+  \setbox\@CR\hbox to\z@{%
+      \vrule height10mm depth10mm width\@tombowwidth
+      \vrule height.5\@tombowwidth depth.5\@tombowwidth width10mm\hss}%
+}
+\def\@outputtombow{%
+  \iftombow
+  \vbox to\z@{\kern\dimexpr-10mm-\@tombowbleed\relax
+    \boxmaxdepth\maxdimen
+      \moveleft\@tombowbleed\vbox to\@@paperheight{%
+	  \color@begingroup
+	  \@tombowcolor
+      \hbox to\@@paperwidth{\hskip\@tombowbleed\relax
+         \copy\@TL\hfill\copy\@TC\hfill\copy\@TR\hskip\@tombowbleed}%
+      \kern-10mm%
+      \hbox to\@@paperwidth{\copy\@Tl\hfill\copy\@Tr}%
+      \vfill
+      \hbox to\@@paperwidth{\copy\@CL\hfill\copy\@CR}%
+      \vfill
+      \hbox to\@@paperwidth{\copy\@Bl\hfill\copy\@Br}%
+      \kern-10mm%
+      \hbox to\@@paperwidth{\hskip\@tombowbleed\relax
+         \copy\@BL\hfill\copy\@BC\hfill\copy\@BR\hskip\@tombowbleed}%
+      \color@endgroup
+    }\vss
+  }%
+  \fi
+}
+\def\@tombowcolor{\normalcolor}
+\def\@tombowbleed{3mm}
+\newdimen\@@paperheight
+\newdimen\@@paperwidth
+\newdimen\@@topmargin
+\def\@tombowreset@@paper{%
+  \@@topmargin\topmargin
+  \iftombow
+    \@@paperwidth\paperwidth
+    \advance\@@paperwidth 2\dimexpr\@tombowbleed\relax
+    \@@paperheight\paperheight
+    \advance\@@paperheight 10mm\relax
+    \advance\@@paperheight 2\dimexpr\@tombowbleed\relax
+    \advance\@@topmargin 1in\relax
+    \advance\@themargin 1in\relax
+  \fi}
+\AddToHook{build/page/reset}[pdftexja]{\@tombowreset@@paper}%
+% \mag/=1000: the shipout cm coordinates are magnified at shipout and
+% the kernel's background origin compensation leaves the \hoffset/
+% \voffset part in the stored coordinates; subtract it so the marks land
+% where pLaTeX+dvipdfmx puts them.
+\def\ptj@tombowput{%
+  \ifnum\mag=1000
+    \def\ptj@tmp{\put(72.27,-72.27)}%
+  \else
+    \edef\ptj@tmp{\noexpand\put(\strip@pt\dimexpr72.27pt-\hoffset\relax,%
+         \strip@pt\dimexpr-72.27pt+\voffset\relax)}%
+  \fi
+  \ptj@tmp}
+\AtBeginDocument{%
+  \iftombow
+    \AddToHook{shipout/background}[pdftexja]{%
+      \ptj@tombowput
+      {\lineskip\z@skip\lineskiplimit\z@\@outputtombow}}%
+  \fi}%
+% pLaTeX's \@outputpage sinks the text block by \@@topmargin (=
+% \topmargin+1in) when \iftombow; emulate it once with \topmargin
+% (\voffset would move the marks too). 1truein = physical 1in.
+\AtBeginDocument{\iftombow\advance\topmargin 1truein\relax\fi}
+
+%. ------------------------------------ text extraction guarantee
+% profile 読込時に \pdfgentounicode=1 が設定される（補助縦グリフの
+% ToUnicode は \pdfglyphtounicode 登録が主体）。文書が後から
+% \pdfgentounicode を 0 へ戻した場合、その出力の文字抽出は保証外
+% （U+FFFD化・喪失）なので、文書末に明示エラーで診断する
+% （受入試験も失敗にする）。
+\AtEndDocument{%
+  \ifnum\pdfgentounicode=\z@
+    \PackageError{pdftexja}{%
+      \string\pdfgentounicode=0 breaks the text extraction guarantee}{%
+    The pdfTeX backend registers per-glyph ToUnicode maps for the vertical\MessageBreak
+    auxiliary font slots; they only take effect while\MessageBreak
+    \string\pdfgentounicode=1. The document set it to 0.\MessageBreak
+    Restore \string\pdfgentounicode=1 before the end of the document.\MessageBreak
+    \@ehc}%
+  \fi
+}
+% NB: classes may load us mid-class where @ is a letter; keep it that way.
+\makeatletter

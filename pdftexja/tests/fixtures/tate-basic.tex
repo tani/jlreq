@@ -1,0 +1,21 @@
+% pdftexja standalone: vertical document (shipout rotation)
+\documentclass{article}
+\usepackage[tate]{pdftexja}
+% a vertical page geometry: \textwidth is the line length (vertical)
+\setlength{\textwidth}{150mm}\setlength{\textheight}{100mm}
+\setlength{\oddsidemargin}{0pt}\setlength{\topmargin}{0pt}
+\setlength{\headheight}{0pt}\setlength{\headsep}{0pt}
+\begin{document}
+\ptjiftdir{\typeout{PTJTEST-PASS: tdir}}{\typeout{PTJTEST-FAIL: tdir}}
+\ptjiftatepage{\typeout{PTJTEST-PASS: tatepage}}{\typeout{PTJTEST-FAIL: tatepage}}
+\edef\x{\the\dimexpr\ptjcharheight+\ptjchardepth\relax}
+\ifdim\x=10pt \typeout{PTJTEST-PASS: char cell 1zw}\else\typeout{PTJTEST-FAIL: char cell \x}\fi
+\setbox0\hbox{\ptjtatechuyoko{12}}
+\ifdim\wd0=10pt \typeout{PTJTEST-PASS: tcy advance}\else\typeout{PTJTEST-FAIL: tcy advance \the\wd0}\fi
+これは縦組みの文章です。「括弧」と、句読点。数字\ptjtatechuyoko{12}も入る。
+\ptjyokopage
+\ptjiftatepage{\typeout{PTJTEST-FAIL: yokopage}}{\typeout{PTJTEST-PASS: yokopage}}
+横組みのページ。
+\ptjtatepage
+縦組みに戻る。
+\end{document}

@@ -28,11 +28,14 @@ pLaTeX / upLaTeX / LuaLaTeX上で動きます．以下のパッケージを内�
 
 ### pdfLaTeX（実験的）
 pdfLaTeXでも文書がコンパイルできます（実験的なサポート・横組み/縦組み）．クラス
-オプションに`pdflatex`を渡すか，エンジンを自動判定させてください．内部で
-bxcjkjatype（CJKutf8）と実験的なバックエンド（jlreq-pdftex.sty）を読み込み，
-JFMに基づく文字間グルー・禁則・和欧文間隔を適用します．日本語ラベル・和暦
+オプションに`pdflatex`を渡すか，エンジンを自動判定させてください．pdfLaTeXでは
+日本語組版の基盤として別パッケージ **pdfTeX-ja**（`pdftexja/`; LuaLaTeXにおける
+LuaTeX-jaに相当．JFMに基づく文字間グルー・禁則・和欧文間隔・縦組み．
+`pdftexja/README.md`参照）を使い，jlreqは自分のJFMデータ（`jfm-jlreq.lua`等から
+生成した`ptjfm-jlreq*.def`）を渡すだけです．pdfTeX-jaは`make pdftexja-install`
+（または`make -C pdftexja install`）でインストールします．日本語ラベル・和暦
 `\today`・ルビ（`ruby`パッケージ経由）・`\tatechuyoko`・優先順位付き伸縮の
-厳密段落環境 `jlreqparagraph` に対応します．フォントセットは
+厳密段落環境 `ptjparagraph` に対応します．フォントセットは
 `pdftex_fontset=`クラスオプションで選択します（`ipaex-type1`（既定）/
 `haranoaji`/`ipa`/`custom`）．
 
@@ -102,7 +105,7 @@ JFMに基づく文字間グルー・禁則・和欧文間隔を適用します�
 全角空白（U+3000）一文字からなるマクロです．和字間隔を挿入します．LuaLaTeXでは`　`のみでも和字間隔を入力できます．
 
 ### その他
-* ルビや圏点はクラス自身では提供されません．[PXrubrica](https://github.com/zr-tex8r/PXrubrica)または`luatexja-ruby`（LuaLaTeX，LuaTeX-jaパッケージに付属）を使うと良いかと思います．pdfLaTeX利用時はCJKパッケージの`ruby`（`\usepackage{ruby}`、オプション`overlap`/`nooverlap`/`CJK`/`latin`、パラメータ`\rubysize`/`\rubysep`）が使えます: 実験的なpdfTeXバックエンドにはプロバイダ適合ファイル（`jlreq-pdftex-ruby.sty`、自動読み込み）が同梱され、プロバイダの`\ruby{本文}{ルビ}`をバックエンドの境界・状態機構に接続します——横組みではルビは本文の上、縦組みでは読み-frame右に付き、境界グルーは通常本文と同一のクラス表値、プロバイダ自身のoverlap判定も保存されます（詳細は`docs/pdftex-compatibility.md`）．
+* ルビや圏点はクラス自身では提供されません．[PXrubrica](https://github.com/zr-tex8r/PXrubrica)または`luatexja-ruby`（LuaLaTeX，LuaTeX-jaパッケージに付属）を使うと良いかと思います．pdfLaTeX利用時はCJKパッケージの`ruby`（`\usepackage{ruby}`、オプション`overlap`/`nooverlap`/`CJK`/`latin`、パラメータ`\rubysize`/`\rubysep`）が使えます: pdfTeX-jaにはプロバイダ適合ファイル（`pdftexja-ruby.sty`、自動読み込み）が同梱され、プロバイダの`\ruby{本文}{ルビ}`を境界・状態機構に接続します——横組みではルビは本文の上、縦組みでは読み-frame右に付き、境界グルーは通常本文と同一のクラス表値、プロバイダ自身のoverlap判定も保存されます（詳細は`docs/pdftex-compatibility.md`）．
 * pLaTeX / upLaTeX利用時はそれぞれ`zw`および`zh`に展開されるマクロ`\zw`と`\zh`が定義されます．LuaLaTeX利用時はLuaTeX-ja内で同名のマクロが定義されます．
 * 日本語組版処理の要件2.3.2.dによれば，横組みにおける二段組の最後のページの各段の行数は揃えることが望ましいとされていますが，この処理は行われません．`nidanfloat`パッケージを使い，
 

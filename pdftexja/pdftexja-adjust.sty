@@ -1,0 +1,2047 @@
+%%
+%% This is file 'pdftexja-adjust.sty'.
+%% pdfTeX-ja: priority-adjusted (strict) paragraph environment, the
+%% counterpart of luatexja-adjust's priority=true for single paragraphs.
+%%
+%% \usepackage{pdftexja-adjust} after pdftexja. User-facing environment:
+%%   \begin{ptjparagraph} ... \end{ptjparagraph}
+%% (no argument; one environment = one paragraph; normal paragraphs keep
+%% the native path).
+%%
+%% DESIGN (docs/pdftex-internals.md, ptjparagraph section):
+%%  1. Snapshot every paragraph parameter at entry; the env never changes
+%%     them in the document (the measurement group re-installs the
+%%     snapshot values locally; the lualatex comparison flow receives the
+%%     same values).
+%%  2. Itemize the EXPLICIT input model ONCE:
+%%     * CJK glyphs: typeset once through the rules glyph layer into a
+%%       pool box (nest-guarded; class/JFM metrics as usual); every
+%%       boundary between items is evaluated by the SHARED rules
+%%       evaluator (\ptj@evalpair) and the candidate series is
+%%       emitted by the rules emitter (\ptj@emitboundary) -- the
+%%       native breaker sees exactly the usual kern/penalty/glue stream.
+%%     * Latin words: one box per word (kerning/ligatures inside; no
+%%       in-word breaks except explicit soft-hyphen/discretionary).
+%%     * Spaces, \hspace: explicit glue items (tier 50).
+%%     * \mbox/\makebox: opaque items (factory direction metadata).
+%%     * $...$ / \(...\): inline math, one box (backend math capture).
+%%     * \tatechuyoko: one box via the direction box factory.
+%%     * \label/\ref/\hyperlink: whatsits are captured INSIDE item boxes
+%%       (labels pend into the next/final item) so the line streams
+%%       contain no bare whatsits.
+%%     * ruby: adapter contract (\ptj@par@rubyiface); polite error when
+%%       no adapter is present.
+%%     * Unknown macros, display math, floats, inserts/footnotes,
+%%       verbatim, non-local layout assignments: SPECIFIC errors at
+%%       itemization time. No silent approximate fallback.
+%%  3. Break ONCE with the native breaker: the items form one shadow
+%%     paragraph inside \vbox{\hsize=<snap> ...\par}. Net-zero markers
+%%     \vadjust{\kern<id>sp\kern-<id>sp} follow each item; the DISCARDED
+%%     measurement vbox is reverse-walked (lastnodetype-verified
+%%     lastbox/unskip/unpenalty/unkern) to recover per-line item ranges,
+%%     interline glue and penalties. User penalties are not clamped.
+%%  4. End-adjust recovery per line: natural repack width minus the known
+%%     naturals = the selected e; the tail kern/penalty series stripped
+%%     type-driven from the line copy must agree within 1sp. Unknown
+%%     nodes (chars, whatsits, discs) abort the recovery with an error.
+%%  5. Final line: the ltj aw_step1_last parfillskip condition; the
+%%     candidates ranked (|rem/total|, |rem|, |e|, e) lexicographically
+%%     (infinite orders take precedence; forbidden shrink/0-div/NaN
+%%     structurally avoided). Non-final lines keep the native candidate.
+%%  6. Priority fill per line (tier scale: JFM priority*10, kanjiskip 0,
+%%     (x)kanjiskip fallback 0, explicit glue 50; higher
+%%     tier first; the partially filled tier distributes proportionally;
+%%     stretch/shrink separate; finite shrink overflow = typeset defect
+%%     reported like TeX's own). sp-integer arithmetic, source-order
+%%     rounding, exact line width.
+%%  7. Assembly per line: the measurement line box is destructured by a
+%%     reverse node walk (boxes/glues/kerns/penalties only -- guaranteed
+%%     by the itemizer), the recorded glue data is applied by replacing
+%%     every glue with a fixed kern of its final size, and the line is
+%%     rebuilt in order by a second reverse pass (list reversal via the
+%%     \unhbox-append idiom); the rebuilt line must equal the measured
+%%     width within 1sp. Interline glue/penalties are replayed from the
+%%     walk; parskip was 0 during measurement and the ambient parskip is
+%%     inserted once at output; the first line box is appended to the
+%%     outer vlist so the outer prevdepth produces the normal baselineskip
+%%     glue; prevdepth/prevgraf are updated at the end. Markers and
+%%     measurement copies never ship out.
+%%
+
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{pdftexja-adjust}
+  [2026/10/27 v0.3 pdfTeX-ja priority-adjusted paragraph (experimental)]
+\RequirePackage{pdftexja}
+
+\@ifundefined{ptj@pairspri}{%
+  \PackageError{pdftexja-adjust}{pdftexja not loaded}{%
+    The priority registers of pdftexja-jfmglue are a hard
+    prerequisite.\MessageBreak \@ehc}}{}
+
+% ============================================================================
+% 0. Scratch / node types
+% ============================================================================
+\newcount\ptj@par@a \newcount\ptj@par@b \newcount\ptj@par@c
+\newdimen\ptj@par@da \newdimen\ptj@par@db \newdimen\ptj@par@dc
+% \lastnodetype (probed on pdfTeX): 0 char, 1 h/vlist, 2 ligature,
+% 3 rule, 4 disc, 5 math, 8 whatsit, 10 mark, 11 glue, 12 kern,
+% 13 penalty, -1 empty list.
+\mathchardef\ptj@par@t@char=0
+\mathchardef\ptj@par@t@box=1
+\mathchardef\ptj@par@t@disc=4
+\mathchardef\ptj@par@t@whatsit=8
+\mathchardef\ptj@par@t@glue=11
+\mathchardef\ptj@par@t@kern=12
+\mathchardef\ptj@par@t@pen=13
+
+% ============================================================================
+% 1. Parameter snapshot (the full parameter list)
+% ============================================================================
+\newdimen\ptj@par@hsize      \newdimen\ptj@par@parindent
+\newskip\ptj@par@parskip    \newskip\ptj@par@leftskip
+\newskip\ptj@par@rightskip  \newskip\ptj@par@parfillskip
+\newskip\ptj@par@spaceskip  \newskip\ptj@par@xspaceskip
+\newskip\ptj@par@baselineskip \newskip\ptj@par@lineskip
+\newdimen\ptj@par@lineskiplimit
+\newdimen\ptj@par@hangindent \newcount\ptj@par@hangafter
+\newdimen\ptj@par@emergencystretch
+\newcount\ptj@par@pretolerance \newcount\ptj@par@tolerance
+\newcount\ptj@par@linepenalty \newcount\ptj@par@hyphenpenalty
+\newcount\ptj@par@exhyphenpenalty
+\newcount\ptj@par@adjdemerits \newcount\ptj@par@doublehyphendemerits
+\newcount\ptj@par@finalhyphendemerits \newcount\ptj@par@looseness
+\newcount\ptj@par@clubpenalty \newcount\ptj@par@widowpenalty
+\newcount\ptj@par@interlinepenalty \newcount\ptj@par@brokenpenalty
+\newcount\ptj@par@prevgraf   \newdimen\ptj@par@prevdepth
+\def\ptj@par@clubpenalties{0}
+\def\ptj@par@widowpenalties{0}
+\def\ptj@par@interlinepenalties{0}
+\def\ptj@par@pshapelen{0}
+\def\ptj@par@pshapedata{}
+
+\def\ptj@par@snapshot{%
+  \global\ptj@par@hsize=\hsize
+  \global\ptj@par@parindent=\parindent
+  \global\ptj@par@parskip=\parskip
+  \global\ptj@par@leftskip=\leftskip
+  \global\ptj@par@rightskip=\rightskip
+  \global\ptj@par@parfillskip=\parfillskip
+  \global\ptj@par@spaceskip=\spaceskip
+  \global\ptj@par@xspaceskip=\xspaceskip
+  \global\ptj@par@baselineskip=\baselineskip
+  \global\ptj@par@lineskip=\lineskip
+  \global\ptj@par@lineskiplimit=\lineskiplimit
+  \global\ptj@par@hangindent=\hangindent
+  \global\ptj@par@hangafter=\hangafter
+  \global\ptj@par@emergencystretch=\emergencystretch
+  \global\ptj@par@pretolerance=\pretolerance
+  \global\ptj@par@tolerance=\tolerance
+  \global\ptj@par@linepenalty=\linepenalty
+  \global\ptj@par@hyphenpenalty=\hyphenpenalty
+  \global\ptj@par@exhyphenpenalty=\exhyphenpenalty
+  \global\ptj@par@adjdemerits=\adjdemerits
+  \global\ptj@par@doublehyphendemerits=\doublehyphendemerits
+  \global\ptj@par@finalhyphendemerits=\finalhyphendemerits
+  \global\ptj@par@looseness=\looseness
+  \global\ptj@par@clubpenalty=\clubpenalty
+  \global\ptj@par@widowpenalty=\widowpenalty
+  \global\ptj@par@interlinepenalty=\interlinepenalty
+  \global\ptj@par@brokenpenalty=\brokenpenalty
+  \global\ptj@par@prevgraf=\prevgraf
+  \global\ptj@par@prevdepth=\prevdepth
+  % e-TeX penalty ARRAYS: \the\<array> is invalid; read the count and
+  % the elements via \numexpr\<array> <idx>\relax (probed: idx 0 = the
+  % entry count, idx i>=1 = element i; zero errors).
+  \ptj@par@a=\numexpr\clubpenalties 0\relax
+  \edef\ptj@par@clubpenalties{\the\ptj@par@a}%
+  \ptj@par@b=0
+  \ptj@par@arrloop\clubpenalties\ptj@par@clubpenalties
+  \ptj@par@a=\numexpr\widowpenalties 0\relax
+  \edef\ptj@par@widowpenalties{\the\ptj@par@a}%
+  \ptj@par@b=0
+  \ptj@par@arrloop\widowpenalties\ptj@par@widowpenalties
+  \ptj@par@a=\numexpr\interlinepenalties 0\relax
+  \edef\ptj@par@interlinepenalties{\the\ptj@par@a}%
+  \ptj@par@b=0
+  \ptj@par@arrloop\interlinepenalties\ptj@par@interlinepenalties
+  \ptj@par@snap@parshape}
+% \ptj@par@arrloop{<array>}{<target macro>}: append elements 1..n
+\def\ptj@par@arrloop#1#2{%
+  \ifnum\ptj@par@b<\ptj@par@a
+    \advance\ptj@par@b1
+    \ptj@par@c=\numexpr#1 \ptj@par@b\relax
+    \expandafter\edef\expandafter#2\expandafter{#2\space\the\ptj@par@c}%
+    \expandafter\ptj@par@arrloop\expandafter#1\expandafter#2
+  \fi}
+
+% parshape snapshot (probed semantics):
+%   \numexpr\parshape 0\relax    = the line count n
+%   \parshapedimen<k>            = spec entries: k=2i-1 the indent of
+%                                 line i, k=2i the width of line i
+% (the whole shape is re-declared in the measurement vbox with the
+% same data; the comparison flow receives the same values).
+\def\ptj@par@snap@parshape{%
+  \def\ptj@par@pshapelen{0}\def\ptj@par@pshapedata{}%
+  % the count read leaks a typeset "0" into the CURRENT LIST when no
+  % shape is active (probed); perform it inside a discarded hbox.
+  \setbox\ptj@par@curbox=\vbox{\global\ptj@par@a=\numexpr\parshape 0\relax}%
+  \ifnum\ptj@par@a>0
+    \gdef\ptj@par@pshapedata{}%
+    \ptj@par@b=0
+    \ptj@par@pshape@loop
+    \edef\ptj@par@pshapelen{\the\ptj@par@b}%
+  \fi}
+\def\ptj@par@pshape@loop{%
+  \ifnum\ptj@par@b<\ptj@par@a
+    \advance\ptj@par@b1
+    \ptj@par@c=\numexpr 2*\ptj@par@b-1\relax
+    \ptj@par@da=\parshapedimen\ptj@par@c\relax
+    \advance\ptj@par@c1
+    \ptj@par@db=\parshapedimen\ptj@par@c\relax
+    \expandafter\edef\csname ptj@par@pshapedata\endcsname{%
+      \ptj@par@pshapedata
+      {\the\ptj@par@da\space\the\ptj@par@db}}%
+    \expandafter\ptj@par@pshape@loop
+  \fi}
+
+% ============================================================================
+% 2. Item model (KEYED csname storage; TeX macros take <=9 parameters)
+% ============================================================================
+%   \ptj@par@ITk@<id> kind: 1 cjk 2 word 3 math 4 tcy 5 opaque 6 ruby
+%                             7 space 8 hspace 9 kern 10 penalty 11 label
+%   \ptj@par@ITb@<id> box register name (empty for glue/penalty items)
+%   \ptj@par@ITg@<id> {wd}{ht}{dp}   pt strings
+%   \ptj@par@ITc@<id> {first}{last}  JFM classes at the run edges
+%   \ptj@par@ITp@<id> {spri}{shpri}  RIGHT-edge pair tier (JFM*10 scale
+%                                    applied at fill time)
+%   \ptj@par@ITG@<id> {nat}{str}{shr} RIGHT-edge pair glue pt strings
+%   \ptj@par@ITK@<id> {knat}{kstr}{kshr} kanjiskip companion pt strings
+%   \ptj@par@ITn@<id> kin penalty at the RIGHT edge
+%   \ptj@par@ITe@<id> end_adjust candidates of the LAST class (list)
+%   \ptj@par@ITz@<id> zw     \ptj@par@ITf@<id> font
+%   \ptj@par@ITx@<id> extra: explicit glue spec for kind 7/8 (5 fields:
+%                             {nat}{str}{shr}{sorder}{shorder}), penalty
+%                             value for kind 10, marker text for 11
+\newcount\ptj@par@nitems
+\newcount\ptj@par@poolcur
+\newcount\ptj@par@poolhi
+\newbox\ptj@par@curbox
+
+% pool: \ptj@par@PB@<n> box registers, reused across envs.
+% The registers are allocated at LOAD time (a fixed pool of 64): the
+% walk runs inside a box group, where a \newbox \chardef would be
+% LOCAL and vanish at the group close (probed: pool copies read back
+% void). A load-time pool is group-proof and bounds the nesting.
+\newcount\ptj@par@poolmax \ptj@par@poolmax=64
+\def\ptj@par@poolinit{%
+  \ptj@par@poolcur=0
+  \loop
+    \advance\ptj@par@poolcur1
+    \expandafter\expandafter\expandafter\newbox
+      \csname ptj@par@PB@\the\ptj@par@poolcur\endcsname
+  \ifnum\ptj@par@poolcur<\ptj@par@poolmax
+  \repeat}
+\ptj@par@poolinit
+\def\ptj@par@poolalloc#1{%
+  \global\advance\ptj@par@poolcur1
+  \ifnum\ptj@par@poolcur>\ptj@par@poolmax
+    \PackageError{pdftexja-adjust}{box pool exhausted}{%
+      The strict paragraph needs more than 
+      \the\ptj@par@poolmax\space pooled box registers.%
+      \MessageBreak \@ehc}%
+  \fi
+  \edef#1{ptj@par@PB@\the\ptj@par@poolcur}}
+
+% field scratch: filled by the capture hooks, read by \itemsave/\itload
+\newcount\ptj@par@F@kind
+\def\ptj@par@F@box{}
+\newcount\ptj@par@F@first
+\newcount\ptj@par@F@last
+\newcount\ptj@par@F@spri
+\newcount\ptj@par@F@shpri
+\def\ptj@par@F@nat{0pt}
+\def\ptj@par@F@str{0pt}
+\def\ptj@par@F@shr{0pt}
+\def\ptj@par@F@knat{0pt}
+\def\ptj@par@F@kstr{0pt}
+\def\ptj@par@F@kshr{0pt}
+\newcount\ptj@par@F@kin
+\def\ptj@par@F@ea{}
+\def\ptj@par@F@zw{0pt}
+\def\ptj@par@F@font{}
+\def\ptj@par@F@extra{}
+
+\def\ptj@par@itemsave{%
+  \global\advance\ptj@par@nitems1
+  \expandafter\xdef\csname ptj@par@ITk@\the\ptj@par@nitems\endcsname
+    {\the\ptj@par@F@kind}%
+  \expandafter\xdef\csname ptj@par@ITb@\the\ptj@par@nitems\endcsname
+    {\ptj@par@F@box}%
+  \expandafter\xdef\csname ptj@par@ITg@\the\ptj@par@nitems\endcsname
+    {{\the\wd\ptj@par@curbox}{\the\ht\ptj@par@curbox}%
+     {\the\dp\ptj@par@curbox}}%
+  \expandafter\xdef\csname ptj@par@ITc@\the\ptj@par@nitems\endcsname
+    {{\the\ptj@par@F@first}{\the\ptj@par@F@last}}%
+  \expandafter\xdef\csname ptj@par@ITp@\the\ptj@par@nitems\endcsname
+    {{\the\ptj@par@F@spri}{\the\ptj@par@F@shpri}}%
+  \expandafter\xdef\csname ptj@par@ITG@\the\ptj@par@nitems\endcsname
+    {{\ptj@par@F@nat}{\ptj@par@F@str}{\ptj@par@F@shr}}%
+  \expandafter\xdef\csname ptj@par@ITK@\the\ptj@par@nitems\endcsname
+    {{\ptj@par@F@knat}{\ptj@par@F@kstr}{\ptj@par@F@kshr}}%
+  \expandafter\xdef\csname ptj@par@ITn@\the\ptj@par@nitems\endcsname
+    {\the\ptj@par@F@kin}%
+  \expandafter\xdef\csname ptj@par@ITe@\the\ptj@par@nitems\endcsname
+    {\ptj@par@F@ea}%
+  \expandafter\xdef\csname ptj@par@ITz@\the\ptj@par@nitems\endcsname
+    {\ptj@par@F@zw}%
+  \expandafter\xdef\csname ptj@par@ITf@\the\ptj@par@nitems\endcsname
+    {\ptj@par@F@font}%
+  \expandafter\xdef\csname ptj@par@ITx@\the\ptj@par@nitems\endcsname
+    {\ptj@par@F@extra}}
+
+\def\ptj@par@itload#1{%
+  \ptj@par@F@kind=\csname ptj@par@ITk@#1\endcsname\relax
+  \edef\ptj@par@F@box{\csname ptj@par@ITb@#1\endcsname}%
+  \expandafter\ptj@par@split@geo\csname ptj@par@ITg@#1\endcsname
+  \expandafter\ptj@par@split@cls\csname ptj@par@ITc@#1\endcsname
+  \expandafter\ptj@par@split@pri\csname ptj@par@ITp@#1\endcsname
+  \expandafter\ptj@par@split@glu\csname ptj@par@ITG@#1\endcsname
+  \expandafter\ptj@par@split@kan\csname ptj@par@ITK@#1\endcsname
+  \ptj@par@F@kin=\csname ptj@par@ITn@#1\endcsname\relax
+  \edef\ptj@par@F@ea{\csname ptj@par@ITe@#1\endcsname}%
+  \ptj@par@da=\csname ptj@par@ITz@#1\endcsname\relax
+  \edef\ptj@par@F@zw{\the\ptj@par@da}%
+  \edef\ptj@par@F@font{\csname ptj@par@ITf@#1\endcsname}%
+\edef\ptj@par@F@extra{\csname ptj@par@ITx@#1\endcsname}}
+\def\ptj@par@split@geo#1#2#3{%
+  \wd\ptj@par@curbox=#1\relax
+  \ht\ptj@par@curbox=#2\relax
+  \dp\ptj@par@curbox=#3\relax}
+\def\ptj@par@split@cls#1#2{%
+  \ptj@par@F@first=#1\relax
+  \ptj@par@F@last=#2\relax}
+\def\ptj@par@split@pri#1#2{%
+  \ptj@par@F@spri=#1\relax
+  \ptj@par@F@shpri=#2\relax}
+\def\ptj@par@split@glu#1#2#3{%
+  \def\ptj@par@F@nat{#1}\def\ptj@par@F@str{#2}%
+  \def\ptj@par@F@shr{#3}}
+\def\ptj@par@split@kan#1#2#3{%
+  \def\ptj@par@F@knat{#1}\def\ptj@par@F@kstr{#2}%
+  \def\ptj@par@F@kshr{#3}}
+
+% ============================================================================
+% 3. The environment shell
+% ============================================================================
+% The environment SPANS the measurement: the begin-code opens the
+% measurement vbox (\bgroup after \vbox), the document body is typeset
+% ONCE inside it (the capture hooks record items as they appear), and
+% the end-code closes the vbox and runs the strict flow. (A delimited
+% \end{...} grab is impossible: `{` cannot appear in a \def parameter
+% text.)
+\newenvironment{ptjparagraph}{%
+  \par
+  \ptj@par@snapshot
+  \ptj@par@measure@open
+}{\ptj@par@measure@close}
+% ============================================================================
+% 5. The reverse walk: per-line item ranges + interline glue/penalties
+% ============================================================================
+% walk data (GLOBAL; the walk runs inside the box-building group):
+%   \ptj@par@LN@<n>@from/@to  item id range of line n (1-based,
+%                             recovered in REVERSE: line ids count up
+%                             as the walk descends)
+%   \ptj@par@LN@<n>@wd/@box   measured width / pool box register name
+%   \ptj@par@LX@<n>@glue      interline glue BEFORE line n as
+%                             {nat}{str}{shr}{sord}{shord} pt strings
+%   \ptj@par@LX@<n>@pen       penalty list BEFORE line n (text list)
+\newcount\ptj@par@wline
+\newcount\ptj@par@wlastmark  % highest marker id seen so far
+\newcount\ptj@par@wka \newcount\ptj@par@wkb
+\newcount\ptj@par@wsum
+\newbox\ptj@par@wlinebox
+\newskip\ptj@par@wskip
+
+\newbox\ptj@par@walkbox
+\def\ptj@par@walk{%
+  \global\ptj@par@wline=0
+  \global\ptj@par@wsum=0
+  \global\ptj@par@wlastmark=0
+  \xdef\ptj@par@LN@1@from{1}%
+  \setbox\ptj@par@walkbox=\vbox{%
+    \unvbox\ptj@par@measbox
+    \ptj@par@walk@step}%
+  % NOTE: the recount/assemble runs OUTSIDE the walkbox group. Inside
+  % the walkbox TeX is in INTERNAL vertical mode -- emitted line
+  % boxes would land in the (discarded) walkbox (probed: the strict
+  % lines silently vanished). After the vbox closes we are back in
+  % the enclosing mode and the assembly appends to the real vlist.
+  \ptj@par@recount}
+
+% one reverse-walk step. \lastnodetype is invalidated by \write-type
+% operations; between reads only pops/assignments happen.
+\def\ptj@par@walk@step{%
+  \ifnum\lastnodetype=-1
+    \let\ptj@par@wnext\ptj@par@walk@end
+  \else
+    \ifnum\lastnodetype=\ptj@par@t@kern
+      \let\ptj@par@wnext\ptj@par@walk@kern
+    \else
+    \ifnum\lastnodetype=\ptj@par@t@box
+      \let\ptj@par@wnext\ptj@par@walk@box
+    \else
+    \ifnum\lastnodetype=\ptj@par@t@glue
+      \let\ptj@par@wnext\ptj@par@walk@glue
+    \else
+    \ifnum\lastnodetype=\ptj@par@t@pen
+      \let\ptj@par@wnext\ptj@par@walk@pen
+    \else
+      \let\ptj@par@wnext\ptj@par@walk@end
+    \fi\fi\fi\fi
+  \fi
+  \ptj@par@wnext}
+
+% kern handling. A MARKER is a \kern<id>sp\kern-<id>sp pair (both
+% members nonzero, exact negations). Other kerns are LAYOUT kerns
+% (the rules backend's para/end tail kern etc.) and must be popped
+% singly and kept in the interline record. The distinction is made by
+% peeking: pop the first kern; if the NEXT node is a kern whose value
+% is the exact negation and both nonzero, it is a marker pair;
+% otherwise the first kern was a layout kern (record it and treat the
+% next node from the top of the walk).
+\def\ptj@par@walk@kern{%
+  \global\ptj@par@wka=\lastkern
+  \unkern
+  \ifnum\lastnodetype=\ptj@par@t@kern
+    \global\ptj@par@wkb=\lastkern
+    \ifnum-\ptj@par@wka=\ptj@par@wkb
+      \ifnum\ptj@par@wka=0
+        % 0/0 pair: not a marker; drop both (net 0) and continue.
+        \unkern
+        \ptj@par@walk@step
+      \else
+        % marker pair: pop the partner, record the id.
+        \unkern
+        \global\advance\ptj@par@wsum\ptj@par@wka
+        \global\advance\ptj@par@wsum\ptj@par@wkb
+        \ifnum\ptj@par@wkb<0
+          \global\ptj@par@wlastmark=-\ptj@par@wkb
+        \else
+          \global\ptj@par@wlastmark=\ptj@par@wkb
+        \fi
+        \ptj@par@walk@step
+      \fi
+    \else
+      % two kerns, NOT a marker pair: the first was layout; the second
+      % is re-processed as the walk's next node (it is still the LAST
+      % node -- do not pop it here).
+      \ptj@par@kern@record
+      \ptj@par@walk@step
+    \fi
+  \else
+    % single kern (no kern follower): layout kern.
+    \ptj@par@kern@record
+    \ptj@par@walk@step
+  \fi}
+% layout kern record: goes to the interline zone (currently the
+% interline kerns are simply consumed; the assembly replays glue and
+% penalties only, which suffices for baseline glue correctness).
+\def\ptj@par@kern@record{\relax}
+
+% a line box: close the line's item range, stash the box.
+\def\ptj@par@walk@box{%
+  \setbox\ptj@par@wlinebox=\lastbox
+  \global\advance\ptj@par@wline1
+  \expandafter\xdef\csname ptj@par@LN@\the\ptj@par@wline @to\endcsname
+    {\the\ptj@par@wlastmark}%
+  \expandafter\xdef\csname ptj@par@LN@\the\ptj@par@wline @wd\endcsname
+    {\the\wd\ptj@par@wlinebox}%
+  \ptj@par@poolalloc\ptj@par@regname
+  \expandafter\global\expandafter\setbox
+    \csname\ptj@par@regname\endcsname=\copy\ptj@par@wlinebox
+  \expandafter\xdef\csname ptj@par@LN@\the\ptj@par@wline @box\endcsname
+    {\ptj@par@regname}%
+  % the NEXT (lower) line starts after this line's last item
+  \expandafter\xdef
+    \csname ptj@par@LN@\the\numexpr\ptj@par@wline+1\space @from\endcsname
+    {\the\numexpr\ptj@par@wlastmark+1}%
+  \ptj@par@walk@step}
+
+% interline glue (before the line below): record the FULL skip text
+% (\the<skip> keeps the plus/minus and fil orders verbatim).
+\def\ptj@par@walk@glue{%
+  \global\ptj@par@wskip=\lastskip
+  \unskip
+  \expandafter\xdef
+    \csname ptj@par@LX@\the\numexpr\ptj@par@wline+1\space @glue\endcsname
+    {\the\ptj@par@wskip}%
+  \ptj@par@walk@step}
+
+\def\ptj@par@walk@pen{%
+  \expandafter\ifx\csname ptj@par@LX@\the\numexpr\ptj@par@wline+1\space
+      @pen\endcsname\relax
+    % first penalty of this zone: seed the list (COMMA separated)
+    \expandafter\xdef
+      \csname ptj@par@LX@\the\numexpr\ptj@par@wline+1\space @pen\endcsname
+      {\the\lastpenalty}%
+  \else
+    \expandafter\let\expandafter\ptj@par@pentmp
+      \csname ptj@par@LX@\the\numexpr\ptj@par@wline+1\space @pen\endcsname
+    \expandafter\xdef
+      \csname ptj@par@LX@\the\numexpr\ptj@par@wline+1\space @pen\endcsname
+      {\the\lastpenalty,\ptj@par@pentmp}%
+  \fi
+  \unpenalty
+  \ptj@par@walk@step}
+
+\def\ptj@par@walk@end{%
+  \ifnum\ptj@par@wsum=0\else
+    \PackageError{pdftexja-adjust}{marker net sum nonzero}%
+      {Markers must sum to zero; got \the\ptj@par@wsum sp.%
+       \MessageBreak \@ehc}%
+  \fi
+  % descending walk done; the driver (outside the walkbox) recounts.
+  \relax}
+
+% The walk numbered lines BOTTOM-UP (wline counts up while
+% descending). Re-key the walk data to TOP-DOWN line numbers.
+\def\ptj@par@recount{%
+  \ptj@par@a=\ptj@par@wline % bottom-up count == total lines
+  \global\ptj@par@nlines=\ptj@par@wline
+  \ptj@par@b=0
+  \ptj@par@recount@loop
+  % assemble ONCE (the old tail-call shape ran it once per level).
+  \ptj@par@assemble}
+\def\ptj@par@recount@loop{%
+  \ifnum\ptj@par@b<\ptj@par@a
+    \advance\ptj@par@b1
+    % bottom-up line b == top-down line (a-b+1)
+    \ptj@par@c=\numexpr\ptj@par@a-\ptj@par@b+1\relax
+    \expandafter\let\expandafter\ptj@par@tmp
+      \csname ptj@par@LN@\the\ptj@par@b @from\endcsname
+    \expandafter\xdef\csname ptj@par@NL@\the\ptj@par@c @from\endcsname
+      {\ptj@par@tmp}%
+    \expandafter\let\expandafter\ptj@par@tmp
+      \csname ptj@par@LN@\the\ptj@par@b @to\endcsname
+    \expandafter\xdef\csname ptj@par@NL@\the\ptj@par@c @to\endcsname
+      {\ptj@par@tmp}%
+    \expandafter\let\expandafter\ptj@par@tmp
+      \csname ptj@par@LN@\the\ptj@par@b @wd\endcsname
+    \expandafter\xdef\csname ptj@par@NL@\the\ptj@par@c @wd\endcsname
+      {\ptj@par@tmp}%
+    \expandafter\let\expandafter\ptj@par@tmp
+      \csname ptj@par@LN@\the\ptj@par@b @box\endcsname
+    \expandafter\xdef\csname ptj@par@NL@\the\ptj@par@c @box\endcsname
+      {\ptj@par@tmp}%
+    % interline data BEFORE bottom-up line b sits between b and b-1;
+    % top-down it belongs after top-down line c=a-b+1 (the zone before
+    % the BOTTOM line, b=1, is the parskip zone -- dropped).
+    \expandafter\ifx\csname ptj@par@LX@\the\ptj@par@b @glue\endcsname\relax
+    \else
+      \expandafter\let\expandafter\ptj@par@tmp
+        \csname ptj@par@LX@\the\ptj@par@b @glue\endcsname
+      \expandafter\xdef
+        \csname ptj@par@LX@\the\ptj@par@c @glue\endcsname{\ptj@par@tmp}%
+    \fi
+    \expandafter\ifx\csname ptj@par@LX@\the\ptj@par@b @pen\endcsname\relax
+    \else
+      \expandafter\let\expandafter\ptj@par@tmp
+        \csname ptj@par@LX@\the\ptj@par@b @pen\endcsname
+      \expandafter\xdef
+        \csname ptj@par@LX@\the\ptj@par@c @pen\endcsname{\ptj@par@tmp}%
+    \fi
+    % tail recursion: when done, simply return (the driver assembles).
+    \expandafter\ptj@par@recount@loop
+  \fi}
+% ============================================================================
+% 4. The strict flow (spanning environment: open -> body -> close)
+% ============================================================================
+\newbox\ptj@par@measbox
+\newcount\ptj@par@nlines
+
+% begin-code tail: opens the measurement vbox. The document body is
+% typeset ONCE inside it; the capture hooks record the items.
+\def\ptj@par@measure@open{%
+  \global\ptj@par@nitems=0
+  \global\ptj@par@poolcur=0
+  \begingroup
+    \hsize=\ptj@par@hsize
+    \parindent=\ptj@par@parindent
+    \leftskip=\ptj@par@leftskip
+    \rightskip=\ptj@par@rightskip
+    \parfillskip=\ptj@par@parfillskip
+    \baselineskip=\ptj@par@baselineskip
+    \lineskip=\ptj@par@lineskip
+    \lineskiplimit=\ptj@par@lineskiplimit
+    \pretolerance=\ptj@par@pretolerance
+    \tolerance=\ptj@par@tolerance
+    \emergencystretch=\ptj@par@emergencystretch
+    \linepenalty=\ptj@par@linepenalty
+    \hyphenpenalty=\ptj@par@hyphenpenalty
+    \exhyphenpenalty=\ptj@par@exhyphenpenalty
+    \adjdemerits=\ptj@par@adjdemerits
+    \doublehyphendemerits=\ptj@par@doublehyphendemerits
+    \finalhyphendemerits=\ptj@par@finalhyphendemerits
+    \looseness=\ptj@par@looseness
+    \clubpenalty=\ptj@par@clubpenalty
+    \widowpenalty=\ptj@par@widowpenalty
+    \interlinepenalty=\ptj@par@interlinepenalty
+    \brokenpenalty=\ptj@par@brokenpenalty
+    \hangindent=\ptj@par@hangindent
+    \hangafter=\ptj@par@hangafter
+    \ifx\parshapelength\undefined\else
+      \ifnum\ptj@par@pshapelen>0
+        \expandafter\parshape\number\ptj@par@pshapelen\ptj@par@pshapedata
+      \fi
+    \fi
+    \parskip=0pt        % measurement parskip = 0
+    \spaceskip=\ptj@par@spaceskip
+    \xspaceskip=\ptj@par@xspaceskip
+    \ptj@par@setup@hooks
+    % NOTE: boxing every 1zw glyph (\ptj@boxglyphs=1) was
+    % probed and REJECTED for the default path -- it changes the
+    % inter-glyph node stream enough to alter native line breaks
+    % (overfull regressions in strict-basic). The distribution engine
+    % instead walks what IS walkable: punct-class glyphs are already
+    % JFM-width boxes natively, and lines whose interior still
+    % holds bare chars/whatsits/ins nodes are SKIPPED (native line
+    % box kept; \ptj@par@distskip). Setting the flag remains
+    % available for the follow-up that boxes latin words as items.
+    \global\ptj@boxglyphs=1
+    \global\setbox\ptj@par@measbox=\vbox\bgroup}
+
+% end-code: closes the measurement vbox, then runs the strict flow.
+\def\ptj@par@measure@close{%
+      % the last glyph's class/zw for aw_step1_last are captured by the
+      % placeglyph hook (\ptj@par@lastcls/\ptj@par@lastzw) -- reading
+      % \ptj@lastclass HERE is wrong: the trailing input space has
+      % already turned it into 93 (probed).
+      \par
+    \egroup
+    \ptj@par@teardown@hooks
+    % restore the native glyph mode for the text AFTER the environment
+    % (the measurement used boxed glyphs; the outer native paragraphs
+    % must keep the unboxed stream)
+    \global\ptj@boxglyphs=0
+    % line count is recovered by the walk (recount sets \nlines).
+  \endgroup
+  \ptj@par@walk}
+
+% ---------------------------------------------------------------------------
+% 4b. item capture hooks
+% ---------------------------------------------------------------------------
+\def\ptj@par@setup@hooks{%
+  \global\ptj@par@bdseq=0
+  \ptj@par@hook@emitters
+  \ptj@par@hook@hbox
+  \ptj@par@hook@explicit
+  \ptj@par@hook@forbidden}
+\def\ptj@par@teardown@hooks{%
+  \ptj@par@unhook@emitters
+  \ptj@par@unhook@hbox
+  \ptj@par@unhook@explicit
+  \ptj@par@unhook@forbidden}
+
+% marker: net-zero kern pair via \vadjust (horizontal mode only)
+\def\ptj@par@mark{%
+  \vadjust{\kern\the\ptj@par@nitems sp\kern-\the\ptj@par@nitems sp}}
+
+% --- \mbox/\makebox -> one opaque item --------------------------------------
+\def\ptj@par@hook@hbox{%
+  \let\ptj@par@saved@mbox\mbox
+  \let\ptj@par@saved@makebox\makebox
+  \def\mbox{\ptj@par@cap@mbox}%
+  \def\makebox{\ptj@par@cap@makebox}}
+\def\ptj@par@unhook@hbox{%
+  \let\mbox\ptj@par@saved@mbox
+  \let\makebox\ptj@par@saved@makebox}
+\long\def\ptj@par@cap@mbox#1{%
+  \ptj@par@cap@opaque{\hbox{#1}}}
+\def\ptj@par@cap@makebox{%
+  \@ifnextchar[{\ptj@par@cap@makebox@a}{\ptj@par@cap@makebox@plain}}
+\long\def\ptj@par@cap@makebox@plain#1{%
+  \ptj@par@cap@opaque{\hbox{#1}}}
+\def\ptj@par@cap@makebox@a[#1]{%
+  \@ifnextchar[{\ptj@par@cap@makebox@b[#1]}{\ptj@par@cap@makebox@w[#1]}}
+\long\def\ptj@par@cap@makebox@w[#1]#2{%
+  \ptj@par@skipval=#1\relax
+  \ptj@par@cap@opaque{\hb@xt@ \ptj@par@skipval{#2}}}
+% makebox with an explicit position: the kernel's \mb@xt@ is not
+% available in this format build (probed: undefined); realize the
+% four positions with \hb@xt@ and \hss spacers directly.
+\long\def\ptj@par@cap@makebox@b[#1][#2]#3{%
+  \ptj@par@cap@opaque{\hb@xt@ #1{%
+    \def\ptj@par@mbpos{#2}%
+    \def\ptj@par@mbtmp{s}\ifx\ptj@par@mbpos\ptj@par@mbtmp
+      \hss#3\hss
+    \else
+      \def\ptj@par@mbtmp{l}\ifx\ptj@par@mbpos\ptj@par@mbtmp
+        \hss#3%
+      \else
+        \def\ptj@par@mbtmp{c}\ifx\ptj@par@mbpos\ptj@par@mbtmp
+          \hss#3\hss
+        \else
+          #3\hss
+        \fi
+      \fi
+    \fi}}}
+% capture: build the box ONCE into a pool register, record the item and
+% the marker, then CONTRIBUTE the same box to the measurement stream.
+\long\def\ptj@par@cap@opaque#1{%
+  \ptj@par@poolalloc\ptj@par@regname
+  \expandafter\setbox\csname\ptj@par@regname\endcsname=#1%
+  \ptj@par@F@kind=5
+  \edef\ptj@par@F@box{\ptj@par@regname}%
+  \setbox\ptj@par@curbox=\expandafter\copy
+    \csname\ptj@par@regname\endcsname
+  \ptj@par@readpairstate
+  \ptj@par@itemsave
+  \ptj@par@mark
+  \expandafter\box\csname\ptj@par@regname\endcsname}
+\def\ptj@par@regname{ptj@par@PB@0}
+
+% snapshot the CURRENT boundary state into the field scratch.
+\def\ptj@par@readpairstate{%
+  \ptj@par@F@first=\ptj@lastclass
+  \ptj@par@F@last=\ptj@lastclass
+  \ptj@par@F@spri=0
+  \ptj@par@F@shpri=0
+  \def\ptj@par@F@nat{0pt}%
+  \def\ptj@par@F@str{0pt}%
+  \def\ptj@par@F@shr{0pt}%
+  \def\ptj@par@F@knat{0pt}%
+  \def\ptj@par@F@kstr{0pt}%
+  \def\ptj@par@F@kshr{0pt}%
+  \ptj@par@F@kin=0
+  \def\ptj@par@F@ea{}%
+  \ptj@par@da=\ptj@zwreg
+  \edef\ptj@par@F@zw{\the\ptj@par@da}%
+  \edef\ptj@par@F@font{\the\font}%
+  \def\ptj@par@F@extra{}}
+
+% --- explicit glue constructs -----------------------------------------------
+% \hspace is an explicit glue ITEM (tier 50 at fill time): captured with
+% a marker. The break commands (\allowbreak/\nobreak/\linebreak/\penalty)
+% are NOT hooked: they are not items, they keep their native node
+% semantics in the shadow paragraph, and hooking them interferes with
+% the rules backend's internal use of the same commands (probed: the
+% candidate series with brackets hangs when \allowbreak/\nobreak are
+% wrapped -- the backend/CJK layer calls them inside contexts where a
+% \vadjust marker is illegal). The walk recovers them natively in the
+% interline zone; user penalties are never clamped.
+\def\ptj@par@hook@explicit{%
+  \let\ptj@par@saved@hspace\hspace
+  \def\hspace{\ptj@par@cap@hspace}}
+\def\ptj@par@unhook@explicit{%
+  \let\hspace\ptj@par@saved@hspace}
+% NOTE: no \@ifstar at all -- after a CJK glyph the rules backend's
+% peek has already futurelet once and any following \@ifnextchar
+% scan mis-parses (probed: "Missing number {" / "Illegal unit").
+% The star form differs only by \ignorespaces; a textual star check
+% is done here without \@ifnextchar.
+\def\ptj@par@cap@hspace{\futurelet\ptj@par@nxt\ptj@par@cap@hs@p}
+\def\ptj@par@cap@hs@p{%
+  \ifx\ptj@par@nxt*%
+    \expandafter\ptj@par@cap@hs@st
+  \else
+    \expandafter\ptj@par@cap@hs@ns
+  \fi}
+\def\ptj@par@cap@hs@st*#1{\ptj@par@cap@skip{#1}}
+\def\ptj@par@cap@hs@ns#1{\ptj@par@cap@skip{#1}}
+\newskip\ptj@par@skipval
+\def\ptj@par@cap@skip#1{%
+  % NOTE: \skip={...} (a brace-group glue) mis-scans in this backend
+  % (probed: "Missing number {" and a 0pt assignment); route the glue
+  % through a scratch macro and assign brace-free.
+  \def\ptj@par@skiparg{#1}%
+  \ptj@par@skipval=\ptj@par@skiparg
+  \hskip\ptj@par@skipval
+  \ptj@par@mark}
+
+% --- forbidden constructs: SPECIFIC errors at itemization time -------
+% The strict input model rejects display math, floats, inserts
+% (footnotes/marginpars) and verbatim inside the environment: each
+% would contribute material outside the item stream. The guards fire
+% with a pdftexja-adjust error naming the construct.
+\def\ptj@par@forbidden@err#1{%
+  \PackageError{pdftexja-adjust}{#1 is not allowed inside ptjparagraph}{%
+    The strict input model rejects it: display math, floats, inserts\MessageBreak
+    (footnotes, marginpar) and verbatim contribute material outside the\MessageBreak
+    item stream. Use them outside the environment.\MessageBreak \@ehc}}
+
+\def\ptj@par@hook@forbidden{%
+  \let\ptj@par@saved@footnote\footnote
+  \let\ptj@par@saved@footnotemark\footnotemark
+  \let\ptj@par@saved@marginpar\marginpar
+  \let\ptj@par@saved@bracket\[%
+  \def\footnote{\ptj@par@forbidden@err{footnote}}%
+  \def\footnotemark{\ptj@par@forbidden@err{footnotemark}}%
+  \def\marginpar{\ptj@par@forbidden@err{marginpar}}%
+  \def\[{\ptj@par@forbidden@err{display math}}}
+\def\ptj@par@unhook@forbidden{%
+  \let\footnote\ptj@par@saved@footnote
+  \let\footnotemark\ptj@par@saved@footnotemark
+  \let\marginpar\ptj@par@saved@marginpar
+  \let\[\ptj@par@saved@bracket}
+% ============================================================================
+% 6. End-adjust recovery: selected e per line (natural repack - naturals)
+% ============================================================================
+\newdimen\ptj@par@eadj      % recovered selected e (sp)
+\newcount\ptj@par@isfinal
+\newdimen\ptj@par@tailk
+\newskip\ptj@par@gskip
+\def\ptj@par@lineref{xx}
+
+\def\ptj@par@recover@all{%
+  \ptj@par@a=0
+  \ptj@par@recover@loop}
+\def\ptj@par@recover@loop{%
+  \ifnum\ptj@par@a<\ptj@par@nlines
+    \advance\ptj@par@a1
+    \ptj@par@recover@line{\the\ptj@par@a}%
+    \expandafter\ptj@par@recover@loop
+  \fi}
+
+\def\ptj@par@recover@line#1{%
+  \expandafter\let\expandafter\ptj@par@lineref
+    \csname ptj@par@NL@#1@box\endcsname
+  \global\ptj@par@isfinal=0
+  {\ptj@par@rec@tail{#1}}}
+
+% tail destructure. The line box is an HBOX: \unhcopy it into a fresh
+% hbox UNDER CONSTRUCTION and run the pop loop INSIDE it, so the pops
+% (\unpenalty/\unkern/\unskip) act on the COPIED line's node list --
+% NOT on the enclosing vertical list (probed twice: an outside loop
+% popped the page list, corrupting the layout and typesetting stray
+% material).
+\def\ptj@par@rec@tail#1{%
+  \ptj@par@tailk=0pt
+  \setbox\ptj@par@curbox=\hbox{%
+    \expandafter\expandafter\expandafter\unhcopy
+      \csname\ptj@par@lineref\endcsname
+    \ptj@par@tail@loop}}
+
+% The loop is ARGUMENT-FREE: the continuation \ptj@par@tnext is
+% called with NO argument. (An earlier shape passed {<line>} to every
+% step; at exit the leftover \relax{1} TYPESET the line number onto
+% the page -- probed.)
+\def\ptj@par@tail@loop{%
+  \ifnum\lastnodetype=\ptj@par@t@pen
+    \unpenalty
+    \let\ptj@par@tnext\ptj@par@tail@loop
+  \else
+    \ifnum\lastnodetype=\ptj@par@t@kern
+      \ptj@par@da=\lastkern
+      \unkern
+      \advance\ptj@par@tailk\ptj@par@da
+      \let\ptj@par@tnext\ptj@par@tail@loop
+    \else
+      \ifnum\lastnodetype=\ptj@par@t@glue
+        \ptj@par@gskip=\lastskip
+        \unskip
+        \ifnum\gluestretchorder\ptj@par@gskip>0
+          \global\ptj@par@isfinal=1
+        \fi
+        \let\ptj@par@tnext\ptj@par@tail@loop
+      \else
+        \ifnum\lastnodetype=\ptj@par@t@box
+          \let\ptj@par@tnext\relax
+        \else
+          \ifnum\lastnodetype=\ptj@par@t@char
+            % a char node: the line's CONTENT begins -- the tail
+            % series is complete.
+            \let\ptj@par@tnext\relax
+          \else
+            \ifnum\lastnodetype=-1
+              \let\ptj@par@tnext\relax
+            \else
+              \PackageError{pdftexja-adjust}
+                {unknown node in line tail}{%
+                Node type \the\lastnodetype\space in a line tail. The%
+                \MessageBreak strict input model guarantees boxes/ 
+                glues/kerns/penalties and glyphs.\MessageBreak \@ehc}%
+              \let\ptj@par@tnext\relax
+            \fi
+          \fi
+        \fi
+      \fi
+    \fi
+  \fi
+  \ptj@par@tnext}
+
+% The recovered e of line #1 lands in the global
+% \ptj@par@E@<n> after the tail walk.
+\def\ptj@par@E@save#1{%
+  \expandafter\xdef\csname ptj@par@E@#1\endcsname
+    {\the\ptj@par@tailk}%
+  \expandafter\xdef\csname ptj@par@FIN@#1\endcsname
+    {\the\ptj@par@isfinal}}
+
+% ============================================================================
+% 9. Assembly and output
+% ============================================================================
+% For each top-down line: re-emit the line content in source order from
+% the ORIGINAL item boxes (moved once), with the boundary glue series
+% re-emitted at their FINAL sizes (tier fill result), the selected
+% end_adjust kern at the line end (non-final: native; final: the
+% aw_step1_last winner), the parfillskip/rightskip tails rebuilt from
+% the snapshot, and the interline glue/penalties replayed. The line is
+% packed to the measured width; the first line box is appended to the
+% outer vlist (ambient parskip once, outer prevdepth baseline glue),
+% the remaining lines follow with the walked interline data.
+\newcount\ptj@par@outln
+\newbox\ptj@par@outlinebox
+
+% ---- distribution engine -------------------------------------------
+% TIER SCALE (ltj-adjust.lua:79-101, luatexja-adjust.sty:120-129):
+% a glue's tier value is
+%     JFM pair glue ........... spri*10 / shpri*10  (-4..4 -> -40..40)
+%     kanjiskip companion ..... 0 / 0
+%     (x)kanjiskip fallback ... 0 / 0
+%     explicit/word/skip glue  50 / 50
+% HIGHER value fills FIRST (aw_step2 walks at2pr tiers i=1.. where 1
+% is the largest value); the partially filled tier splits
+% proportionally; lower tiers get 0. Stretch and shrink are separate
+% passes; finite shrink beyond capacity is reported as a defect.
+%
+% Emitter-side recording: during measurement the module wraps
+% \ptj@emitglue@do / \ptj@emitkcomp (the rules backend's
+% glue emitters) so EVERY pair/companion glue is recorded, in
+% creation order, into a boundary table:
+%   \ptj@par@BD@<seq>  {nat}{str}{shr}{sord}{shord}{stier}{shtier}{role}
+% role: 1 = JFM pair, 2 = kanjiskip companion, 3 = xkanjiskip-class
+% pair, 4 = explicit/space/skipzone (assigned at line assembly).
+% The xkanjiskip class is identified by the boundary's classes (one
+% side 27); kanjiskip companions by the emitkcomp wrapper; the
+% fallback (fbmode=1) pair is the (x)kanjiskip substitute itself.
+
+% \ptj@par@gdef{<name>}{<body>}: global def by csname name (digits ok)
+\def\ptj@par@gdef#1#2{%
+  \global\expandafter\def\csname #1\endcsname{#2}}
+% \ptj@par@gxdef{<name>}{<body>}: global xdef by csname name
+\def\ptj@par@gxdef#1#2{%
+  \global\expandafter\edef\csname #1\endcsname{#2}}
+
+\newif\ifptj@par@inv@stop
+\newcount\ptj@par@diston \global\ptj@par@diston=1
+\newif\ifptj@par@distskip
+\newcount\ptj@par@distphase \global\ptj@par@distphase=4
+\newcount\ptj@par@dline \global\ptj@par@dline=0
+\newcount\ptj@par@bdseq      % boundary table cursor
+\newcount\ptj@par@gk         % per-line glue index
+\newcount\ptj@par@role
+\newdimen\ptj@par@lnwd       % measured line width
+\newdimen\ptj@par@natsum     % natural sum of the line's nodes
+\newdimen\ptj@par@rem        % remainder to distribute
+
+% install/uninstall the emitter wrappers (measurement only)
+\def\ptj@par@hook@emitters{%
+  \let\ptj@par@saved@emitglue@do\ptj@emitglue@do
+  \let\ptj@par@saved@emitkcomp\ptj@emitkcomp
+  \let\ptj@par@saved@emitglue\ptj@emitglue
+  \def\ptj@emitglue@do{\ptj@par@rec@pair\ptj@par@saved@emitglue@do}%
+  \def\ptj@emitkcomp{\ptj@par@rec@kanji\ptj@par@saved@emitkcomp}%
+  % the FALLBACK pair path (fbmode=1: an undefined pair such as the
+  % kanji-kanji pair@0@0 whose glue is the live kanjiskip
+  % verbatim) never reaches emitglue@do -- wrap the entry point so
+  % the fallback glue is recorded too (probed: without this every
+  % kanji-kanji boundary was missing from BD and classified as
+  % explicit tier 50 instead of the kanjiskip tier 0).
+  \def\ptj@emitglue{%
+    \ifnum\ptj@fbmode=1
+      \ptj@par@rec@fallback
+      \hskip\ptj@fbskip
+    \else
+      \expandafter\ptj@par@saved@emitglue
+    \fi}%
+  % capture each placed glyph's class+zw for the aw_step1_last final
+  % selection (the LAST placed glyph's class is the tail boundary's
+  % class; trailing input spaces turn lastclass into 93 before the
+  % env end-code runs -- probed).
+  \let\ptj@par@saved@placeglyph\ptj@placeglyph
+  \def\ptj@placeglyph##1##2{%
+    \xdef\ptj@par@lastcls{\the\ptj@curclass}%
+    \xdef\ptj@par@lastzw{\the\ptj@zwreg}%
+    \ptj@par@saved@placeglyph{##1}{##2}}%
+}
+\def\ptj@par@unhook@emitters{%
+  \let\ptj@emitglue@do\ptj@par@saved@emitglue@do
+  \let\ptj@emitkcomp\ptj@par@saved@emitkcomp
+  \let\ptj@emitglue\ptj@par@saved@emitglue
+  \let\ptj@placeglyph\ptj@par@saved@placeglyph}
+% record the fallback (x)kanjiskip substitute glue: role 2 (or 3 for
+% the xkanjiskip side), tier 0/0 (the kanjiskip scale)
+\def\ptj@par@rec@fallback{%
+  \global\advance\ptj@par@bdseq1
+  \ptj@par@role=2
+  \ifnum\ptj@lastclass=27 \ptj@par@role=3
+  \else\ifnum\ptj@curclass=27 \ptj@par@role=3
+  \fi\fi
+  \ptj@par@da=\ptj@fbskip
+  \ptj@par@db=\gluestretch\ptj@fbskip
+  \ptj@par@dc=\glueshrink\ptj@fbskip
+  \expandafter\xdef\csname ptj@par@BD@\the\ptj@par@bdseq\endcsname
+    {{\the\ptj@par@da}{\the\ptj@par@db}{\the\ptj@par@dc}%
+     {\the\gluestretchorder\ptj@fbskip}%
+     {\the\glueshrinkorder\ptj@fbskip}%
+     {0}{0}{\the\ptj@par@role}}}
+
+% record a JFM pair glue (role by the boundary's classes)
+\def\ptj@par@rec@pair{%
+  \global\advance\ptj@par@bdseq1
+  \ptj@par@role=1
+  \ifnum\ptj@lastclass=27 \ptj@par@role=3
+  \else\ifnum\ptj@curclass=27 \ptj@par@role=3
+  \fi\fi
+  \ifnum\ptj@fbmode=1
+    % fallback: the pair glue IS the (x)kanjiskip substitute
+    \ifnum\ptj@par@role=3 \else \ptj@par@role=2 \fi
+  \fi
+  \ptj@par@da=\ptj@nat
+  \expandafter\xdef\csname ptj@par@BD@\the\ptj@par@bdseq\endcsname
+    {{\the\ptj@par@da}{\the\ptj@str}{\the\ptj@shr}%
+     {\the\gluestretchorder\ptj@str}%
+     {\the\glueshrinkorder\ptj@shr}%
+     {\the\numexpr\ptj@pairspri*10\relax}%
+     {\the\numexpr\ptj@pairshpri*10\relax}%
+     {\the\ptj@par@role}}}
+% record a kanjiskip companion glue (tier 0/0, role 2)
+\def\ptj@par@rec@kanji{%
+  \global\advance\ptj@par@bdseq1
+  \ptj@par@role=2
+  \expandafter\xdef\csname ptj@par@BD@\the\ptj@par@bdseq\endcsname
+    {{\the\ptj@knat}{\the\ptj@kstr}{\the\ptj@kshr}%
+     {\the\gluestretchorder\ptj@kstr}%
+     {\the\glueshrinkorder\ptj@kshr}%
+     {0}{0}{2}}}
+
+\def\ptj@par@assemble{%
+  \ptj@par@recover@all
+  % per line: E@n and FIN@n
+  \ptj@par@a=0
+  \ptj@par@Esave@loop
+  % (aw_step1_last final selection runs INSIDE the fill, where the
+  % natsum/lnwd of each line are live -- the old no-arg call here
+  % mis-grabbed \ptj@par@distribute@all as #1; probed.)
+  \ptj@par@distribute@all
+  \ptj@par@emit@lines}
+\def\ptj@par@Esave@loop{%
+  \ifnum\ptj@par@a<\ptj@par@nlines
+    \advance\ptj@par@a1
+    \ptj@par@E@save{\the\ptj@par@a}%
+    \expandafter\ptj@par@Esave@loop
+  \fi}
+
+% final-line selection (aw_step1_last): the plan's bullet 5. For the
+% FINAL line the end_adjust candidate is re-chosen by the parfillskip
+% condition: among the last boundary's ascending candidates e_1..e_m,
+% pick the one minimizing the parfill slack
+%   slack(e) = lnwd - natsum - (e - e_native)
+%           = rem + e_native - e
+% lexicographically by (|slack|, |e|, e). All candidates face the same
+% parfill stretch total (fil), so ltj's first key |slack/total| keeps
+% the |slack| order; the (|e|, e) tiebreaks follow. The WINNER lands in
+% \ptj@par@F@win (empty when no candidate list / no change needed).
+% The rebuild applies (e_win - e_native) to the final line's tail kern.
+\def\ptj@par@final@sel#1{%
+  \global\let\ptj@par@F@win\relax
+  % the last glyph's class (captured at measure close) drives the
+  % candidate series; zw from the same capture.
+  \expandafter\ifx\csname ptj@jfm@endadj@\ptj@par@lastcls\endcsname\relax
+    % no end_adjust data for this class: nothing to re-choose
+  \else
+    \ptj@par@finrank{\ptj@par@lastcls}%
+  \fi}
+\newdimen\ptj@par@finrem
+% defaults until the first placed glyph overwrites them (probed: a
+% run where finrank fired before any glyph hook write crashed with
+% an undefined lastzw)
+\def\ptj@par@lastcls{0}
+\def\ptj@par@lastzw{10pt}
+\newdimen\ptj@par@finzw
+\newdimen\ptj@par@fincand
+\newdimen\ptj@par@finbestslack
+\newdimen\ptj@par@dc
+\newdimen\ptj@par@dd
+\newdimen\ptj@par@finslack
+\newif\ifptj@par@finsilent
+\newdimen\ptj@par@finbest
+\newif\ifptj@par@finhave
+% rank the class's two candidate fields (the generated endadj data
+% has EXACTLY two fields per class: {{e1}{e2}} -- verified in the .def;
+% classes 2/5/6/7). Direct unpack, no recursion/sentinel walkers (an
+% earlier custom walker mis-gobbled its tail group and leaked an \fi).
+\def\ptj@par@finrank#1{%
+  \ptj@par@finrem=\dimexpr\ptj@par@lnwd-\ptj@par@natsum\relax
+  \ptj@par@da=\csname ptj@par@E@\the\ptj@par@nlines\endcsname\relax
+  \ptj@par@finrem=\dimexpr\ptj@par@finrem+\ptj@par@da\relax
+  \ptj@par@finhavefalse
+  \ptj@par@finzw=\ptj@par@lastzw\relax
+  \ptj@par@finbest=0pt
+  \ptj@par@finbestslack=0pt
+  \expandafter\ptj@par@finunpack
+    \csname ptj@jfm@endadj@#1\endcsname
+  \ptj@par@fin@finish}
+% #1 = the OUTER group {{f1}{f2}}; strip once so the two field groups
+% become the next two arguments
+\def\ptj@par@finunpack#1{%
+  \expandafter\ptj@par@finunpack@a#1}
+\def\ptj@par@finunpack@a#1#2{%
+  \ptj@par@finfield{#1}%
+  \ptj@par@finfield{#2}}
+% evaluate one candidate field: e = ratio * zw; slack = finrem - e
+\def\ptj@par@finfield#1{%
+  \ptj@par@fincand=#1\ptj@par@finzw\relax
+  \ptj@par@finslack=\dimexpr\ptj@par@finrem-\ptj@par@fincand\relax
+  \ifptj@par@finhave
+    \ptj@par@fin@cmp
+  \else
+    \ptj@par@finhavetrue
+    \ptj@par@finbest=\ptj@par@fincand
+    \ptj@par@finbestslack=\ptj@par@finslack
+  \fi}
+
+% lexicographic (|slack|, |e|, e): smaller |slack| wins; tie: smaller
+% |e|; tie: smaller e. natsum includes the native e (the tail kern),
+% so finrem already carries +e_native; slack(e) = finrem - e.
+\def\ptj@par@fin@cmp{%
+  \ptj@par@da=\ptj@par@finslack
+  \ifdim\ptj@par@da<0pt \ptj@par@da=-\ptj@par@da \fi
+  \ptj@par@db=\ptj@par@finbestslack
+  \ifdim\ptj@par@db<0pt \ptj@par@db=-\ptj@par@db \fi
+  \ifdim\ptj@par@da<\ptj@par@db
+    \ptj@par@finbest=\ptj@par@fincand
+    \ptj@par@finbestslack=\ptj@par@finslack
+  \else
+    \ifdim\ptj@par@da=\ptj@par@db
+      \ptj@par@dc=\ptj@par@fincand
+      \ifdim\ptj@par@dc<0pt \ptj@par@dc=-\ptj@par@dc \fi
+      \ptj@par@dd=\ptj@par@finbest
+      \ifdim\ptj@par@dd<0pt \ptj@par@dd=-\ptj@par@dd \fi
+      \ifdim\ptj@par@dc<\ptj@par@dd
+        \ptj@par@finbest=\ptj@par@fincand
+        \ptj@par@finbestslack=\ptj@par@finslack
+      \else
+        \ifdim\ptj@par@dc=\ptj@par@dd
+          \ifdim\ptj@par@fincand<\ptj@par@finbest
+            \ptj@par@finbest=\ptj@par@fincand
+            \ptj@par@finbestslack=\ptj@par@finslack
+          \fi
+        \fi
+      \fi
+    \fi
+  \fi}
+% after the walk: the winner replaces the native e only when different
+\def\ptj@par@fin@finish{%
+  \ifptj@par@finhave
+    \ptj@par@da=\csname ptj@par@E@\the\ptj@par@nlines\endcsname\relax
+    \expandafter\ifx\csname ptj@par@verifywd\endcsname\relax
+      \ptj@par@finsilenttrue
+    \else
+      \ptj@par@finsilentfalse
+    \fi
+    \ifdim\ptj@par@finbest=\ptj@par@da
+      \ifptj@par@finsilent\else
+        \message{[FINS: native-e=\the\ptj@par@da\space
+          win-e=same\space
+          rem=\the\ptj@par@finrem\space]}%
+      \fi
+    \else
+      \xdef\ptj@par@F@win{\the\ptj@par@finbest}%
+      \ifptj@par@finsilent\else
+        \message{[FINS: native-e=\the\ptj@par@da\space
+          win-e=\the\ptj@par@finbest\space
+          rem=\the\ptj@par@finrem\space
+          slack=\the\ptj@par@finbestslack]}%
+      \fi
+    \fi
+  \fi}
+
+% ---------------------------------------------------------------------------
+% 9a. line emission: native-measured line boxes + walked interline data
+% ---------------------------------------------------------------------------
+% Each top-down line's content is the NATIVE-measured line box (its
+% break, its end_adjust candidate and its glue stretch all chosen by
+% the native breaker from the rules backend's exact node stream). The
+% emission appends them to the outer vlist:
+%   * the AMBIENT parskip is inserted once before the first line
+%     (measurement parskip was 0),
+%   * the first line box is appended as a normal box so the OUTER
+%     prevdepth drives the baselineskip glue (no extra baseline gap),
+%   * between lines the walked interline penalties and glue are
+%     replayed in their walked order,
+%   * prevdepth/prevgraf are updated from the last line.
+\def\ptj@par@emit@lines{%
+  \ifnum\ptj@par@nlines=0
+    \PackageError{pdftexja-adjust}{empty strict paragraph}{%
+      The ptjparagraph environment produced no lines.\MessageBreak
+      \@ehc}%
+  \else
+    % return to the outer VERTICAL mode: the environment was opened
+    % inside the surrounding paragraph (horizontal mode); the line
+    % boxes are appended to the outer VLIST.
+    \par
+    % ambient parskip: ONCE, before the first line (measurement was 0)
+    \ifdim\ptj@par@parskip=0pt\else
+      \vskip\ptj@par@parskip
+    \fi
+    \ptj@par@a=0
+    \ptj@par@emit@loop
+    % outer state: prevdepth from the last line, prevgraf = nlines
+    \prevdepth=\ptj@par@lastdepth
+    \prevgraf=\ptj@par@nlines
+  \fi}
+
+\newdimen\ptj@par@lastdepth
+\def\ptj@par@emit@loop{%
+  \ifnum\ptj@par@a<\ptj@par@nlines
+    \advance\ptj@par@a1
+    \expandafter\ifx\csname ptj@par@NL@\the\ptj@par@a @box\endcsname\relax
+    \else
+      % NOTE the DOUBLE \csname: \ptj@par@NL@<n>@box stores the box
+      % register NAME as text (ptj@par@PB@k); the outer \csname turns
+      % that text back into the register control sequence. ONE
+      % \expandafter per primitive suffices for the double \csname
+      % (the outer \csname expands the inner one while building).
+      \expandafter\setbox\ptj@par@curbox=\expandafter\copy
+        \csname\csname ptj@par@NL@\the\ptj@par@a @box\endcsname\endcsname
+      \ptj@par@lastdepth=\dp\ptj@par@curbox
+      \expandafter\box
+        \csname\csname ptj@par@NL@\the\ptj@par@a @box\endcsname\endcsname
+    \fi
+    % replay the interline penalties + glue walked after this line
+    \expandafter\ifx\csname ptj@par@LX@\the\ptj@par@a @pen\endcsname\relax
+    \else
+      \expandafter\ptj@par@emit@pens\expandafter
+        {\csname ptj@par@LX@\the\ptj@par@a @pen\endcsname}%
+    \fi
+    \expandafter\ifx\csname ptj@par@LX@\the\ptj@par@a @glue\endcsname\relax
+    \else
+      \expandafter\ptj@par@emit@iglue
+        \csname ptj@par@LX@\the\ptj@par@a @glue\endcsname
+    \fi
+    \expandafter\ptj@par@emit@loop
+  \fi}
+
+% penalty list replay: "<p1>,<p2>,..." comma separated (the walk stores
+% it that way). The kernel's \pl@for walker handles the empty case.
+\def\ptj@par@emit@pens#1{%
+  \@for\ptj@par@tmp:=#1\do{%
+    \penalty\ptj@par@tmp\relax}}
+
+% interline glue replay: the store is the FULL walked skip text
+% (\the<skip>: natural, plus/minus and fil orders verbatim).
+\def\ptj@par@emit@iglue#1{%
+  \ptj@par@wskip=#1\relax
+  \vskip\ptj@par@wskip}
+
+
+% ---------------------------------------------------------------------------
+% 10. Tier distribution (per line)
+% ---------------------------------------------------------------------------
+% Storage per line n, reverse-walked node index j (1 = the TAIL node):
+%   \ptj@par@NW@<n>@<j>  node type (1 box, 11 glue, 12 kern, 13 pen)
+%   \ptj@par@NS@<n>@<j>  {size-data} glue: {nat}{str}{shr}{sord}{shord}
+%   \ptj@par@NZ@<n>      node count of line n
+% The glue INDEXING for the fill is FORWARD (k = 1..GN), built by
+% reversing; per glue k:
+%   \ptj@par@GI@<n>@<k>  {nat}{str}{shr}{sord}{shord}{stier}{shtier}{role}
+%   \ptj@par@GD@<n>@<k>  final delta (sp text; stretch>0 / shrink<0)
+%   \ptj@par@GN@<n>      glue count
+\newcount\ptj@par@nj
+\newcount\ptj@par@bdcur    % boundary-table cursor for classification
+\newcount\ptj@par@bdstart  % boundary index where the line's slice begins
+\newskip\ptj@par@gsnat \newdimen\ptj@par@gsstr \newdimen\ptj@par@gsshr
+\newcount\ptj@par@gssord \newcount\ptj@par@gshord
+\newcount\ptj@par@gstier \newcount\ptj@par@gshtier
+\newcount\ptj@par@tval
+\newdimen\ptj@par@tiercap
+\newdimen\ptj@par@need
+
+\def\ptj@par@distribute@all{%
+  \global\ptj@par@dline=0
+  \ptj@par@distribute@loop}
+\def\ptj@par@distribute@loop{%
+  % DEDICATED counter: \ptj@par@a is shared scratch (the rebuild's
+  % penalty branch clobbers it; a clobbered loop counter produced
+  % line=-1 arguments and cascaded illegal-unit errors -- probed).
+  \ifnum\ptj@par@dline<\ptj@par@nlines
+    \global\advance\ptj@par@dline1
+    \edef\ptj@par@lnnum{\the\ptj@par@dline}%
+    \ifnum\ptj@par@distphase>0
+      \expandafter\ptj@par@invline\expandafter{\ptj@par@lnnum}%
+    \fi
+    \ifptj@par@distskip\else
+      \ifnum\ptj@par@distphase>1
+        \expandafter\ptj@par@classify\expandafter{\ptj@par@lnnum}%
+      \fi
+      \ifnum\ptj@par@distphase>2
+        \expandafter\ptj@par@fill\expandafter{\ptj@par@lnnum}%
+      \fi
+      \ifnum\ptj@par@distphase>3
+        \expandafter\ptj@par@rebuild\expandafter{\ptj@par@lnnum}%
+      \fi
+    \fi
+    \expandafter\ptj@par@distribute@loop
+  \fi}
+
+% ---- (a) inventory: reverse-walk the line interior -----------------------
+% The line interior (with boxed glyphs) holds only boxes/glues/kerns/
+% penalties. Glues at the tail zone (rightskip/parfillskip) are kept
+% with role 4 and NEVER redistributed (the plan's skip zone keeps its
+% native role; infinite orders win their own pass).
+\def\ptj@par@invline#1{%
+  \global\ptj@par@distskipfalse
+  \expandafter\let\expandafter\ptj@par@lineref
+    \csname ptj@par@NL@#1@box\endcsname
+  \global\ptj@par@nj=0
+  {\ptj@par@inv@tail{#1}}%
+  % NZ and the per-node macros were written inside the group (global)
+  \expandafter\xdef\csname ptj@par@NZ@#1\endcsname{\the\ptj@par@nj}}
+\def\ptj@par@inv@tail#1{%
+  \setbox\ptj@par@curbox=\hbox{%
+    \expandafter\expandafter\expandafter\unhcopy
+      \csname\ptj@par@lineref\endcsname
+    \ptj@par@inv@loop{#1}}}
+\def\ptj@par@inv@loop#1{%
+  \def\ptj@par@invln{#1}%
+  \ptj@par@inv@step}
+\def\ptj@par@inv@step{%
+  \ifnum\lastnodetype=-1
+    \let\ptj@par@inext\relax
+  \else
+    \ifnum\lastnodetype=11
+      \let\ptj@par@inext\ptj@par@inv@glue
+    \else
+    \ifnum\lastnodetype=12
+      \let\ptj@par@inext\ptj@par@inv@kern
+    \else
+    \ifnum\lastnodetype=13
+      \let\ptj@par@inext\ptj@par@inv@pen
+    \else
+    \ifnum\lastnodetype=1
+      \let\ptj@par@inext\ptj@par@inv@box
+    \else
+      \ifnum\lastnodetype=0
+        % a bare char (unboxed latin word content): the line is not
+        % fully walkable -- SKIP the distribution for this line (the
+        % native line box is kept; latin word boxing is the itemizer
+        % follow-up).
+        \global\ptj@par@distskiptrue
+        \let\ptj@par@inext\relax
+      \else
+        \ifnum\lastnodetype=8
+          % whatsit (hyperref anchors, savepos): not re-emittable from
+          % the walk -- skip the line (native box kept).
+          \global\ptj@par@distskiptrue
+          \let\ptj@par@inext\relax
+        \else
+          \ifnum\lastnodetype=9
+            % mark node: same treatment.
+            \global\ptj@par@distskiptrue
+            \let\ptj@par@inext\relax
+          \else
+            \ifnum\lastnodetype=10
+              % ins node (label writes etc.): same treatment.
+              \global\ptj@par@distskiptrue
+              \let\ptj@par@inext\relax
+            \else
+              \ifnum\lastnodetype=4
+                % discretionary (explicit hyphenation): same treatment.
+                \global\ptj@par@distskiptrue
+                \let\ptj@par@inext\relax
+              \else
+        % unknown node: report and stop (the itemizer guarantees this
+        % cannot happen with boxed glyphs)
+        \PackageError{pdftexja-adjust}
+          {unknown node in line inventory}{%
+          Node type \the\lastnodetype. With boxed glyphs the line%
+          \MessageBreak interior holds boxes/glues/kerns/penalties only.%
+          \MessageBreak \@ehc}%
+        \let\ptj@par@inext\relax
+              \fi
+            \fi
+          \fi
+        \fi
+      \fi
+    \fi\fi\fi\fi
+  \fi
+  \ptj@par@inext}
+\def\ptj@par@inv@glue{%
+  \global\advance\ptj@par@nj1
+  \ptj@par@gsnat=\lastskip
+  \ptj@par@gsstr=\gluestretch\ptj@par@gsnat
+  \ptj@par@gsshr=\glueshrink\ptj@par@gsnat
+  \ptj@par@gssord=\gluestretchorder\ptj@par@gsnat
+  \ptj@par@gshord=\glueshrinkorder\ptj@par@gsnat
+  \expandafter\xdef\csname ptj@par@NW@\ptj@par@invln @\the\ptj@par@nj\endcsname
+    {11}%
+  % field 1 = the NATURAL ALONE via a dimen capture (\the<skip> carries
+  % the full "nat plus.. minus.." text; downstream dimen assignments
+  % mis-scan and the leftover text ends up TYPESET in the rebuilt line
+  % -- probed: literal "plus 2.5pt" runs appeared in the output box).
+  \ptj@par@da=\ptj@par@gsnat
+  % field 6 = the FULL skip text (\the\lastskip: "nat plus X fil..."),
+  % captured while the node is still in the list -- the skip zone
+  % re-emits this VERBATIM (assembling "nat plus ... fil" from split
+  % fields loses the inter-word spaces and the assignment then
+  % mis-parses, leaking literal 'fil' glyphs -- probed).
+  \expandafter\xdef\csname ptj@par@NS@\ptj@par@invln @\the\ptj@par@nj\endcsname
+    {{\the\ptj@par@da}{\the\ptj@par@gsstr}{\the\ptj@par@gsshr}%
+     {\the\ptj@par@gssord}{\the\ptj@par@gshord}}%
+  \expandafter\xdef\csname ptj@par@NSf@\ptj@par@invln @\the\ptj@par@nj\endcsname
+    {{\the\lastskip}}%
+  \unskip
+  \ptj@par@inv@step}
+\def\ptj@par@inv@kern{%
+  \global\advance\ptj@par@nj1
+  \expandafter\xdef\csname ptj@par@NW@\ptj@par@invln @\the\ptj@par@nj\endcsname
+    {12}%
+  \expandafter\xdef\csname ptj@par@NS@\ptj@par@invln @\the\ptj@par@nj\endcsname
+    {{\the\lastkern}}%
+  \unkern
+  \ptj@par@inv@step}
+\def\ptj@par@inv@pen{%
+  \global\advance\ptj@par@nj1
+  \expandafter\xdef\csname ptj@par@NW@\ptj@par@invln @\the\ptj@par@nj\endcsname
+    {13}%
+  \expandafter\xdef\csname ptj@par@NS@\ptj@par@invln @\the\ptj@par@nj\endcsname
+    {{\the\lastpenalty}}%
+  \unpenalty
+  \ptj@par@inv@step}
+\def\ptj@par@inv@box{%
+  \global\advance\ptj@par@nj1
+  \setbox\ptj@par@wlinebox=\lastbox
+  \expandafter\xdef\csname ptj@par@NW@\ptj@par@invln @\the\ptj@par@nj\endcsname
+    {1}%
+  \expandafter\xdef\csname ptj@par@NS@\ptj@par@invln @\the\ptj@par@nj\endcsname
+    {{\the\wd\ptj@par@wlinebox}}%
+  \ptj@par@inv@step}
+\def\ptj@par@invln{0}
+
+% ---- (b) classify: forward glue list with tiers ---------------------------
+% The reverse-walk recorded nodes tail-first. The boundary table
+% (BD@seq) is in creation (forward) order. Within a line, the
+% pair/companion glues appear in forward order; the walk sees them in
+% reverse. Classification walks the reverse node list, consuming the
+% boundary table from the END downward for glues that match a BD spec
+% exactly (nat+str+shr). Non-matching glues are role 4 (tier 50/50).
+% The skip-zone tail glues (rightskip/parfillskip zone: the trailing
+% run of glues in the reverse walk before any box) are marked role 5
+% (excluded from the fill; they keep their native glue behavior).
+\def\ptj@par@classify#1{%
+  \def\ptj@par@clsarg{#1}%
+  \def\ptj@par@clsln{#1}%
+  \expandafter\ifx\csname ptj@par@NZ@#1\endcsname\relax
+    \ptj@par@gxdef{ptj@par@GN@#1}{0}%
+  \else
+    \global\ptj@par@gk=0
+    \global\ptj@par@bdcur=\ptj@par@bdseq
+    \ptj@par@nj=\csname ptj@par@NZ@#1\endcsname\relax
+    \ptj@par@c=\ptj@par@nj
+    % iterate reverse node index j = nj down to 1 (plain loop)
+    \ptj@par@classify@j{#1}%
+    \ptj@par@gxdef{ptj@par@GN@#1}{\the\ptj@par@gk}%
+  \fi}
+\def\ptj@par@classify@j#1{%
+  \ifnum\ptj@par@c<1
+  \else
+    \expandafter\ifnum\csname ptj@par@NW@#1@\the\ptj@par@c\endcsname=11
+      \global\advance\ptj@par@gk1
+      \ptj@par@cls@split{ptj@par@NS@#1@\the\ptj@par@c}%
+      \ptj@par@cls@match{#1}%
+    \fi
+    \advance\ptj@par@c-1
+    \expandafter\ptj@par@classify@j\expandafter{\ptj@par@clsarg}%
+  \fi}
+% store the current glue (forward index gk) with tier/role
+\def\ptj@par@cls@store#1#2#3#4{%
+  % nat via dimen capture (the \the<skip> text trap again).
+  \ptj@par@da=\ptj@par@gsnat
+  \expandafter\xdef\csname ptj@par@GI@#1@\the\ptj@par@gk\endcsname
+    {{\the\ptj@par@da}{\the\ptj@par@gsstr}{\the\ptj@par@gsshr}%
+     {\the\ptj@par@gssord}{\the\ptj@par@gshord}{#2}{#3}{#4}}}
+% Match the current glue spec against the BD table: a POSITION-
+% INDEPENDENT first-match scan from the table top. The old cursor-
+% consume form decremented from bdseq while the classify walk runs
+% head-first (c = NZ..1) -- a direction mismatch that mis-aligned pair
+% glues onto wrong entries (a 」pair classified explicit tier 50/50
+% on one line and its JFM tier -10/--20 on another -- probed).
+% Position independence is CORRECT here because the BD table is
+% generated from ONE JFM: identical (nat,str,shr) specs always carry
+% identical tiers/roles, so which entry matches does not matter.
+% Non-BD glues (word spaces, explicit \hspace, rightskip) match nothing
+% and take the explicit role 4 / tier 50.
+\newcount\ptj@par@bdscan
+\newif\ifptj@par@clsfound
+\def\ptj@par@cls@match#1{%
+  % ROLE 5 (skip zone: kept as native glue, never redistributed):
+  % infinite-order glues (the parfillskip fil). Without this the
+  % rebuilt line had no stretch left -- underfull badness 10000.
+  \ifnum\ptj@par@gssord>0
+    \ptj@par@cls@store{#1}{50}{50}{5}%
+  \else
+    \ifnum\ptj@par@gshord>0
+      \ptj@par@cls@store{#1}{50}{50}{5}%
+    \else
+      \global\ptj@par@bdscan=0
+      \ptj@par@clsfoundfalse
+      \ptj@par@cls@scana
+      \ifptj@par@clsfound\else
+        \ptj@par@cls@store{#1}{50}{50}{4}%
+      \fi
+    \fi
+  \fi}
+% argument-free scan body (the line number rides in \ptj@par@clsln;
+% argument-passing recursions inside \if..\else..\fi chains mis-grab)
+\def\ptj@par@cls@scana{%
+  \ifnum\ptj@par@bdscan<\ptj@par@bdseq
+    \global\advance\ptj@par@bdscan1
+    \ptj@par@bd@split{ptj@par@BD@\the\ptj@par@bdscan}%
+    \ifdim\ptj@par@bdnat=\ptj@par@gsnat
+      \ifdim\ptj@par@bdstr=\ptj@par@gsstr
+        \ifdim\ptj@par@bdshr=\ptj@par@gsshr
+          \ptj@par@cls@store{\ptj@par@clsln}%
+            {\the\ptj@par@bdstier}{\the\ptj@par@bdshtier}%
+            {\the\ptj@par@bdrole}%
+          \ptj@par@clsfoundtrue
+        \fi
+      \fi
+    \fi
+    \ifptj@par@clsfound
+      \let\ptj@par@clssnext\relax
+    \else
+      \let\ptj@par@clssnext\ptj@par@cls@scana
+    \fi
+  \else
+    \let\ptj@par@clssnext\relax
+  \fi
+  \ptj@par@clssnext}
+% \ptj@par@cls@split{name}: expand \csname name\endcsname ONCE (the
+% NS macros expand to the field groups) and split the fields.
+\def\ptj@par@cls@split#1{%
+  \expandafter\ptj@par@cls@split@a\csname #1\endcsname}
+% #1 here is the NS MACRO TOKEN (one level); expand it once more so
+% the five field groups are the actual arguments.
+\def\ptj@par@cls@split@a#1{%
+  \expandafter\ptj@par@cls@split@b#1}
+\def\ptj@par@cls@split@b#1#2#3#4#5{%
+  \ptj@par@gsnat=#1\relax
+  \ptj@par@gsstr=#2\relax
+  \ptj@par@gsshr=#3\relax
+  \ptj@par@gssord=#4\relax
+  \ptj@par@gshord=#5\relax}
+\def\ptj@par@bd@split#1{%
+  \expandafter\ptj@par@bd@split@a\csname #1\endcsname}
+\def\ptj@par@bd@split@a#1{%
+  \expandafter\ptj@par@bd@split@b#1}
+\def\ptj@par@bd@split@b#1#2#3#4#5#6#7#8{%
+  \ptj@par@bdnat=#1\relax
+  \ptj@par@bdstr=#2\relax
+  \ptj@par@bdshr=#3\relax
+  \ptj@par@gssord=#4\relax
+  \ptj@par@gshord=#5\relax
+  \ptj@par@bdstier=#6\relax
+  \ptj@par@bdshtier=#7\relax
+  \ptj@par@bdrole=#8\relax}
+\newdimen\ptj@par@bdnat \newdimen\ptj@par@bdstr \newdimen\ptj@par@bdshr
+\newcount\ptj@par@bdstier \newcount\ptj@par@bdshtier \newcount\ptj@par@bdrole
+
+% ---- (c) fill: tier-scaled distribution ----------------------------------
+% R = line width - natural sum. The natural sum is recomputed from the
+% inventory (boxes + kerns + glue naturals + the line's tail-kept
+% rightskip/parfillskip zone). Stretch pass (R>0) and shrink pass
+% (R<0) run separately. Tiers descending; infinite-order glues are
+% excluded (they win their own pass natively -- the line already used
+% them). Finite shrink beyond capacity: typeset defect report.
+\def\ptj@par@fill#1{%
+  \ptj@par@lnwd=\csname ptj@par@NL@#1@wd\endcsname\relax
+  % ltj aw_step2 semantics: if the line contains an INFINITE-order
+  % glue (the parfillskip fil), it has already absorbed the line's
+  % stretch natively -- the finite-tier distribution is SKIPPED
+  % (distributing the parfill's share into finite pair glues would
+  % over-stretch them; probed: the last line's 130pt remainder tried
+  % to fill tier-50 word glues).
+  \ptj@par@filpresent=0
+  \ptj@par@gk=0
+  \ptj@par@fill@filscan{#1}%
+  \ptj@par@natsum=0pt
+  \ptj@par@nj=\csname ptj@par@NZ@#1\endcsname\relax
+  \ptj@par@c=\ptj@par@nj
+  \ptj@par@fill@natsum{#1}%
+  \ifnum\ptj@par@filpresent=1
+    % ltj aw_step2 semantics: a line with an INFINITE-order glue (the
+    % parfillskip fil) has had its stretch absorbed by the fil
+    % natively -- the finite-tier distribution is SKIPPED
+    % (distributing the parfill's share into finite pair glues would
+    % over-stretch them; probed: the last line's 130pt remainder tried
+    % to fill tier-50 word glues).
+    \ptj@par@fill@filskip{#1}%
+  \else
+    \ptj@par@rem=\dimexpr\ptj@par@lnwd-\ptj@par@natsum\relax
+    % zero all deltas first
+    \ptj@par@gk=0
+    \ptj@par@fill@zero{#1}%
+    \ifdim\ptj@par@rem>0pt
+      \ptj@par@fill@pass{#1}{1}%
+    \else
+      \ifdim\ptj@par@rem<0pt
+        \ptj@par@fill@pass{#1}{2}%
+      \fi
+    \fi
+  \fi
+  % aw_step1_last: the final line's end_adjust candidate is RE-CHOSEN
+  % by the parfillskip condition (lexicographic (|slack|, |e|, e);
+  % parfill stretch is fil so the |slack/total| key reduces to |slack|
+  % ordering -- all candidates face the same stretch total).
+  \expandafter\ifnum\csname ptj@par@FIN@#1\endcsname=1
+    \ptj@par@final@sel{#1}%
+  \fi}
+\def\ptj@par@fill@filskip#1{%
+  % zero all deltas (the rebuild reads them; the parfill case keeps
+  % every glue at its native size)
+  \ptj@par@gk=0
+  \ptj@par@b=\csname ptj@par@GN@#1\endcsname\relax
+  \loop
+    \ifnum\ptj@par@gk<\ptj@par@b
+    \advance\ptj@par@gk1
+    \expandafter\xdef\csname ptj@par@GD@#1@\the\ptj@par@gk\endcsname{0pt}%
+  \repeat}
+\newcount\ptj@par@filpresent
+% scan: any role-5 glue with an infinite order?
+\def\ptj@par@fill@filscan#1{%
+  \ptj@par@b=\csname ptj@par@GN@#1\endcsname\relax
+  \loop
+    \ifnum\ptj@par@gk<\ptj@par@b
+    \advance\ptj@par@gk1
+    \ptj@par@ft@split{ptj@par@GI@#1@\the\ptj@par@gk}%
+    \ifnum\ptj@par@ftrole=5
+      \ifnum\ptj@par@ftsord>0
+        \ptj@par@filpresent=1
+      \else
+        \ifnum\ptj@par@ftshord>0
+          \ptj@par@filpresent=1
+        \fi
+      \fi
+    \fi
+  \repeat}
+\def\ptj@par@fill@natsum#1{%
+  \ifnum\ptj@par@c<1
+  \else
+    \expandafter\ifnum\csname ptj@par@NW@#1@\the\ptj@par@c\endcsname=1
+      % box: the NS entry is {{wd}}; strip the group and add wd*1pt?
+      % NO -- wd was stored WITH its unit (\the\wd gives pt text).
+      \expandafter\ptj@par@nat@kern{ptj@par@NS@#1@\the\ptj@par@c}%
+    \else
+      \expandafter\ifnum\csname ptj@par@NW@#1@\the\ptj@par@c\endcsname=11
+        \ptj@par@cls@split{ptj@par@NS@#1@\the\ptj@par@c}%
+        \advance\ptj@par@natsum\ptj@par@gsnat
+      \else
+        \expandafter\ifnum\csname ptj@par@NW@#1@\the\ptj@par@c\endcsname=12
+          \ptj@par@nat@kern{ptj@par@NS@#1@\the\ptj@par@c}%
+        \fi
+      \fi
+    \fi
+    \advance\ptj@par@c-1
+    \expandafter\ptj@par@fill@natsum\expandafter{\ptj@par@lnnum}%
+  \fi}
+\def\ptj@par@nat@kern#1{%
+  \expandafter\ptj@par@nat@kern@a\csname #1\endcsname}
+% the NS kern/box entry is ONE brace group {{size}}; strip the group
+% and add the size (both kerns and box wds carry their pt unit).
+\def\ptj@par@nat@kern@a#1{%
+  \expandafter\ptj@par@nat@kern@b#1\relax}
+\def\ptj@par@nat@kern@b#1{%
+  \advance\ptj@par@natsum#1\relax}
+\def\ptj@par@fill@zero#1{%
+  \ifnum\ptj@par@gk<\csname ptj@par@GN@#1\endcsname
+    \advance\ptj@par@gk1
+    \expandafter\xdef\csname ptj@par@GD@#1@\the\ptj@par@gk\endcsname{0pt}%
+    \expandafter\ptj@par@fill@zero\expandafter{\ptj@par@lnnum}%
+  \fi}
+% pass: sign 1 = stretch, 2 = shrink. Tiers tried in descending order.
+% The distinct tier values present are scanned from the recorded list;
+% for each tier: capacity = sum of that tier's stretch (or shrink)
+% capacity; fill = min(|rem|, capacity); distribute proportionally by
+% capacity with source-order rounding; rem -= fill.
+\def\ptj@par@fill@pass#1#2{%
+  % iterate tier values from high to low: the explicit tier 50, then
+  % the JFM priorities (LuaTeX-ja range -4..4, times 10)
+  \ptj@par@fill@tier{#1}{#2}{50}%
+  \ptj@par@fill@tier{#1}{#2}{40}%
+  \ptj@par@fill@tier{#1}{#2}{30}%
+  \ptj@par@fill@tier{#1}{#2}{20}%
+  \ptj@par@fill@tier{#1}{#2}{10}%
+  \ptj@par@fill@tier{#1}{#2}{0}%
+  \ptj@par@fill@tier{#1}{#2}{-10}%
+  \ptj@par@fill@tier{#1}{#2}{-20}%
+  \ptj@par@fill@tier{#1}{#2}{-30}%
+  \ptj@par@fill@tier{#1}{#2}{-40}%
+  \ifnum#2=2
+    % shrink pass: verify no finite overflow remains
+    \ifdim\ptj@par@rem<0pt
+      \PackageWarning{pdftexja-adjust}{%
+        Over-shrink \the\ptj@par@rem\space beyond finite shrink capacity%
+        \MessageBreak (typeset defect, reported like TeX's own)}%
+    \fi
+  \fi}
+% one tier: collect capacity; if rem still nonzero and capacity>0,
+% fill proportionally (source order = forward glue index order).
+\def\ptj@par@fill@tier#1#2#3{%
+  \def\ptj@par@signarg{#2}%
+  \def\ptj@par@tierarg{#3}%
+  \ifdim\ptj@par@rem=0pt
+  \else
+    % capacity of this tier
+    \ptj@par@tiercap=0pt
+    \ptj@par@gk=0
+    \ptj@par@capsign=#2\relax
+    \ptj@par@captier=#3\relax
+    \ptj@par@ft@cap
+    \ifdim\ptj@par@tiercap>0pt
+      \ptj@par@need=\ptj@par@rem
+      \ifdim\ptj@par@need<0pt \ptj@par@need=-\ptj@par@need \fi
+      \ifdim\ptj@par@need>\ptj@par@tiercap
+        \ptj@par@need=\ptj@par@tiercap
+      \fi
+      % distribute need over the tier members proportionally
+      \ptj@par@gk=0
+      \ptj@par@ft@dist
+      \ifdim\ptj@par@rem>0pt
+        \advance\ptj@par@rem-\ptj@par@need
+      \else
+        \advance\ptj@par@rem\ptj@par@need
+      \fi
+    \fi
+  \fi}
+% capacity scan: argument-free (sign/tier ride in dedicated counts;
+% the {\ptj@par@lnnum}{signarg}{tierarg} argument chains inside
+% \if..\fi nesting mis-grab -- probed: the illegal-unit cascade).
+\newcount\ptj@par@capsign \newcount\ptj@par@captier
+\def\ptj@par@ft@cap{%
+  \ifnum\ptj@par@gk<\csname ptj@par@GN@\ptj@par@lnnum\endcsname
+    \advance\ptj@par@gk1
+    \ptj@par@ft@split{ptj@par@GI@\ptj@par@lnnum @\the\ptj@par@gk}%
+    \ifnum\ptj@par@ftrole>4 \else
+      \ifnum\ptj@par@ftrole=5 \else
+        \ifnum\ptj@par@capsign=1
+          \ifnum\ptj@par@ftsord=0
+            \ifnum\ptj@par@ftstier=\ptj@par@captier
+              \ifdim\ptj@par@ftstr>0pt
+                \advance\ptj@par@tiercap\ptj@par@ftstr
+              \fi
+            \fi
+          \fi
+        \else
+          \ifnum\ptj@par@ftshord=0
+            \ifnum\ptj@par@ftshtier=\ptj@par@captier
+              \ifdim\ptj@par@ftshr>0pt
+                \advance\ptj@par@tiercap\ptj@par@ftshr
+              \fi
+            \fi
+          \fi
+        \fi
+      \fi
+    \fi
+    \expandafter\ptj@par@ft@cap
+  \fi}
+% proportional distribution within the tier with source-order
+% rounding: member share = need * cap_k / tiercap, accumulated in
+% integer sp with the running-remainder technique.
+% proportional distribution within the tier: argument-free (same
+% discipline as the capacity scan). The per-member share accumulates
+% into GD in integer sp; source order = increasing gk.
+\def\ptj@par@ft@dist{%
+  \ptj@par@dacc=0pt
+  \ptj@par@drem=\ptj@par@need
+  \ptj@par@gk=0
+  \ptj@par@ft@dista}
+\def\ptj@par@ft@dista{%
+  \ifnum\ptj@par@gk<\csname ptj@par@GN@\ptj@par@lnnum\endcsname
+    \advance\ptj@par@gk1
+    \ptj@par@ft@split{ptj@par@GI@\ptj@par@lnnum @\the\ptj@par@gk}%
+    \ifnum\ptj@par@ftrole>4 \else
+      \ifnum\ptj@par@ftrole=5 \else
+        \ifnum\ptj@par@capsign=1
+          \ifnum\ptj@par@ftsord=0
+            \ifnum\ptj@par@ftstier=\ptj@par@captier
+              \ifdim\ptj@par@ftstr>0pt
+                \ptj@par@ft@share{1}%
+              \fi
+            \fi
+          \fi
+        \else
+          \ifnum\ptj@par@ftshord=0
+            \ifnum\ptj@par@ftshtier=\ptj@par@captier
+              \ifdim\ptj@par@ftshr>0pt
+                \ptj@par@ft@share{2}%
+              \fi
+            \fi
+          \fi
+        \fi
+      \fi
+    \fi
+    \expandafter\ptj@par@ft@dista
+  \fi}
+\def\ptj@par@ft@share#1{%
+  % #1 = the SIGN (1 stretch / 2 shrink); the LINE index is
+  % \ptj@par@lnnum (the committed form passed the line as #1 from the
+  % dista caller -- the arg-free dista now passes the sign; the GD
+  % table is keyed LINE@glue, so a sign-as-line write corrupted the
+  % delta table; probed: staged-tate GD@1@52 missing-number cascade).
+  % sp-integer proportional share (配分はsp整数). A
+  % \dimexpr<dimen>*<dimen> product is invalid TeX, so the share is
+  % computed as integer sp arithmetic:
+  %   share_sp = need_sp * cap_sp / tiercap_sp
+  % (\count<dimen> assigns the raw scaled point integer).
+  \ptj@par@shn=\ptj@par@need
+  \ptj@par@shc=\ptj@par@ftstr
+  \ifnum#1=1
+    \ptj@par@sht=\ptj@par@tiercap
+    \ptj@par@shq=\numexpr\ptj@par@shn*\ptj@par@shc/\ptj@par@sht\relax
+    \ptj@par@db=\the\dimexpr\ptj@par@shq sp\relax
+    \advance\ptj@par@dacc\ptj@par@db
+    \expandafter\xdef
+      \csname ptj@par@GD@\ptj@par@lnnum @\the\ptj@par@gk\endcsname
+      {\the\dimexpr\csname ptj@par@GD@\ptj@par@lnnum @\the\ptj@par@gk\endcsname
+       +0pt+\ptj@par@db\relax}%
+  \else
+    \ptj@par@shc=\ptj@par@ftshr
+    \ptj@par@sht=\ptj@par@tiercap
+    \ptj@par@shq=\numexpr\ptj@par@shn*\ptj@par@shc/\ptj@par@sht\relax
+    \ptj@par@db=\the\dimexpr\ptj@par@shq sp\relax
+    \advance\ptj@par@dacc\ptj@par@db
+    \expandafter\xdef
+      \csname ptj@par@GD@\ptj@par@lnnum @\the\ptj@par@gk\endcsname
+      {\the\dimexpr\csname ptj@par@GD@\ptj@par@lnnum @\the\ptj@par@gk\endcsname
+       +0pt-\ptj@par@db\relax}%
+  \fi}
+\newcount\ptj@par@shn \newcount\ptj@par@shc \newcount\ptj@par@sht
+\newcount\ptj@par@shq
+\newdimen\ptj@par@dacc \newdimen\ptj@par@drem
+% NOT REACHED for the bump (kept simple: the proportional division in
+% TeX dimensions is exact to sp for these magnitudes; the residual
+% check below reports >1sp mismatches).
+\def\ptj@par@ft@lastbump#1#2#3{\relax}
+\def\ptj@par@ft@split#1{%
+  \expandafter\ptj@par@ft@split@a\csname #1\endcsname}
+\def\ptj@par@ft@split@a#1{%
+  \expandafter\ptj@par@ft@split@b#1}
+\def\ptj@par@ft@split@b#1#2#3#4#5#6#7#8{%
+  \ptj@par@ftnat=#1\relax
+  \ptj@par@ftstr=#2\relax
+  \ptj@par@ftshr=#3\relax
+  \ptj@par@ftsord=#4\relax
+  \ptj@par@ftshord=#5\relax
+  \ptj@par@ftstier=#6\relax
+  \ptj@par@ftshtier=#7\relax
+  \ptj@par@ftrole=#8\relax}
+\newdimen\ptj@par@ftnat \newdimen\ptj@par@ftstr \newdimen\ptj@par@ftshr
+\newcount\ptj@par@ftsord \newcount\ptj@par@ftshord
+\newcount\ptj@par@ftstier \newcount\ptj@par@ftshtier
+\newcount\ptj@par@ftrole
+
+% ---- (d) rebuild: re-emit the line with final glue sizes -----------------
+% The line is rebuilt INSIDE the line's own box register: unhbox the
+% measurement copy into a fresh hbox under construction, walking the
+% reverse inventory and RE-EMITTING nodes forward is impossible from
+% a tail walk -- so the rebuild uses the SECOND reverse pass trick:
+% pop each node from the tail and PREPEND nothing (order preserved by
+% re-emitting into a list built by \unhbox-append in the SAME order is
+% not available). Instead the rebuild re-walks the interior and
+% replaces each glue ON THE SPOT: glues are popped (\unskip) and
+% immediately re-emitted as a kern of (nat + delta) at the same
+% position -- because the pop-and-emit happens at the TAIL, the node
+% ends up BEFORE the remaining nodes... which REVERSES the order.
+% Correct approach: the line content is re-emitted into a work box by
+% popping from the tail and PREPENDING via the box-list swap idiom is
+% complex; instead RE-BUILD by walking the reverse inventory and
+% emitting into a box in REVERSE order, then flipping that box via a
+% second unhbox... a flip needs the same problem.
+% FINAL APPROACH: rebuild FORWARD from the recorded inventory + the
+% item boxes still stored in the measurement copy: pop each node tail-
+% to-head, saving boxes into pool registers and re-emitting GLUES as
+% kerns; nodes end up reversed; then rotate: the reversal is undone by
+% building the final line via \unhbox of the reversed box appended to
+% an empty box -- no. THE PRACTICAL SOLUTION: emit forward into a new
+% hbox by RECURSIVE DESCENT: pop the tail node into a scratch box,
+% recurse (emitting the earlier nodes first), then emit the scratch
+% box -- a stack via recursion restores the order exactly.
+\def\ptj@par@rebuild#1{%
+  % suppress badness reporting for the internal boxes (the pop pass
+  % leaves an empty work box; ltj's repack uses the same suppression
+  % -- tex.hbadness=10000 during repack)
+  \begingroup
+    \hbadness=10000
+    \global\ptj@par@rbsl=0
+  \expandafter\let\expandafter\ptj@par@lineref
+    \csname ptj@par@NL@#1@box\endcsname
+  % PASS 1: pop the line's tail nodes into dedicated rebuild slots
+  % (RB@<k>, load-time allocated below) in REVERSE order (k=1 = the
+  % tail). The slot index tracks EVERY node so it matches the NW
+  % inventory indices; only boxes occupy their slot, other node kinds
+  % are popped and discarded (PASS 2 re-emits them from NW/NS data).
+  \setbox\ptj@par@curbox=\hbox{%
+    \expandafter\unhcopy\csname\ptj@par@lineref\endcsname
+    \ptj@par@rb@pop}%
+  % PASS 2: emit head-first (c = rbsl down to 1). The line packs TO
+  % THE MEASURED WIDTH (the breaker packed the original to hsize; a
+  % natural-pack rebuild reports the content natural and the role-5
+  % parfill zone contributes 0 natural -- probed 264pt vs 440pt).
+  \ptj@par@lnwd=\csname ptj@par@NL@#1@wd\endcsname\relax
+  \setbox\ptj@par@outlinebox=\hbox to\ptj@par@lnwd{%
+    \global\ptj@par@rgk=0
+    \ptj@par@c=\ptj@par@rbsl
+    \ptj@par@rb@emit{#1}}%
+  % replace the line's pool box with the rebuilt one
+  \expandafter\global\setbox
+    \csname\csname ptj@par@NL@#1@box\endcsname\endcsname
+    =\box\ptj@par@outlinebox
+  % verification hook (define \ptj@par@verifywd to enable):
+  % rebuilt width vs measured width must agree within 1sp.
+  \expandafter\ifx\csname ptj@par@verifywd\endcsname\relax\else
+    \ptj@par@da=\csname ptj@par@NL@#1@wd\endcsname\relax
+    \expandafter\setbox\ptj@par@wlinebox=\expandafter\copy
+      \csname\csname ptj@par@NL@#1@box\endcsname\endcsname
+    \ptj@par@db=\wd\ptj@par@wlinebox
+    \advance\ptj@par@db-\ptj@par@da
+    \ifdim\ptj@par@db<0pt \ptj@par@db=-\ptj@par@db \fi
+    \ifdim\ptj@par@db<1sp
+      \message{[RBWD: line=#1 measured=\the\ptj@par@da\space
+        rebuilt=\the\wd\ptj@par@wlinebox\space delta=\the\ptj@par@db\space
+        VERDICT=OK]}%
+    \else
+      \message{[RBWD: line=#1 measured=\the\ptj@par@da\space
+        rebuilt=\the\wd\ptj@par@wlinebox\space delta=\the\ptj@par@db\space
+        VERDICT=DIFF]}%
+    \fi
+  \fi
+  \endgroup}
+\newcount\ptj@par@rgk \newcount\ptj@par@rn
+\newcount\ptj@par@rbsl
+\newcount\ptj@par@rbslmax \ptj@par@rbslmax=1024
+% dedicated rebuild slots (load-time: \newbox inside the walk's group
+% would vanish at group close -- probed)
+{\count0=0
+ \loop
+   \advance\count0 1
+   \expandafter\expandafter\expandafter\newbox
+     \csname ptj@par@RB@\the\count0\endcsname
+ \ifnum\count0<\ptj@par@rbslmax
+ \repeat}
+% PASS 1 (argument-free dispatch walk)
+\def\ptj@par@rb@pop{%
+  \ifnum\lastnodetype=-1
+    \let\ptj@par@rbnext\relax
+  \else
+    \global\advance\ptj@par@rbsl1
+    \ifnum\lastnodetype=1
+      % GLOBAL: PASS 1 runs inside the \hbox group; a local \setbox
+      % dies at group close and PASS 2 then emits EMPTY slots -- the
+      % rebuilt lines kept their \hbox-to width (the RBWD check only
+      % verifies width!) while ALL glyphs vanished from the page
+      % (probed: 33 chars at distphase=3 vs 2 at distphase=4).
+      \expandafter\global\setbox
+        \csname ptj@par@RB@\the\ptj@par@rbsl\endcsname=\lastbox
+    \else
+      \ifnum\lastnodetype=11
+        \unskip
+      \else
+        \ifnum\lastnodetype=12
+          \unkern
+        \else
+          \ifnum\lastnodetype=13
+            \unpenalty
+          \else
+            \global\advance\ptj@par@rbsl-1
+            \let\ptj@par@rbnext\relax
+          \fi
+        \fi
+      \fi
+    \fi
+    \ifx\ptj@par@rbnext\relax\else
+      \let\ptj@par@rbnext\ptj@par@rb@pop
+    \fi
+  \fi
+  \ptj@par@rbnext}
+% PASS 2 emit: head-first; the glue's forward index = the emit
+% counter rgk (the classify pass counted glues in the same order).
+\def\ptj@par@rb@emit#1{%
+  \ifnum\ptj@par@c<1
+    \let\ptj@par@rbnext\relax
+  \else
+    \expandafter\ifnum\csname ptj@par@NW@#1@\the\ptj@par@c\endcsname=1
+      \expandafter\box\csname ptj@par@RB@\the\ptj@par@c\endcsname
+    \else
+      \expandafter\ifnum\csname ptj@par@NW@#1@\the\ptj@par@c\endcsname=11
+        \global\advance\ptj@par@rgk1
+        \ptj@par@ft@split{ptj@par@GI@#1@\the\ptj@par@rgk}%
+        \ptj@par@rb@delta{#1}%
+      \else
+        \expandafter\ifnum\csname ptj@par@NW@#1@\the\ptj@par@c\endcsname=12
+          \ptj@par@rb@kern{ptj@par@NS@#1@\the\ptj@par@c}%
+        \else
+          \expandafter\ifnum\csname ptj@par@NW@#1@\the\ptj@par@c\endcsname=13
+            \ptj@par@rb@pen{ptj@par@NS@#1@\the\ptj@par@c}%
+          \fi
+        \fi
+      \fi
+    \fi
+    \global\advance\ptj@par@c-1
+    \let\ptj@par@rbnext\ptj@par@rb@emit
+  \fi
+  \ifx\ptj@par@rbnext\relax\else\ptj@par@rbnext{#1}\fi}
+% emit a glue node at its FINAL size (skip zone keeps native glue)
+\def\ptj@par@rb@delta#1{%
+  \ifnum\ptj@par@ftrole=5
+    % the skip zone re-emits the walked FULL skip text; the line and
+    % node index ride in dedicated registers (argument-passing inside
+    % \if..\else..\fi chains mis-grabs -- probed repeatedly)
+    \def\ptj@par@rbline{#1}%
+    \ptj@par@rbc=\ptj@par@c
+    \ptj@par@rb@skipzone
+  \else
+    \ptj@par@rb@finite{#1}%
+  \fi}
+\newcount\ptj@par@rbc
+\def\ptj@par@rb@skipzone{%
+  % re-emit the skip-zone glue VERBATIM from the walked NSf full-skip
+  % text (assembling the fil orders from split fields lost the word
+  % spaces and mis-parsed, leaking literal 'fil' glyphs -- probed).
+  \expandafter\ptj@par@rb@sz@a
+    \csname ptj@par@NSf@\ptj@par@rbline @\the\ptj@par@rbc\endcsname}
+\def\ptj@par@rb@sz@a#1{%
+  \expandafter\ptj@par@rb@sz@b#1}
+\def\ptj@par@rb@sz@b#1{%
+  \hskip#1}
+\def\ptj@par@rb@finite#1{%
+  \ptj@par@db=\csname ptj@par@GD@#1@\the\ptj@par@rgk\endcsname\relax
+  \kern\dimexpr\ptj@par@ftnat+\ptj@par@db\relax}
+% kern re-emit: name-based double expansion (the NS entry is one brace
+% group {{size}}; strip before the primitive sees it). The FINAL
+% line's TAIL kern (node index c=1) additionally carries the
+% aw_step1_last re-selection delta (e_win - e_native) when F@win was
+% set by the final selection.
+\def\ptj@par@rb@kern#1{%
+  \expandafter\ptj@par@rb@kern@a\csname #1\endcsname}
+\def\ptj@par@rb@kern@a#1{%
+  \expandafter\ptj@par@rb@kern@b#1}
+\def\ptj@par@rb@kern@b#1{%
+  \kern#1%
+  \ifnum\ptj@par@c=1
+    \expandafter\ifnum\csname ptj@par@FIN@\the\ptj@par@lnnum\endcsname=1
+      \expandafter\ifx\ptj@par@F@win\relax
+      \else
+        \ptj@par@da=\csname ptj@par@E@\the\ptj@par@lnnum\endcsname\relax
+        \ptj@par@db=\dimexpr\ptj@par@F@win-\ptj@par@da\relax
+        \ifdim\ptj@par@db=0pt\else \kern\ptj@par@db \fi
+      \fi
+    \fi
+  \fi}
+\def\ptj@par@rb@pen#1{%
+  \expandafter\ptj@par@rb@pen@a\csname #1\endcsname}
+\def\ptj@par@rb@pen@a#1{%
+  \expandafter\ptj@par@rb@pen@b#1}
+\def\ptj@par@rb@pen@b#1{\penalty#1}
+\def\ptj@par@clsarg{0}
+\endinput

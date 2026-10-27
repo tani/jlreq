@@ -8,7 +8,7 @@
 #     各 (section, fixture, engine, pass) に個別サブディレクトリを与える。
 #     各コンパイルは -output-directory=<そのdir> で実行する。ログ・PDFは
 #     すべてそこに残り、失敗行は該当ログのパスを必ず示す。
-#   - 冒頭で make pdftex-fonts を実行し、TeX Live のフォントから
+#   - 冒頭で make -C pdftexja fonts を実行し、TeX Live のフォントから
 #     補助縦フォント・HaranoAji 横組変換 TTF を生成する
 #     （リポジトリにフォントバイナリは無い。生成失敗は FAIL）。
 #   - T0 プリフライト: 必須資源（JFM .def 12種+manifest、バックエンド
@@ -38,16 +38,15 @@
 
 cd "$(dirname "$0")/.." || exit 1
 
-# 補助縦フォント（aux TTF/TFM/enc）とフォントプロファイルは
-# fonts/pdftex/ に配置される。pdfTeX の mapline 資源解決は kpathsea
-# （TEXFONTS/TEXENCS）で行うため、repo root からの実行で見えるように
-# 先頭で一度だけ設定する（POSIX sh; 上書きではなく追記）。
-PDFTEX_AUX_FONT_DIR="$(pwd)/fonts/pdftex"
-if [ -d "$PDFTEX_AUX_FONT_DIR" ]; then
-  TEXFONTS="${TEXFONTS:+$TEXFONTS}${PDFTEX_AUX_FONT_DIR}:"
-  TEXENCS="${TEXENCS:+$TEXENCS}${PDFTEX_AUX_FONT_DIR}:"
-  export TEXFONTS TEXENCS
-fi
+# pdfTeX-ja（pdftexja/）を未インストールのまま使う: .sty/.def/.tex は
+# TEXINPUTS、補助縦フォント（pdftexja/fonts/ の TTF/TFM/enc と
+# フォントプロファイル）は TEXINPUTS/TEXFONTS/TEXENCS で見えるようにする
+# （POSIX sh; 上書きではなく追記）。
+PTJ_DIR="$(pwd)/pdftexja"
+TEXINPUTS=".:$(pwd):${PTJ_DIR}//:${TEXINPUTS:+$TEXINPUTS}"
+TEXFONTS="${TEXFONTS:+$TEXFONTS}${PTJ_DIR}/fonts:"
+TEXENCS="${TEXENCS:+$TEXENCS}${PTJ_DIR}/fonts:"
+export TEXINPUTS TEXFONTS TEXENCS
 
 # ---------------------------------------------------------------------------
 # 集計変数
@@ -157,67 +156,48 @@ run() {
 }
 
 # ===========================================================================
-# フォント資源はコミットされていない（make pdftex-fonts が TeX Live の
+# フォント資源はコミットされていない（make -C pdftexja fonts が TeX Live の
 # フォントから生成する。生成の要否はタイムスタンプで make が判断する）。
-if ! make pdftex-fonts >"$OUT/pdftex-fonts.out" 2>&1; then
-  fail "pdftex-fonts" "$OUT/pdftex-fonts.out"
+if ! make -C pdftexja fonts >"$OUT/pdftexja-fonts.out" 2>&1; then
+  fail "pdftexja-fonts" "$OUT/pdftexja-fonts.out"
 fi
 
 echo "== T0: プリフライト（必須資源の検査; 欠損はSKIPではなくFAIL） =="
 # ===========================================================================
 T0_MISSING=""
-# JFM .def 12組: pdftex-jfm-manifest.lua（唯一の一覧とする生成
-# manifest）から .def ファイル名を抽出する。manifest が読めない場合は
-# それ自体が FAIL（下の必須チェックで拾う）。
-T0_JFM_DEFS=$(sed -n 's/.*file[[:space:]]*=[[:space:]]*"\(jlreq-pdftex-jfm[^"]*\.def\)".*/\1/p' \
-  pdftex-jfm-manifest.lua 2>/dev/null | sort -u)
+# jlreq の JFM .def 12組: ptjfm-jlreq-manifest.lua（唯一の一覧）から抽出する。
+T0_JFM_DEFS=$(sed -n 's/.*file[[:space:]]*=[[:space:]]*"\(ptjfm-jlreq[^"]*\.def\)".*/\1/p' \
+  ptjfm-jlreq-manifest.lua 2>/dev/null | sort -u)
 T0_JFM_COUNT=$(printf '%s\n' $T0_JFM_DEFS | grep -c '\.def$' || true)
 if [ "$T0_JFM_COUNT" -ne 12 ]; then
-  echo "FAIL: T0-preflight manifest yields $T0_JFM_COUNT JFM defs (want 12) from pdftex-jfm-manifest.lua"
+  echo "FAIL: T0-preflight manifest yields $T0_JFM_COUNT JFM defs (want 12) from ptjfm-jlreq-manifest.lua"
   FAILED=$((FAILED+1))
 fi
 for f in $T0_JFM_DEFS \
-         pdftex-jfm-manifest.lua \
-         jlreq-pdftex.sty jlreq-pdftex-rules.sty jlreq-pdftex-ruby.sty \
-         jlreq-pdftex-paragraph.sty \
+         ptjfm-jlreq-manifest.lua \
+         pdftexja/pdftexja.sty pdftexja/pdftexja-core.sty pdftexja/pdftexja-jfmglue.sty \
+         pdftexja/pdftexja-ruby.sty pdftexja/pdftexja-adjust.sty \
+         pdftexja/ptjfm-ujis.def pdftexja/ptjfm-ujisv.def pdftexja/pdftexja-kinsoku.tex \
          jlreq-trimmarks-pdftex.def jlreq.cls; do
   [ -f "$f" ] || T0_MISSING="$T0_MISSING $f"
 done
-# フォントプロファイル（両組）と第1シャードの aux 縦フォント資源
-# （profile .def + TFM/enc/TTF）は縦組みの必須資源。fonts/pdftex/ は
-# `make pdftex-fonts` の出力先（ビルド成果物）。
-for f in fonts/pdftex/jlreq-pdftex-fonts-ipaex.def \
-         fonts/pdftex/jlreq-pdftex-fonts-ipa.def \
-         fonts/pdftex/jlreq-pdftex-fonts-haranoaji.def \
-         fonts/pdftex/haranoaji-mincho-ttf.ttf \
-         fonts/pdftex/haranoaji-mincho-bold-ttf.ttf \
-         fonts/pdftex/haranoaji-gothic-ttf.ttf \
-         fonts/pdftex/haranoaji-gothic-bold-ttf.ttf \
-         fonts/pdftex/jlreqv-ipaex-mc-00.tfm fonts/pdftex/jlreqv-ipaex-mc-00.enc \
-         fonts/pdftex/jlreqv-ipaex-mc-00.ttf fonts/pdftex/jlreqv-ipaex-mc-01.tfm \
-         fonts/pdftex/jlreqv-ipaex-mc-01.enc fonts/pdftex/jlreqv-ipaex-mc-01.ttf \
-         fonts/pdftex/jlreqv-ipaex-gt-00.tfm fonts/pdftex/jlreqv-ipaex-gt-00.enc \
-         fonts/pdftex/jlreqv-ipaex-gt-00.ttf fonts/pdftex/jlreqv-ipaex-gt-01.tfm \
-         fonts/pdftex/jlreqv-ipaex-gt-01.enc fonts/pdftex/jlreqv-ipaex-gt-01.ttf \
-         fonts/pdftex/jlreqv-ipa-mc-00.tfm fonts/pdftex/jlreqv-ipa-mc-00.enc \
-         fonts/pdftex/jlreqv-ipa-mc-00.ttf fonts/pdftex/jlreqv-ipa-mc-01.tfm \
-         fonts/pdftex/jlreqv-ipa-mc-01.enc fonts/pdftex/jlreqv-ipa-mc-01.ttf \
-         fonts/pdftex/jlreqv-ipa-gt-00.tfm fonts/pdftex/jlreqv-ipa-gt-00.enc \
-         fonts/pdftex/jlreqv-ipa-gt-00.ttf fonts/pdftex/jlreqv-ipa-gt-01.tfm \
-         fonts/pdftex/jlreqv-ipa-gt-01.enc fonts/pdftex/jlreqv-ipa-gt-01.ttf \
-         fonts/pdftex/jlreqv-haranoaji-mc-00.tfm fonts/pdftex/jlreqv-haranoaji-mc-00.enc \
-         fonts/pdftex/jlreqv-haranoaji-mc-00.ttf fonts/pdftex/jlreqv-haranoaji-mc-01.tfm \
-         fonts/pdftex/jlreqv-haranoaji-mc-01.enc fonts/pdftex/jlreqv-haranoaji-mc-01.ttf \
-         fonts/pdftex/jlreqv-haranoaji-mc-02.tfm fonts/pdftex/jlreqv-haranoaji-mc-02.enc \
-         fonts/pdftex/jlreqv-haranoaji-mc-02.ttf fonts/pdftex/jlreqv-haranoaji-mc-03.tfm \
-         fonts/pdftex/jlreqv-haranoaji-mc-03.enc fonts/pdftex/jlreqv-haranoaji-mc-03.ttf \
-         fonts/pdftex/jlreqv-haranoaji-gt-00.tfm fonts/pdftex/jlreqv-haranoaji-gt-00.enc \
-         fonts/pdftex/jlreqv-haranoaji-gt-00.ttf fonts/pdftex/jlreqv-haranoaji-gt-01.tfm \
-         fonts/pdftex/jlreqv-haranoaji-gt-01.enc fonts/pdftex/jlreqv-haranoaji-gt-01.ttf \
-         fonts/pdftex/jlreqv-haranoaji-gt-02.tfm fonts/pdftex/jlreqv-haranoaji-gt-02.enc \
-         fonts/pdftex/jlreqv-haranoaji-gt-02.ttf fonts/pdftex/jlreqv-haranoaji-gt-03.tfm \
-         fonts/pdftex/jlreqv-haranoaji-gt-03.enc fonts/pdftex/jlreqv-haranoaji-gt-03.ttf; do
+# フォントプロファイル（3組）と aux 縦フォント資源・HaranoAji 横組TTF
+# （pdftexja/fonts/ は make -C pdftexja fonts の出力先）。
+for f in pdftexja/fonts/pdftexja-fontprofile-ipaex.def \
+         pdftexja/fonts/pdftexja-fontprofile-ipa.def \
+         pdftexja/fonts/pdftexja-fontprofile-haranoaji.def \
+         pdftexja/fonts/haranoaji-mincho-ttf.ttf \
+         pdftexja/fonts/haranoaji-mincho-bold-ttf.ttf \
+         pdftexja/fonts/haranoaji-gothic-ttf.ttf \
+         pdftexja/fonts/haranoaji-gothic-bold-ttf.ttf; do
   [ -f "$f" ] || T0_MISSING="$T0_MISSING $f"
+done
+for fs in ipaex ipa haranoaji; do
+  for fam in mc gt; do
+    for ext in tfm enc ttf; do
+      [ -f pdftexja/fonts/ptjv-$fs-$fam-00.$ext ] || T0_MISSING="$T0_MISSING pdftexja/fonts/ptjv-$fs-$fam-00.$ext"
+    done
+  done
 done
 for f in ipxm-r-u30.pfb ipxg-r-u30.pfb cmtt9.tfm; do
   kpsewhich "$f" >/dev/null 2>&1 || T0_MISSING="$T0_MISSING $f(kpsewhich)"
@@ -226,20 +206,20 @@ if [ -n "$T0_MISSING" ]; then
   echo "FAIL: T0-preflight missing required files:$T0_MISSING"
   FAILED=$((FAILED+1))
 else
-  pass "T0-preflight (JFM .def x12 + manifest, backend .sty x3, trimmarks .def, ipxm/ipxg fonts, cmtt9, font profiles + aux vert fonts x3 fontsets + haranoaji horizontal TTFs x4)"
+  pass "T0-preflight (jlreq JFM .def x12 + manifest, pdftexja .sty x5 + data, trimmarks .def, ipxm/ipxg fonts, cmtt9, font profiles + aux vert fonts x3 fontsets + haranoaji horizontal TTFs x4)"
 fi
 
 # ===========================================================================
 echo "== T1: JFMデータ検証 =="
 # ===========================================================================
 d=$(outdir_for t1 jfm)
-if make check-pdftex-jfm >"$d/check.out" 2>&1; then
-  pass "check-jfm-diff (make check-pdftex-jfm)"
+if make check-pdftexja-jfm >"$d/check.out" 2>&1; then
+  pass "check-jfm-diff (make check-pdftexja-jfm)"
 else
   fail "check-jfm-diff" "$d/check.out"
 fi
-if texlua check_jfm_pdftex.lua >"$d/check-full.out" 2>&1; then
-  pass "check-jfm-full (texlua check_jfm_pdftex.lua)"
+if make -C pdftexja check-data >"$d/check-full.out" 2>&1; then
+  pass "check-pdftexja-data (make -C pdftexja check-data)"
 else
   fail "check-jfm-full" "$d/check-full.out"
 fi
@@ -478,7 +458,7 @@ else
   pass "interlinear-log-assertions (3 assertions)"
 fi
 # ===========================================================================
-echo "== T11: strict paragraph jlreqparagraph =="
+echo "== T11: strict paragraph ptjparagraph =="
 # ===========================================================================
 # strict-basic: スナップショット一致 + 多行 + 連続環境（STRICT-PASS/FAIL）
 d=$(outdir_for t11 strict-basic)
@@ -510,9 +490,9 @@ fi
 d=$(outdir_for t11 strict-errors)
 pdflatex -interaction=nonstopmode -output-directory="$d" \
   tests/fixtures/pdflatex-paragraph/strict-errors.tex >"$d/compile.out" 2>&1
-if grep -q 'footnote~is~not~allowed~inside' \
+if grep -q 'footnote is not allowed inside' \
      "$d/strict-errors.log" 2>/dev/null \
-   && grep -q 'display~math~is~not~allowed~inside' \
+   && grep -q 'display math is not allowed inside' \
      "$d/strict-errors.log" 2>/dev/null \
    && grep -q 'Undefined control sequence' \
      "$d/strict-errors.log" 2>/dev/null; then
@@ -667,7 +647,7 @@ for f in tests/fixtures/basic-mixed.tex tests/fixtures/math-japanese.tex \
     d=$(outdir_for t7 "$name" "$e")
     run "reg-$name-$e" "$d" "$e" "$f"
     # バックエンドが読み込まれていないこと
-    if grep -q 'jlreq-pdftex' "$d/$name.log" 2>/dev/null; then
+    if grep -q 'pdftexja' "$d/$name.log" 2>/dev/null; then
       fail "reg-$name-$e-backend-isolation" "$d/$name.log"
     else
       pass "reg-$name-$e-backend-isolation"
@@ -700,15 +680,15 @@ done
 echo "== T8: pdfTeX 縦組み（shipout rotation; tate .def 欠損はFAIL）=="
 # ===========================================================================
 # tate JFM データは必須資源（T0 で検査済み。ここでは欠けていたら即FAIL）。
-if [ ! -f jlreq-pdftex-jfm-tate.def ]; then
-  fail "tate-fixtures" "jlreq-pdftex-jfm-tate.def"
+if [ ! -f ptjfm-jlreqv.def ]; then
+  fail "tate-fixtures" "ptjfm-jlreqv.def"
 else
   # pdflatex+tate はエラーにならない（回転出荷アーキテクチャ + 情報行）
   d=$(outdir_for t8 tate-ok)
   printf '\\documentclass[pdflatex,tate]{jlreq}\n\\begin{document}あ\\end{document}' >"$d/tate-ok.tex"
   if pdflatex -interaction=nonstopmode -halt-on-error -output-directory="$d" \
        "$d/tate-ok.tex" >"$d/compile.out" 2>&1 \
-     && grep -q 'pdfTeX tate support: shipout-rotation architecture' "$d/tate-ok.log" 2>/dev/null; then
+     && grep -q 'tate (pdfTeX-ja)' "$d/tate-ok.log" 2>/dev/null; then
     pass "tate-option-compiles-with-info"
   else
     fail "tate-option-compiles-with-info" "$d/compile.out"
@@ -716,7 +696,7 @@ else
   # tate fixtures: コンパイル + ログ内 TATE-PASS 判定
   #   pdflatex-tate-pairs.tex はsmokeのみ（期待値と実値が同じペア表を読む
   #   循環検査であるため成功基準から外した。実値検証は T1 の JFM .def
-  #   等価性検査 check_jfm_pdftex.lua が担う）。ここではコンパイル成立のみ。
+  #   等価性検査 check_jfm_pdftexja.lua が担う）。ここではコンパイル成立のみ。
   for f in tests/fixtures/pdflatex-tate-basic.tex tests/fixtures/pdflatex-tate-pairs.tex; do
     name=$(basename "$f" .tex)
     d=$(outdir_for t8 "$name")
@@ -815,9 +795,9 @@ else
   elif grep -q 'TATE-PASS: LEGAL' "$d/pdflatex-tate-math-rawbox.log" 2>/dev/null \
     && grep -q 'TATE-PASS: RAWERR' "$d/pdflatex-tate-math-rawbox.log" 2>/dev/null \
     && grep -q 'TATE-PASS: VBOXERR' "$d/pdflatex-tate-math-rawbox.log" 2>/dev/null \
-    && grep -q 'raw~primitive~box.*hbox' "$d/pdflatex-tate-math-rawbox.log" 2>/dev/null \
-    && grep -q 'raw~primitive~box.*vbox' "$d/pdflatex-tate-math-rawbox.log" 2>/dev/null \
-    && grep -q 'Replace~it~with' "$d/pdflatex-tate-math-rawbox.log" 2>/dev/null; then
+    && grep -q 'raw primitive box.*hbox' "$d/pdflatex-tate-math-rawbox.log" 2>/dev/null \
+    && grep -q 'raw primitive box.*vbox' "$d/pdflatex-tate-math-rawbox.log" 2>/dev/null \
+    && grep -q 'Replace it with' "$d/pdflatex-tate-math-rawbox.log" 2>/dev/null; then
     pass "pdflatex-tate-math-rawbox-log-assertions (3 assertions + 2 expected ClassErrors)"
   else
     fail "pdflatex-tate-math-rawbox-log-assertions" "$d/pdflatex-tate-math-rawbox.log"
@@ -948,7 +928,7 @@ else
     fail "toc-twopass" "$tg/compile.out"
   fi
 
-  if grep -qE '\\shipout |\\@begindvi|\\stepcounter\{page\}' jlreq-pdftex.sty; then
+  if grep -qE '\\shipout |\\@begindvi|\\stepcounter\{page\}' pdftexja/pdftexja-core.sty; then
     fail "outputpage-copy-gone (kernel body must not be copied in source)"
   else
     pass "outputpage-copy-gone (grep: no shipout/@begindvi/stepcounter in backend)"
@@ -1064,7 +1044,7 @@ else
   # 報告のみ（ゲート外）: 脚注領域の ◆/☆ アンカーは tate 脚注・
   # 合印マイクロレイアウトの既知残差（マーク位置 d≈(+1.49,+7.61)pt、
   # 脚注テキスト d≈2.3-5.5pt、脚注列間隔 11.458 vs 13.748pt;
-  # 同機構の yoko 対照は 0.006/0.53pt）— docs/pdftex-internals.md
+  # 同機構の yoko 対照は 0.006/0.53pt）— pdftexja/doc/pdftexja-internals.md
   # の縦組み脚注パリティ数値表参照。up 変換は dvipdfmx -p "182mm,257mm"（JIS B5;
   # クラスは papersize special を出さないため）。
   ap_pd=$(outdir_for t8c anchor-parity pd)
@@ -1180,7 +1160,7 @@ fi
 # 判定: rc=0、ログマーカ、埋込フォント面の実在（pdffonts:
 #   横組 = Mincho-Regular + Mincho-Bold + Gothic-Regular + Gothic-Bold
 #          （実Bold面; emboldenではない）、
-#   縦組 = Mincho-Regular + 補助縦フォント JLreqVertharanoaji
+#   縦組 = Mincho-Regular + 補助縦フォント PtjVertharanoaji
 #          （vert字形は補助縦TTFから供給される）、
 # 抽出照合（pdftotext で本文断片と縦字形対象文字のcodepointが再現）。
 for f in haranoaji-yoko haranoaji-tate; do
@@ -1199,7 +1179,7 @@ for f in haranoaji-yoko haranoaji-tate; do
     pdffonts "$d/$f.pdf" 2>/dev/null | grep -q "HaranoAjiGothic-Bold" || hrc=1
     pdffonts "$d/$f.pdf" 2>/dev/null | grep -q "HaranoAjiGothic-Regular" || hrc=1
   else
-    pdffonts "$d/$f.pdf" 2>/dev/null | grep -q "JLreqVertharanoaji" || hrc=1
+    pdffonts "$d/$f.pdf" 2>/dev/null | grep -q "PtjVertharanoaji" || hrc=1
     # 縦字形対象文字の抽出（ToUnicode契約）: ー っ ‥ が原文codepointで出る
     # pdftotext はグリフ間へ空白を挿入することがあるため空白も除去する
     pdftotext "$d/$f.pdf" - 2>/dev/null | tr -d '\n ' | \
@@ -1229,8 +1209,8 @@ done
 # ===========================================================================
 echo "== T9: ruby（ruby.sty provider 適合）=="
 # ===========================================================================
-# T0 追加資源: アダプタ jlreq-pdftex-ruby.sty（バックエンド .sty 3本目）
-for f in jlreq-pdftex-ruby.sty; do
+# T0 追加資源: アダプタ pdftexja-ruby.sty
+for f in pdftexja/pdftexja-ruby.sty; do
   [ -f "$f" ] || { echo "FAIL: T9-ruby missing required file: $f"; FAILED=$((FAILED+1)); }
 done
 
@@ -1368,7 +1348,8 @@ echo "== T12: staged install smoke（配布物だけでの -no-shell-escape コ�
 # ===========================================================================
 # 目的: 「-no-shell-escape でインストール済みTDSだけから本文・縦中横・
 # ルビ・厳密段落をコンパイルできる」ことの実証。
-#   1. make install を一時 texmf 木へ（JLREQ_TEXMF 変数で配置先を指定）
+#   1. make install + make pdftexja-install を一時 texmf 木へ
+#      （JLREQ_TEXMF 変数で配置先を指定）
 #   2. リポジトリ外の作業ディレクトリで、TEXINPUTS/TEXFONTS/ENCFONTS を
 #      staged TEXMF（+ システム既定）に向けて pdflatex -no-shell-escape
 #   3. 判定: rc=0、ログに shell-out 証跡（runsystem/write18/shellescape）
@@ -1376,8 +1357,9 @@ echo "== T12: staged install smoke（配布物だけでの -no-shell-escape コ�
 # 欠損資源・失敗はSKIPではなくFAIL。
 staged=$(mktemp -d "${TMPDIR:-/tmp}/jlreq-staged.XXXXXXXX") || {
   echo "FAIL: cannot create staged temp dir"; exit 1; }
-if make install JLREQ_TEXMF="$staged/texmf" >"$staged/install.out" 2>&1; then
-  pass "staged-install (make install JLREQ_TEXMF=<tmp>, all modules + fonts + defs + manifest)"
+if make install JLREQ_TEXMF="$staged/texmf" >"$staged/install.out" 2>&1 \
+   && make pdftexja-install JLREQ_TEXMF="$staged/texmf" >>"$staged/install.out" 2>&1; then
+  pass "staged-install (make install + pdftexja-install JLREQ_TEXMF=<tmp>, all modules + fonts + defs)"
 else
   fail "staged-install" "$staged/install.out"
 fi
@@ -1391,7 +1373,8 @@ for f in staged-smoke-yoko staged-smoke-tate staged-smoke-haranoaji; do
   mkdir -p "$d"
   cp "$smokework/$f.tex" "$d/"
   ( cd "$d" \
-    && TEXINPUTS="$staged/texmf/tex/latex/jlreq:" \
+    && unset TEXENCS \
+    && TEXINPUTS="$staged/texmf/tex/latex//:" \
       TEXFONTS="$staged/texmf/fonts/tfm//:$staged/texmf/fonts/truetype//:" \
       ENCFONTS="$staged/texmf/fonts/enc//:${ENCFONTS:-}" \
       pdflatex -no-shell-escape -interaction=nonstopmode \
@@ -1439,7 +1422,7 @@ for f in staged-smoke-yoko staged-smoke-tate staged-smoke-haranoaji; do
       fail "staged-$f (text extraction does not contain body chars)" "$d/$f.pdf"
       continue
     fi
-    if ! pdffonts "$d/$f.pdf" 2>/dev/null | grep -q "JLreqVertharanoaji"; then
+    if ! pdffonts "$d/$f.pdf" 2>/dev/null | grep -q "PtjVertharanoaji"; then
       fail "staged-$f (aux vertical font not embedded)" "$d/$f.pdf"
       continue
     fi

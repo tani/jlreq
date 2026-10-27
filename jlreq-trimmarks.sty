@@ -3,12 +3,9 @@
 \RequirePackage{jlreq-helpers}[2024/02/13]
 
 \ExplSyntaxOn
-% check \tombowdatetrue（pdfTeXは後段の分離ファイル内の最小実装で提供）
+% check \tombowdatetrue（pdfTeXではpdftexjaが提供）
 \ifx\tombowdatetrue\@undefined
-  \jlreq@helper@guessengine
-  \ifx d\jlreq@result\else
-    \PackageError{jlreq-trimmarks}{This~package~only~works~with~pLaTeX,~upLaTeX~or~LuaTeX-ja}{\@ehc}
-  \fi
+  \PackageError{jlreq-trimmarks}{This~package~only~works~with~pLaTeX,~upLaTeX,~LuaTeX-ja~or~pdfTeX-ja}{\@ehc}
 \fi
 
 \cs_set:Nn \__jlreq_trimmarks_undeferr:n {\ClassError{jlreq-trimmarks}{Trying~to~delete~\string#1~even~though~it~is~not~defined,~may~be~a~bug}{\@ehc}}
@@ -170,10 +167,8 @@
   \let\jlreq@trimmarks@engine=\jlreq@result
 \fi
 
-% pdfTeX: pTeX系tombow機構（plcore相当）は分離ファイルに置く．
-% （d分岐の中身に\iftombow等，pTeXでは実在する条件名が含まれるため，
-%   \ifxが偽の場合の条件スキップが対応を壊す．ファイル分離により
-%   pTeX系ではそもそも読み込まれない．）
+% pdfTeX: tombow機構本体はpdftexjaが提供する．jlreq-trimmarks固有の
+% 追加（回転バナー等）は分離ファイルに置く（pTeX系では読み込まれない）．
 \ifx d\jlreq@trimmarks@engine
   \input{jlreq-trimmarks-pdftex.def}
 \fi

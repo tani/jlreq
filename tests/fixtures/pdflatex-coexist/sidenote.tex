@@ -1,7 +1,7 @@
 % sidenote_type=number（傍注，4.2.7）: pdfTeX検証
 % 過去のpdfTeX不具合(a)の回帰フィクスチャ：number型\sidenoteが\marginpar
 % 内部のボックス調整で「Dimension too large」（\jlreq@tempdima代入）．
-% 真因は\set@fontsizeフックの\jlreq@jareg計算
+% 真因は\set@fontsizeフックの\ptj@zwreg計算
 % （\dimexpr\f@size\jlreq@jafontscale pt → "10"+"1"+"pt" と数字連結され
 % 101pt化）で，\marginparの\@marginparresetが\normalsizeを呼んだ時点で
 % 箱内の\zw実寸が101ptになり，続く\footnotesizeの
@@ -24,13 +24,13 @@ English混植でもルールフックが効くことを見るための少し長�
 
 \theendnotes
 \makeatletter
-% 回帰ロック：マージン箱内でも\jlreq@jaregが正しくサイズ追従すること
+% 回帰ロック：マージン箱内でも\ptj@zwregが正しくサイズ追従すること
 % （旧バグでは\marginpar箱内で101ptになっていた）
 \setbox0=\vbox{\reset@font\footnotesize
-  \ifdim\jlreq@jareg=8.00003pt\relax
-    \typeout{SIDENOTE-JAREG-OK: \the\jlreq@jareg}%
+  \ifdim\ptj@zwreg=8.00003pt\relax
+    \typeout{SIDENOTE-JAREG-OK: \the\ptj@zwreg}%
   \else
-    \errmessage{SIDENOTE-JAREG-NG: \the\jlreq@jareg\space (expected 8.00003pt)}%
+    \errmessage{SIDENOTE-JAREG-NG: \the\ptj@zwreg\space (expected 8.00003pt)}%
   \fi
   X}%
 \makeatother

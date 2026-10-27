@@ -1,0 +1,70 @@
+%%
+%% This is file 'pdftexja.sty'.
+%% pdfTeX-ja: Japanese typesetting for pdfLaTeX (experimental).
+%%
+%% pdfTeX-ja plays, for pdfLaTeX, the role LuaTeX-ja plays for LuaLaTeX:
+%% it is the engine-level foundation (character state machine, JFM glue,
+%% kinsoku, zw/zh units, vertical typesetting) on which document classes
+%% such as jlreq build. It is NOT a LuaTeX-ja clone: pdfTeX has no node
+%% callbacks, no box direction attribute and no >8-bit control sequence
+%% names, so several APIs are pdfTeX-ja specific (see README.md).
+%%
+%% Usage:
+%%   \usepackage[<options>]{pdftexja}
+%% Options (key=value):
+%%   fontset=ipaex-type1|ipa|haranoaji|custom   (default ipaex-type1)
+%%   fontprofile=<file>      vertical glyph profile for fontset=custom
+%%   jfm=<name>              horizontal JFM data ptjfm-<name>.def (ujis)
+%%   tjfm=<name>             vertical JFM data ptjfm-<name>.def (ujisv)
+%%   tate                    vertical document (shipout rotation model)
+%%   scale=<real>            CJK size = \f@size * <real> (default 1)
+%%   disablejfam             do not define \mathmc / \mathgt
+%%   kinsoku=true|false      load the default kinsoku table (true)
+%%
+%% Modules:
+%%   pdftexja-core.sty      fonts, CJK state, units, direction, math,
+%%                           labels, kanji control sequences, tombow
+%%   pdftexja-jfmglue.sty   JFM glue / kinsoku / line-end adjustment
+%%   pdftexja-ruby.sty      adapter for the CJK bundle's ruby.sty
+%%   pdftexja-adjust.sty    priority-adjusted paragraph (load explicitly)
+%%
+
+\NeedsTeXFormat{LaTeX2e}[2022/06/01]
+\ProvidesPackage{pdftexja}[2026/10/27 v0.3 Japanese typesetting for pdfLaTeX (experimental)]
+
+\ifx\pdftexversion\@undefined
+  \PackageError{pdftexja}{pdftexja requires pdfTeX}{%
+    Use LuaTeX-ja (lualatex) or pLaTeX/upLaTeX on the other engines.}%
+  \expandafter\endinput
+\fi
+\ifx\kanjiskip\@undefined\else
+  \PackageError{pdftexja}{pdftexja cannot be used with (e-)pTeX}{%
+    The engine already has native Japanese support.}%
+  \expandafter\endinput
+\fi
+
+\newif\ifptj@tate
+\newif\ifptj@jfam \ptj@jfamtrue
+\newif\ifptj@kinsoku \ptj@kinsokutrue
+\def\ptj@opt@fontset{ipaex-type1}
+\def\ptj@opt@fontprofile{}
+\def\ptj@opt@jfm{ujis}
+\def\ptj@opt@tjfm{ujisv}
+\def\ptj@scale{1}
+\DeclareKeys[pdftexja]{
+  fontset.store = \ptj@opt@fontset,
+  fontprofile.store = \ptj@opt@fontprofile,
+  jfm.store = \ptj@opt@jfm,
+  tjfm.store = \ptj@opt@tjfm,
+  tate.if = ptj@tate,
+  yoko.code = \ptj@tatefalse,
+  scale.store = \ptj@scale,
+  disablejfam.code = \ptj@jfamfalse,
+  enablejfam.code = \ptj@jfamtrue,
+  kinsoku.if = ptj@kinsoku,
+}
+\ProcessKeyOptions[pdftexja]
+
+\RequirePackage{pdftexja-core}
+
+\endinput

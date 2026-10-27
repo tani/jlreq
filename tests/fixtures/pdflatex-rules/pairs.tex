@@ -5,7 +5,7 @@
 \makeatletter
 \newbox\mboxa
 \def\meas#1#2#3{%
-  \ifx d\jlreq@engine\global\jlreqpdf@lastclass=90\fi
+  \ifx d\jlreq@engine\global\ptj@lastclass=90\fi
   \setbox\mboxa=\hbox{#3}%
   \ifdim\wd\mboxa=#1\relax
     \typeout{PASS: #2 = \the\wd\mboxa}%

@@ -7,7 +7,7 @@
 \makeatletter
 \newbox\pwbox
 \def\pwmeas#1#2#3{%
-  \ifx d\jlreq@engine\global\jlreqpdf@lastclass=90\fi
+  \ifx d\jlreq@engine\global\ptj@lastclass=90\fi
   \setbox\pwbox=\hbox{#3}%
   \ifdim\wd\pwbox=#1\relax
     \typeout{PASS: #2 = \the\wd\pwbox}%

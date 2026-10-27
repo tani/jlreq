@@ -4,7 +4,7 @@ r"""endadjust-lineend.tex の行末追込み（end_adjust）4エンジンparity�
 
 検証の歴史: 本ゲートは tests/reference/kinsoku-lines.md に記録された
 「pdfTeXバックエンドは 」 を次行へ落とす (xMax≈143.22pt)」既知不良
-を検出するために作られたが、\jlreqpdf@addendadj の
+を検出するために作られたが、\ptj@addendadj の
 修正により既に現行HEADでparityが成立している
 (実測: hsize 60–80pt の全ケースで pdflatex と p/u/l の
 1行目 xMax 差は ≤0.01pt)。よって本ゲートは通常の回帰ゲートとして

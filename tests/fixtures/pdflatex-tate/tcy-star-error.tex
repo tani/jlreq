@@ -3,7 +3,7 @@
 %   * yoko 文書で非 star 形を使うと ClassError（"tatechuyoko is not
 %     allowed in yoko mode"）。
 %   * yoko 文書で star 形は中身をそのまま通す（透過）。
-%   * 未知 box の方向照会 \jlreqpdf@boxdir は ClassError（無告知の
+%   * 未知 box の方向照会 \ptj@boxdir は ClassError（無告知の
 %     yoko fallback はしない）。
 % 本 fixture は yoko 文書で非 star 形を「エラーになることを確認」する:
 % LaTeX のエラーは halt しない限り続行するため、エラー発生を
@@ -24,6 +24,6 @@
 \newbox\unknownbox
 \setbox\unknownbox=\hbox{阿}%
 \typeout{BOXDIR-ERROR-EXPECT}%
-\jlreqpdf@boxdir{\unknownbox}%
+\ptj@boxdir{\unknownbox}%
 \typeout{TATE-PASS: DIR-BOXDIR-ERROR-REACHED (boxdir on unknown box errors; run continued)}%
 \end{document}

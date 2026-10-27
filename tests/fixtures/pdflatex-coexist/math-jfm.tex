@@ -1,6 +1,6 @@
 % 数式内和文（jfam相当, audit B19）の検証: \mathmc/\mathgt のボックス供給。
-% pdfTeXでは \DeclareSymbolFont{mincho}/\jfam が無いため、jlreq-pdftex.styの
-% \jlreq@pdftex@mathja が \mathchoice で sizes を切り替え、対応サイズの
+% pdfTeXでは \DeclareSymbolFont{mincho}/\jfam が無いため、pdftexja-core.styの
+% \ptj@mathja が \mathchoice で sizes を切り替え、対応サイズの
 % \hbox に \mcfamily/\gtfamily で本文を組む。enablejfam（既定）でのみ定義。
 % disablejfam 側は math-jfm-disablejfam.tex を参照（\mathmc 未定義 = (u)pTeX
 % と同じ意味論）。

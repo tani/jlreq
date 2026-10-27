@@ -4,7 +4,7 @@ r"""label-japanese.tex の日本語ラベル \ref 解決検証（昇格済みの
 
 契約: \label{日本語ラベル} / \ref{日本語ラベル} / \pageref{日本語ラベル}
 が upLaTeX/LuaLaTeX と同様に解決する（aux への書込と読込が対称に
-正規化される — \jlreqpdf@labelkey）。GREEN ゲート。
+正規化される — \ptj@labelkey）。GREEN ゲート。
 
 判定:
   1. 2パスコンパイル後の aux に当該ラベルの \newlabel 行が存在する。

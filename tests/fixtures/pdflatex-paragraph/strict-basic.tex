@@ -1,4 +1,4 @@
-% 受入: jlreqparagraph 厳密段落環境の基本動作（yoko）
+% 受入: ptjparagraph 厳密段落環境の基本動作（yoko）
 % 判定: ログ内 STRICT-PASS / STRICT-FAIL（runner が grep）。
 \documentclass[pdflatex]{jlreq}
 \begin{document}
@@ -10,11 +10,11 @@
 \edef\snapbs{\the\baselineskip}%
 \hsize=333pt
 \parindent=20pt
-\begin{jlreqparagraph}
+\begin{ptjparagraph}
 スナップショット検証用の段落。あいうえおかきくけこさしすせそ。
-\end{jlreqparagraph}
-\ifdim\jlreqpar@hsize=333pt\relax\else
-  \typeout{STRICT-FAIL: hsize-snapshot (\the\jlreqpar@hsize)}\fi
+\end{ptjparagraph}
+\ifdim\ptj@par@hsize=333pt\relax\else
+  \typeout{STRICT-FAIL: hsize-snapshot (\the\ptj@par@hsize)}\fi
 \makeatother
 通常段落へ戻る。
 \makeatletter
@@ -23,16 +23,16 @@
 \makeatother
 % ---- 2. 基本: 多行・括弧・約物・欧文混在（Overfull/Underfull 0 は
 %         runner が検査） ----
-\begin{jlreqparagraph}
+\begin{ptjparagraph}
 厳密段落テスト。日本語の文章をここに入れる。優先順位付きの伸縮が厳密に処理される。漢字とひらがな、そして「括弧」や句読点、English words too。あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわをん。
-\end{jlreqparagraph}
+\end{ptjparagraph}
 % ---- 3. 連続環境（2環境連続、行間が正常につながること） ----
-\begin{jlreqparagraph}
+\begin{ptjparagraph}
 一号環境。あいうえおかきくけこさしすせそたちつてとなにぬねの。
-\end{jlreqparagraph}
-\begin{jlreqparagraph}
+\end{ptjparagraph}
+\begin{ptjparagraph}
 二号環境。はひふへほまみむめもやゆよらりるれろわをん。
-\end{jlreqparagraph}
+\end{ptjparagraph}
 後続の通常段落。
 \makeatletter
 \typeout{STRICT-PASS: basic-multiline}

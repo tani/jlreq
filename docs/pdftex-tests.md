@@ -1,28 +1,39 @@
-# pdfTeXバックエンドのテスト方法（pdftex-tests）
+# pdfLaTeX（pdfTeX-ja）経路のテスト方法（pdftex-tests）
+
+テストは2層:
+
+* **pdfTeX-ja 単体**（jlreq を使わない; article + pdftexja）:
+  `make -C pdftexja check`（データの再生成差分ゼロ・フォント生成の決定性と
+  構造検査・`pdftexja/tests/run-tests.sh` の単体フィクスチャ）。
+* **jlreq 統合**（本書の対象）: `sh tests/run-pdftex-tests.sh`。jlreq の全機能を
+  pdflatex で組み，uplatex/lualatex の実測値と対照する。リポジトリ内の
+  pdftexja を未インストールのまま使うため，スイートは
+  `TEXINPUTS=.:<repo>:<repo>/pdftexja//:`、`TEXFONTS`/`TEXENCS` に
+  `pdftexja/fonts` を設定する（手で個別フィクスチャを組むときも同じ設定が要る）。
 
 ## テスト構成
 
 | 層 | 内容 | 実装 | 実行方法 |
 |---|---|---|---|
-| T0 プリフライト | 必須資源の存在（欠損=FAIL） | tests/run-pdftex-tests.sh T0 | スイート冒頭（JFM .def×12+manifest・backend .sty×4・trimmarks .def・aux縦font資源×3 fontset・haranoaji 横組TTF×4・ipxm/ipxg・cmtt9） |
-| T1 静的 | JFM生成データの同等性 | `check_jfm_pdftex.lua` + `make check-pdftex-jfm` | `texlua check_jfm_pdftex.lua`（rc=0で全項目合格） |
+| T0 プリフライト | 必須資源の存在（欠損=FAIL） | tests/run-pdftex-tests.sh T0 | スイート冒頭（jlreq JFM .def×12+manifest・pdftexja .sty×5+データ・trimmarks .def・aux縦font資源×3 fontset・haranoaji 横組TTF×4・ipxm/ipxg・cmtt9） |
+| T1 静的 | JFM生成データの同等性 | `check_jfm_pdftexja.lua` + `make check-pdftexja-jfm` + `make -C pdftexja check-data` | `texlua check_jfm_pdftexja.lua`（rc=0で全項目合格） |
 | T2 マクロ | エンジン検出・寸法・フォント選択 | tests/fixtures/ + 3エンジン回帰 | 下記「回帰テスト」 |
 | T3 文字組版 | ペアグルー・禁則・和欧文間隔 | tests/fixtures/pdflatex-rules/pairs.tex, kinsoku.tex | `pdflatex ... pairs.tex` → ログの PASS/FAIL |
 | T3b parity | 行末追込みの4エンジン一致 | endadjust-lineend.tex + tests/check-endadjust-parity.py | 1行目 xMax を参照と0.1ptで比較 |
 | T4 段落 | 行末調整 | tests/fixtures/pdflatex-rules/endadjust.tex | Overfull件数で判定 |
 | T5 文書 | 混植文書の全体動作・バナー幾何 | tests/fixtures/pdflatex-mixed.tex, trimmarks-banner.tex | pdftotext 抽出・tests/check-banner-slots.py |
 | T5b 日付・label | wareki \today・日本語label + パッケージ行列・境界日・綴り | today-wareki.tex, label-japanese.tex, label-packages.tex, date-boundaries.tex, space-dispatcher.tex | lualatex 参照抽出比較 + check-{today-wareki,label-japanese,label-packages,date-boundaries,space-dispatcher}.py |
-| T11 厳密段落 | jlreqparagraph 環境: snapshot・入力モデル行列・禁止構成エラー・統合（rightskip/parskip/parshape/接続）・縦組み | tests/fixtures/pdflatex-paragraph/{strict-basic,strict-inputmodel,strict-errors,strict-integration,strict-tate}.tex | ログ内 STRICT/INM/INTEG/TATE-PASS 判定 + エラー文言 grep + Overfull/Underfull 0 件（T11 ブロック） |
+| T11 厳密段落 | ptjparagraph 環境: snapshot・入力モデル行列・禁止構成エラー・統合（rightskip/parskip/parshape/接続）・縦組み | tests/fixtures/pdflatex-paragraph/{strict-basic,strict-inputmodel,strict-errors,strict-integration,strict-tate}.tex | ログ内 STRICT/INM/INTEG/TATE-PASS 判定 + エラー文言 grep + Overfull/Underfull 0 件（T11 ブロック） |
 | T7 回帰 | p/u/l の既存動作（ベースライン照合） | tests/fixtures/{basic-mixed,math-japanese,tate-vertical}.tex | tests/reference/baselines/ とのバイト比較 |
-| T8 縦組み | tate shipout 回転・縦中横・局所方向 | tests/fixtures/pdflatex-tate-*.tex, pdflatex-tate/{tcy-*,dir-*}.tex | ログ判定 + tests/check-tatechuyoko.py（縦中横は通常ゲート）。**haranoaji ゲート**: `haranoaji-yoko`/`haranoaji-tate`（tests/fixtures/pdflatex-haranoaji/）は `pdftex_fontset=haranoaji` の実レンダリングを検査——横組は4面（Mincho/Gothic × Regular/**Bold**）の実埋込、縦組は補助縦フォント `JLreqVertharanoaji` 埋込＋縦字形対象文字（ーっ‥）の抽出codepoint照合。抽出照合は pdftotext がグリフ間に挿入する空白も除去して行う（`tr -d '\n '`; fontset により単語区切りが変わるため。全パイプ共通）。T12 には `staged-smoke-haranoaji`（staged TDS だけから -no-shell-escape、aux 縦フォントの実埋込まで判定） |
+| T8 縦組み | tate shipout 回転・縦中横・局所方向 | tests/fixtures/pdflatex-tate-*.tex, pdflatex-tate/{tcy-*,dir-*}.tex | ログ判定 + tests/check-tatechuyoko.py（縦中横は通常ゲート）。**haranoaji ゲート**: `haranoaji-yoko`/`haranoaji-tate`（tests/fixtures/pdflatex-haranoaji/）は `pdftex_fontset=haranoaji` の実レンダリングを検査——横組は4面（Mincho/Gothic × Regular/**Bold**）の実埋込、縦組は補助縦フォント `PtjVertharanoaji` 埋込＋縦字形対象文字（ーっ‥）の抽出codepoint照合。抽出照合は pdftotext がグリフ間に挿入する空白も除去して行う（`tr -d '\n '`; fontset により単語区切りが変わるため。全パイプ共通）。T12 には `staged-smoke-haranoaji`（staged TDS だけから -no-shell-escape、aux 縦フォントの実埋込まで判定） |
 | T9 ruby | ruby.sty provider 適合 | tests/fixtures/pdflatex-tate/ruby-{basic,tate}.tex + ruby-adapter-noop | ログ内自己表明（17+10件）+ lualatex+ruby.sty 同一ソース対照（yoko ベースライン完全一致）+ noop ゲート |
 
 ## 実行方法（リポジトリ直下から）
 
 ```sh
 # T1: JFMデータ検証（差分ゼロ + 全ペア照合）
-make check-pdftex-jfm
-texlua check_jfm_pdftex.lua
+make check-pdftexja-jfm
+texlua check_jfm_pdftexja.lua
 
 # T3: 組版規則の実測（ログに PASS/FAIL が出る）
 mkdir -p /tmp/m4t
@@ -124,10 +135,10 @@ l PDF の正規化バイト）に対して自動で行う。ベースライン�
 **昇格記録（2026-10-24）**: `today-wareki` と `label-japanese` を
 KNOWN_DEFECTS から削除し通常ゲートへ移した。
 `today-wareki`: d-engine 分岐の `\today` が `\ifjlreq@seireki` を反映
-（wareki→`\jlreq@wareki` の元号表、tate→`\jlreq@pdf@kansuji`、
+（wareki→`\jlreq@wareki` の元号表、tate→`\ptjkansuji`、
 yoko→`\number`）。lualatex 参照との抽出比較が一致。
 `label-japanese`: label key の対称正規化
-（`\jlreqpdf@labelkey`: `\protected@edef` でマクロ展開+UTF8 byte凍結 →
+（`\ptj@labelkey`: `\protected@edef` でマクロ展開+UTF8 byte凍結 →
 `\detokenize` で catcode 12 化）を write（`\label`）・read（aux の
 `\newlabel`、begindocument/before フック）・query（`\ref`/`\pageref`）と
 パッケージ面（nameref `\NR@setref`、hyperref `\label@hyperref`/
@@ -170,14 +181,14 @@ live 化し、縦中横が正規化組版される。追加ゲート:
 
 `tests/fixtures/pdflatex-rules/endadjust-lineend.tex` はこのリストには
 **入っていない**: 記録されていた行末追込み不良（kinsoku-lines.md の
-pdflatex 143.2pt）は f665eba の `\jlreqpdf@addendadj` 修正で解消済みで、
+pdflatex 143.2pt）は f665eba の `\ptj@addendadj` 修正で解消済みで、
 2026-10-24 の再実測では4エンジン parity が成立するため、通常の回帰
 ゲートとして 0.1pt 許容で固定検査している。
 
 ### T11 厳密段落（2026-10-25 追加）
 
 - `strict-basic`: 環境入口の hsize snapshot が保存値と一致すること
-  （hsize=333pt 下で `\jlreqpar@hsize` を照合）、多行・括弧・約物・
+  （hsize=333pt 下で `\ptj@par@hsize` を照合）、多行・括弧・約物・
   欧文混在の厳密段落が Overfull/Underfull 0 で組めること、
   連続環境（2環境）の行間接続。
 - `strict-inputmodel`: 許可構成要素すべて（CJK 連続・欧文 word・空白・
@@ -185,8 +196,8 @@ pdflatex 143.2pt）は f665eba の `\jlreqpdf@addendadj` 修正で解消済み�
   inline math・`\mbox`・`\makebox[c]`・hyperref リンク・label）が
   エラー 0 で itemize されること（INM-PASS）。
 - `strict-errors`: 未知マクロ（TeX 自身の Undefined control sequence）、
-  環境内 `\footnote`（`footnote~is~not~allowed~inside~jlreqparagraph`）、
-  環境内 `\[`（`display~math~is~not~allowed~inside~jlreqparagraph`）の
+  環境内 `\footnote`（`footnote~is~not~allowed~inside~ptjparagraph`）、
+  環境内 `\[`（`display~math~is~not~allowed~inside~ptjparagraph`）の
   具体的エラー文言（-halt-on-error なしで実行し grep）。
 - `strict-integration`: 非ゼロ rightskip/parskip 下、looseness・
   emergencystretch、parshape（3行形状）、通常段落との前後接続
@@ -200,7 +211,7 @@ pdflatex 143.2pt）は f665eba の `\jlreqpdf@addendadj` 修正で解消済み�
 **実装状況の注記（2026-10-25 最終）**: 配分エンジン全段階
 実装・検証済み（distphase=4: 境界表記録 → 行内 node 逆走 →
 tier 分類 → sp 充填 → 行 box 再構成）。実測: 再構成幅は測定幅と
-delta=0.0pt（1sp 以内、`\jlreqpar@verifywd` でログ検証可能）、
+delta=0.0pt（1sp 以内、`\ptj@par@verifywd` でログ検証可能）、
 hsize=211pt の有限伸長行で tier-50 glue 群に +0.06667pt の
 配分が発生。ltj 準拠の fil 除外（parfill 行は配分スキップ）も
 実装。BD 表照合は位置非依存 first-match に修正済み（約物 pair
@@ -231,7 +242,7 @@ interline のみ。byte 完全一致ではなく実測座標比較
 sh tests/run-pdftex-tests.sh
 ```
 
-ランナーは冒頭で `make pdftex-fonts` を実行し、TeX Live 収録フォントから
+ランナーは冒頭で `make -C pdftexja fonts` を実行し、TeX Live 収録フォントから
 補助縦フォントと HaranoAji 横組変換 TTF を生成する（リポジトリにフォント
 バイナリは無い。生成は manifest 駆動なので fresh clone でも動作する。
 生成失敗は FAIL）。
@@ -307,7 +318,7 @@ sh tests/run-pdftex-tests.sh
 | DoD項目 | 確認方法 | 結果 |
 |---|---|---|
 | 自動検出+明示指定 | `\documentclass{jlreq}` / `[pdflatex]` 両方 rc=0 | PASS |
-| JFM単一ソース+差分ゼロ | `make check-pdftex-jfm` | PASS（全12変種） |
+| JFM単一ソース+差分ゼロ | `make check-pdftexja-jfm` | PASS（全12変種） |
 | 禁則・字間の重大な規則違反 | `tests/check-kinsoku.py`（実PDF bbox走査）+ pairs.tex 7計測 | 0件 |
 | p/u/l 非意図的回帰 | DVI（タイムスタンプ正規化）とPDF（日付/ID正規化）の、コミット済みベースライン（tests/reference/baselines/、2026-10-24実装前に固定条件で記録）とのバイト比較＋`\jidori`/`\akigumi` 4エンジン回帰ガード（suite内 reg-* baseline / reg-jidori-*） | 全同一 |
 | 文字抽出 | 全21 PDF（20フィクスチャ+エラーケース1） `pdftotext` → 置換文字(U+FFFD) 0件 | PASS |
@@ -315,5 +326,5 @@ sh tests/run-pdftex-tests.sh
 | フォント埋め込み | 全21 PDF `pdffonts` → 未埋込 0件（IPAex Type1, LM, CM すべて subset埋込） | PASS |
 | しおり | hyperref-bookmarks 3パス → PDF ObjStm 内 UTF-16BE タイトル3件（`はじめてのしおり`等）を解凍確認 | PASS |
 | インストール・配布 | Makefile `install`/`tds` にバックエンド・def・生成器・ドキュメント収録 | 済み |
-| 依存関係・ライセンス・最低版 | `docs/pdftex-dependencies.md` | 記録済み |
+| 依存関係・ライセンス・最低版 | `pdftexja/doc/pdftexja-dependencies.md` | 記録済み |
 | 上流レビュー・マージ | `docs/upstream-issue-draft.md`（PR 1–7 分割案つき） | 外部待ち |

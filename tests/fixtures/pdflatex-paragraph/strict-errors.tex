@@ -5,22 +5,22 @@
 \documentclass[pdflatex]{jlreq}
 \begin{document}
 % (A) 未知マクロ → エラー
-\begin{jlreqparagraph}
+\begin{ptjparagraph}
 未知マクロテスト。\thismacroisundefined あいうえお。
-\end{jlreqparagraph}
+\end{ptjparagraph}
 % (B) 環境内 display math → エラー
-\begin{jlreqparagraph}
+\begin{ptjparagraph}
 表示数式テスト。
 \[ x=1 \]
 あいうえお。
-\end{jlreqparagraph}
+\end{ptjparagraph}
 % (C) 環境内脚注
-\begin{jlreqparagraph}
+\begin{ptjparagraph}
 脚注テスト\footnote{環境内脚注}。あいうえお。
-\end{jlreqparagraph}
+\end{ptjparagraph}
 % (D) その後も処理が続くこと（回帰）
-\begin{jlreqparagraph}
+\begin{ptjparagraph}
 正常環境。あいうえおかきくけこさしすせそ。
-\end{jlreqparagraph}
+\end{ptjparagraph}
 後続段落。
 \end{document}

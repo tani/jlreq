@@ -5,7 +5,7 @@
 \documentclass[pdflatex]{jlreq}
 \begin{document}
 \makeatletter
-\def\jlreqpar@verifywd{1}%
+\def\ptj@par@verifywd{1}%
 % hsize chosen so line 1 must stretch ~23pt. The line contains:
 %   - a JFM 」pair glue   (tier -10 stretch)
 %   - kanjiskip boundaries (tier 0 stretch, ~9 x 2.5pt)
@@ -15,9 +15,9 @@
 %   ~1.1pt; the tier engine gives the hspace the whole 23pt
 % (within its 30pt capacity) and the lower tiers ZERO.
 \hsize=158pt
-\begin{jlreqparagraph}
+\begin{ptjparagraph}
 あい」うえお。\hspace{0pt plus 30pt}かきくけこ。さしすせそ。たちつてと。
-\end{jlreqparagraph}
+\end{ptjparagraph}
 % STRICT-PASS probes: dump the tier-50 explicit glue's delta (GD@1@k
 % where the GI spec has 30pt stretch) and assert the kanjiskip
 % boundaries' deltas are 0.
@@ -25,10 +25,10 @@
 \loop
   \advance\count0 1
   \ifnum\count0<40
-    \expandafter\ifx\csname jlreqpar@GD@1@\the\count0\endcsname\relax\else
+    \expandafter\ifx\csname ptj@par@GD@1@\the\count0\endcsname\relax\else
       \message{TIERTOP: line=1 gk=\the\count0
-        delta=\csname jlreqpar@GD@1@\the\count0\endcsname
-        GI=\csname jlreqpar@GI@1@\the\count0\endcsname}%
+        delta=\csname ptj@par@GD@1@\the\count0\endcsname
+        GI=\csname ptj@par@GI@1@\the\count0\endcsname}%
     \fi
 \repeat
 \makeatother

@@ -1,4 +1,4 @@
-# .github/workflows/pdftex.yml -- pdfTeX backend CI.
+# .github/workflows/pdftex.yml -- pdfTeX-ja and jlreq (pdflatex) CI.
 #
 # 単一jobでビルド成果物を使うコマンド群と staged install smoke
 # を実行する。参照環境は TeX Live 2025 最終配布。
@@ -62,26 +62,25 @@ jobs:
           python3 -c 'import fontTools, pymupdf; print("fonttools+pymupdf OK")'
           command -v pdftotext pdffonts makejvf uppltotf ppltotf pandoc
 
-      - name: make -j4 pdftex-fonts pdftex-jfm (parallel generators, no races)
-        run: make -j4 pdftex-fonts pdftex-jfm
+      - name: pdfTeX-ja build (JFM data, kinsoku table, fonts)
+        run: make -C pdftexja -j4 all
 
-      - name: make check-pdftex-jfm
-        run: make check-pdftex-jfm
+      - name: pdfTeX-ja checks (regeneration diff zero, deterministic fonts, standalone tests)
+        run: make -C pdftexja check
 
-      - name: make check-pdftex-fonts
-        run: make check-pdftex-fonts
-
-      - name: texlua check_jfm_pdftex.lua
-        run: texlua check_jfm_pdftex.lua
+      - name: jlreq JFM data for pdfTeX-ja (regeneration diff zero + validation)
+        run: make check-pdftexja-jfm
 
       - name: sh tests/run-pdftex-tests.sh (4-engine suite + staged install smoke)
         run: sh tests/run-pdftex-tests.sh
 
-      - name: make tds (full TDS bundle)
-        run: make tds
+      - name: make tds (jlreq and pdfTeX-ja TDS bundles)
+        run: |
+          make tds
+          make -C pdftexja tds
 
       - name: TDS bundle listing
-        run: find tds -type f | sort
+        run: find tds pdftexja/tds -type f | sort
 
       - name: Collect failure artifacts (logs/PDFs/diffs)
         if: failure()
@@ -91,10 +90,11 @@ jobs:
           cp -r /tmp/jlreq-tests.* artifacts/ 2>/dev/null || true
           cp -r /tmp/jlreq-staged.* artifacts/ 2>/dev/null || true
           cp -r /tmp/jlreq-smoke.* artifacts/ 2>/dev/null || true
+          cp -r /tmp/pdftexja-tests.* artifacts/ 2>/dev/null || true
           cp -r tds artifacts/ 2>/dev/null || true
           # keep the regenerated outputs for byte-diff triage
-          cp pdftex-jfm-manifest.lua artifacts/ 2>/dev/null || true
-          cp fonts/pdftex/*.def artifacts/ 2>/dev/null || true
+          cp ptjfm-jlreq-manifest.lua artifacts/ 2>/dev/null || true
+          cp pdftexja/fonts/*.def artifacts/ 2>/dev/null || true
 
       - name: Upload failure artifacts
         if: failure()

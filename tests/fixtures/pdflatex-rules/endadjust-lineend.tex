@@ -3,7 +3,7 @@
 % バックエンドは hsize=65pt で 」 を次行へ落とし1行目 xMax≈143.2pt に
 % 対し参照エンジン (platex/uplatex/lualatex + jlreq) はクラス2
 % end_adjust {0,0.5} により 」 を行末に置く (xMax≈148.2pt)」という既知
-% 不良を記録していた。\jlreqpdf@addendadj の修正
+% 不良を記録していた。\ptj@addendadj の修正
 % （旧2引数版がデータ無関係の1zwをshrinkに畳み込むバグ）により
 % 現在はparityが成立している（hsize 60–80pt 全ケースで差
 % ≤0.01pt）。よって本fixtureは既知不良(XFAIL)ではなく通常の回帰ゲート

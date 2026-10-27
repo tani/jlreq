@@ -25,10 +25,10 @@
 \end{theindex}
 % --- CALLER-INDEX-RESTORE: 索引後に縦組みに戻っている
 本文再開。
-\ifnum\jlreqpdf@dir=1
+\ifnum\ptj@dir=1
   \typeout{TATE-PASS: CALLER-INDEX-RESTORE (dir=1 after theindex)}%
 \else
-  \typeout{TATE-FAIL: CALLER-INDEX-RESTORE (dir=\the\jlreqpdf@dir, expected 1)}%
+  \typeout{TATE-FAIL: CALLER-INDEX-RESTORE (dir=\the\ptj@dir, expected 1)}%
 \fi
 % complements 既定の確認: tate 文書では theindex_yoko=false（索引自体は
 % tate のまま。uplatex 同一挙動）。横組み索引ページは theindex_yoko=true

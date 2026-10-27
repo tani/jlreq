@@ -16,7 +16,7 @@
 \newcount\probe@n
 \AddToHook{build/page/before}{%
   \global\advance\probe@n\@ne
-  \typeout{HOOK-BEFORE-\the\probe@n: page=\the\c@page, dir=\the\jlreqpdf@pagedir@count}}
+  \typeout{HOOK-BEFORE-\the\probe@n: page=\the\c@page, dir=\the\ptj@pagedir@count}}
 \AddToHook{build/page/after}{%
   \typeout{HOOK-AFTER-\the\probe@n: page=\the\c@page}}
 \AddToHook{shipout/before}{%

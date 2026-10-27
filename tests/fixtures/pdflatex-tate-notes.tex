@@ -2,7 +2,7 @@
 % 検証内容（uplatex+tate を ground truth とした実測比較で確認済みの項目：
 % 脚注=最左端カラム上揃え／後注=本文直後のカラム／傍注(marginpar)=本文カラムの
 % 下方、いずれも縦組み正立，数ミリの家具由来オフセットを除き uplatex と一致）:
-%   NOTE-JAREG   : \footnotesize で \jlreq@jareg(\zw実寸)が 8pt に追従する
+%   NOTE-JAREG   : \footnotesize で \ptj@zwreg(\zw実寸)が 8pt に追従する
 %                  （横組 (a) バグの縦組挿入物内回帰ガード．旧バグでは101pt）
 %   NOTE-FNCOUNT : footnote/endnote/sidenote が共有カウンタを正しい順で
 %                  進める（本フィクスチャの系列で 7；uplatex GT でも同一）
@@ -17,7 +17,7 @@
 \makeatletter
 % --- NOTE-JAREG: 挿入物箱内のフォントサイズ追従
 \setbox\@tempboxa=\vbox{\reset@font\footnotesize
-  \xdef\jlreq@testjareg{\the\jlreq@jareg}X}%
+  \xdef\jlreq@testjareg{\the\ptj@zwreg}X}%
 \ifdim\jlreq@testjareg=\dimexpr.8\jlreq@fontsize\relax
   \typeout{TATE-PASS: NOTE-JAREG (\jlreq@testjareg)}%
 \else

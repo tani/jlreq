@@ -10,7 +10,7 @@
 %   FLOAT-FNUM    : \figurename=図, \tablename=表 が空でなく期待文字
 %   FLOAT-CAPTYPE : figure 環境内で \@captype=figure
 %   FLOAT-COUNT   : \caption で c@figure=1, c@table=1 が立つ
-%   FLOAT-JAREG   : キャプション相当サイズ(\smallの箱)でも \jlreq@jareg が
+%   FLOAT-JAREG   : キャプション相当サイズ(\smallの箱)でも \ptj@zwreg が
 %                   正しく追従（旧連結バグの回帰ガード）
 %   コンパイル成立自体が [t]/[b] フロート + \caption + tabular のゲート
 \documentclass[pdflatex,tate,paper=a5]{jlreq}
@@ -34,7 +34,7 @@
 \fi
 % --- FLOAT-JAREG: \small 箱での実寸追従（\small = .9\jlreq@fontsize）
 \setbox\@tempboxa=\vbox{\reset@font\small
-  \xdef\jlreq@testjareg{\the\jlreq@jareg}X}%
+  \xdef\jlreq@testjareg{\the\ptj@zwreg}X}%
 \ifdim\jlreq@testjareg=\dimexpr.9\jlreq@fontsize\relax
   \typeout{TATE-PASS: FLOAT-JAREG (\jlreq@testjareg)}%
 \else

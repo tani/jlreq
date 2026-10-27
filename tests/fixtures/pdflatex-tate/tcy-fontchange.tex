@@ -14,14 +14,14 @@
 % --- TCY-GT: 内部 \gtfamily 変更（body は一度だけ組まれbox寸法に反映）
 \newbox\tcybox
 \setbox\tcybox=\hbox{\tatechuyoko{\gtfamily 12}}%
-\ifdim\wd\tcybox=\dimexpr1\jlreq@jareg\relax
+\ifdim\wd\tcybox=\dimexpr1\ptj@zwreg\relax
   \typeout{TATE-PASS: TCY-GT (wd=\the\wd\tcybox)}%
 \else
   \typeout{TATE-FAIL: TCY-GT (wd=\the\wd\tcybox)}%
 \fi
 % --- TCY-BF: 内部 \bfseries
 \setbox\tcybox=\hbox{\tatechuyoko{\bfseries 34}}%
-\ifdim\wd\tcybox=\dimexpr1\jlreq@jareg\relax
+\ifdim\wd\tcybox=\dimexpr1\ptj@zwreg\relax
   \typeout{TATE-PASS: TCY-BF (wd=\the\wd\tcybox)}%
 \else
   \typeout{TATE-FAIL: TCY-BF (wd=\the\wd\tcybox)}%

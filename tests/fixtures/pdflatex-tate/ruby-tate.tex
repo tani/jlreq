@@ -46,17 +46,17 @@
 % 2. annotation の box が base の行方向に「並ぶ」: ルビ box の幅
 %    (内枠進行方向) = base 幅 (ann が狭い場合、外枠は base 幅)。
 \setbox\ttboxa=\hbox{\ruby{漢}{か}}%
-\ifdim\wd\ttboxa=\dimexpr1\jlreq@jareg\relax
+\ifdim\wd\ttboxa=\dimexpr1\ptj@zwreg\relax
   \typeout{RUBY-PASS: ann-line-advance (wd=\the\wd\ttboxa)}%
 \else
-  \typeout{RUBY-FAIL: ann-line-advance (wd=\the\wd\ttboxa, expected \the\jlreq@jareg)}%
+  \typeout{RUBY-FAIL: ann-line-advance (wd=\the\wd\ttboxa, expected \the\ptj@zwreg)}%
 \fi
 % 3. base の内部進行: 依存 = 2zw (tate JFM クラス幅)
 \setbox\ttboxa=\hbox{\ruby{依存}{いぞん}}%
-\ifdim\wd\ttboxa=\dimexpr2\jlreq@jareg\relax
+\ifdim\wd\ttboxa=\dimexpr2\ptj@zwreg\relax
   \typeout{RUBY-PASS: base-advance-2zw (wd=\the\wd\ttboxa)}%
 \else
-  \typeout{RUBY-FAIL: base-advance-2zw (wd=\the\wd\ttboxa, expected \the\dimexpr2\jlreq@jareg\relax)}%
+  \typeout{RUBY-FAIL: base-advance-2zw (wd=\the\wd\ttboxa, expected \the\dimexpr2\ptj@zwreg\relax)}%
 \fi
 % 4. 境界グルー: 、→ルビ (0.5zw) — 直接組対照との幅差 0
 \TTEST{punct-left-glue-tate}{0.02pt}{漢、\ruby{字}{じ}あ}{漢、字あ}
@@ -67,12 +67,12 @@
 % 5. 連続ルビ (overlap): 2 つ目のルビは 1 つ目の ruby@width を進む
 \setbox\ttboxa=\hbox{\ruby{漢}{かんたんいそん}\ruby{字}{じ}}%
 \ttdiff=\wd\ttboxa
-\advance\ttdiff-\dimexpr2\jlreq@jareg+0.9\jlreq@jareg\relax
+\advance\ttdiff-\dimexpr2\ptj@zwreg+0.9\ptj@zwreg\relax
 \ifdim\ttdiff<\z@ \ttdiff=-\ttdiff \fi
 \ifdim\ttdiff<0.01pt
   \typeout{RUBY-PASS: consecutive-overlap-tate (wd=\the\wd\ttboxa)}%
 \else
-  \typeout{RUBY-FAIL: consecutive-overlap-tate (wd=\the\wd\ttboxa, expected 2.9\jlreq@jareg, residual=\the\ttdiff)}%
+  \typeout{RUBY-FAIL: consecutive-overlap-tate (wd=\the\wd\ttboxa, expected 2.9\ptj@zwreg, residual=\the\ttdiff)}%
 \fi
 % 6. 状態隔離: base が句読点で終わるルビの後の和文境界 (pair 7→0)
 \TTEST{state-exit-baseclass-tate}{0.02pt}{\ruby{漢、}{かん}字}{漢、字}
@@ -80,12 +80,12 @@
 \rubynooverlap
 \setbox\ttboxa=\hbox{\ruby{漢}{かんたんいそんですよ}}%
 \ttdiff=\wd\ttboxa
-\advance\ttdiff-4\jlreq@jareg
+\advance\ttdiff-4\ptj@zwreg
 \ifdim\ttdiff<\z@ \ttdiff=-\ttdiff \fi
 \ifdim\ttdiff<0.01pt
   \typeout{RUBY-PASS: long-ann-nooverlap-tate (wd=\the\wd\ttboxa)}%
 \else
-  \typeout{RUBY-FAIL: long-ann-nooverlap-tate (wd=\the\wd\ttboxa, expected 4\jlreq@jareg, diff=\the\ttdiff)}%
+  \typeout{RUBY-FAIL: long-ann-nooverlap-tate (wd=\the\wd\ttboxa, expected 4\ptj@zwreg, diff=\the\ttdiff)}%
 \fi
 \rubyoverlap
 % 8. 書体・サイズ変更

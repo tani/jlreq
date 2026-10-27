@@ -1,7 +1,7 @@
 % latin-adjacency.tex -- 段落/box 先頭の LA->JA 境界（abc漢）と
 % 誤判定ガード（空段落・indent・明示空白・kern・直前box は欧文と
 % みなさない）。判定は lastclass=90 && lastnodetype=0（char ノード）
-% のみ（\jlreqpdf@latadj, CJK@X helper head で実行）。
+% のみ（\ptj@latadj, CJK@X helper head で実行）。
 \documentclass[pdflatex]{jlreq}
 \makeatletter
 \newbox\lboxa
@@ -23,9 +23,9 @@
 \ltest{para-head-latin-adjacency}
 
 % ---- 2. box 内 abc漢
-\global\jlreqpdf@lastclass=90
+\global\ptj@lastclass=90
 \setbox\lboxa=\hbox{abc漢}%
-\global\jlreqpdf@lastclass=90
+\global\ptj@lastclass=90
 \setbox\lboxb=\hbox{abc\hskip\jlreqxkanjiskip 漢}%
 \ltest{box-latin-adjacency}
 
@@ -40,23 +40,23 @@
 \ltest{indent-not-latin}
 
 % ---- 5. 明示空白の後（glue は欧文とみなさない）
-\global\jlreqpdf@lastclass=90
+\global\ptj@lastclass=90
 \setbox\lboxa=\hbox{漢\kern1pt 漢}%
-\global\jlreqpdf@lastclass=90
+\global\ptj@lastclass=90
 \setbox\lboxb=\hbox{漢\kern1pt 漢}%
 \ltest{kern-not-latin}
 
 % ---- 6. 直前 box（mbox）の後（box は欧文とみなさない）
-\global\jlreqpdf@lastclass=90
+\global\ptj@lastclass=90
 \setbox\lboxa=\hbox{\mbox{x}漢}%
-\global\jlreqpdf@lastclass=90
+\global\ptj@lastclass=90
 \setbox\lboxb=\hbox{\mbox{x}漢}%
 \ltest{box-not-latin}
 
 % ---- 7. 段落途中の abc漢（中間欧文走行: peek が処理済み——変化なし）
-\global\jlreqpdf@lastclass=90
+\global\ptj@lastclass=90
 \setbox\lboxa=\hbox{漢abc漢}%
-\global\jlreqpdf@lastclass=90
+\global\ptj@lastclass=90
 \setbox\lboxb=\hbox{漢\hskip\jlreqxkanjiskip abc\hskip\jlreqxkanjiskip 漢}%
 \ltest{mid-para-latin-run}
 

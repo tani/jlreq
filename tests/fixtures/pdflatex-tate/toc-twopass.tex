@@ -1,6 +1,6 @@
 % toc-twopass.tex -- acceptance gate: tate + \tableofcontents across
 % TWO passes. Root cause of the historical "Leaders not followed by
-% proper glue" on pass 2 (see docs/pdftex-internals.md):
+% proper glue" on pass 2 (see pdftexja/doc/pdftexja-internals.md):
 %   (1) the frame-pop \aftergroup inserted assignment tokens after
 %       EVERY closed box, and \leaders\hbox{...}<glue> requires the glue
 %       to follow the box with nothing unexpandable in between

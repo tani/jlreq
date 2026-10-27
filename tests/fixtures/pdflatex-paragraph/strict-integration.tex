@@ -6,29 +6,29 @@
 \begingroup
 \parskip=5pt
 \rightskip=10pt
-\begin{jlreqparagraph}
+\begin{ptjparagraph}
 非ゼロ余白テスト。あいうえおかきくけこさしすせそたちつてと。はひふへほまみむめもやゆよらりるれろ。
-\end{jlreqparagraph}
+\end{ptjparagraph}
 続く同じ設定の段落。
 \endgroup
 % ---- (2) looseness と emergencystretch ----
 \begingroup
-\begin{jlreqparagraph}
+\begin{ptjparagraph}
 緩め設定テスト。あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわをん。続けて文章を伸ばす。あいうえおかきくけこさしすせそたちつてとなにぬねの。ルビなし。ここまで。
-\end{jlreqparagraph}
+\end{ptjparagraph}
 \endgroup
 % ---- (3) 前後接続: 通常段落 → 厳密 → 通常（ページ跨ぎを含む長さ） ----
 通常段落その一。あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほ。
-\begin{jlreqparagraph}
+\begin{ptjparagraph}
 接続テスト長文。厳密段落が通常段落に挟まれても行間・改ページが壊れないこと。あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわをん。たちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわをん。あいうえおかきくけこさしすせそ。たちにぬねのはひふへほまみむめもやゆよらりるれろわをん。さすせそ。たちつてとなにぬねの。はひふへほまみむめもやゆよ。らりるれろ。わをん。終わり。
-\end{jlreqparagraph}
+\end{ptjparagraph}
 通常段落その二。続いて通常の流れに戻る。
 % ---- (4) parshape ----
 \begingroup
 \parshape 3 0pt 300pt 10pt 280pt 20pt 260pt
-\begin{jlreqparagraph}
+\begin{ptjparagraph}
 パーシェイプテスト。あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめも。やゆよらりるれろわをん。さしすせそ。たちつてと。なにぬねの。はひふへほ。まみむめも。
-\end{jlreqparagraph}
+\end{ptjparagraph}
 \endgroup
 \makeatletter
 \typeout{INTEG-PASS: rightskip-parskip-looseness-parshape-continuity}
